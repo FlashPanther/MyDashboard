@@ -1,0 +1,145 @@
+@import 'tailwindcss';
+
+/*
+ * Les utilitaires pointent vers des variables intermediaires (--t-*) plutot que
+ * vers des valeurs fixes : c'est ce qui rend le theme commutable a chaud.
+ * Les noms sont fonctionnels (ground, ink, muted) et non descriptifs : un token
+ * appele "night" mentirait en theme clair.
+ */
+@theme {
+  --color-ground: var(--t-ground);
+  --color-panel: var(--t-panel);
+  --color-panel-soft: var(--t-panel-soft);
+  --color-rule: var(--t-rule);
+  --color-ink: var(--t-ink);
+  --color-muted: var(--t-muted);
+  --color-amber: var(--t-amber);
+  --color-jade: var(--t-jade);
+  --color-sky: var(--t-sky);
+  --color-rose: var(--t-rose);
+
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+/*
+ * Theme clair : le tableau imprime. Valeurs par defaut, jamais dans un media.
+ * L'ambre et le rose sont volontairement eloignes en teinte : ils se cotoient
+ * dans les listes ("aujourd'hui" contre "en retard") et un rouge-orange contre
+ * un rouge-brique etait indistinguable, deuteranopie ou pas. Chaque signal
+ * colore est de toute facon double d'un mot : la couleur ne porte jamais seule.
+ */
+:root {
+  color-scheme: light;
+  --t-ground: #eef1f6;
+  --t-panel: #ffffff;
+  --t-panel-soft: #e7edf6;
+  --t-rule: #d3dbe7;
+  --t-ink: #16202f;
+  --t-muted: #5c6980;
+  --t-amber: #c2410c;
+  --t-jade: #0d7355;
+  --t-sky: #2560c4;
+  --t-rose: #9c1b66;
+  --t-glow: #dde6f6;
+}
+
+/* Theme sombre : le tableau de departs eclaire. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --t-ground: #0b1220;
+    --t-panel: #121d2e;
+    --t-panel-soft: #16223a;
+    --t-rule: #22314a;
+    --t-ink: #e9eff7;
+    --t-muted: #7f8ea6;
+    --t-amber: #ffb020;
+    --t-jade: #4fd1a5;
+    --t-sky: #6ba8ff;
+    --t-rose: #ff7a7a;
+    --t-glow: #16243b;
+  }
+}
+
+/* Sombre choisi explicitement : doit gagner meme si le systeme est en clair. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --t-ground: #0b1220;
+  --t-panel: #121d2e;
+  --t-panel-soft: #16223a;
+  --t-rule: #22314a;
+  --t-ink: #e9eff7;
+  --t-muted: #7f8ea6;
+  --t-amber: #ffb020;
+  --t-jade: #4fd1a5;
+  --t-sky: #6ba8ff;
+  --t-rose: #ff7a7a;
+  --t-glow: #16243b;
+}
+
+@layer base {
+  body {
+    background:
+      radial-gradient(120rem 60rem at 15% -20%, var(--t-glow) 0%, transparent 60%),
+      var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Les chiffres d'un tableau de departs ne dansent pas. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-amber);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  /* Etiquette de section, empruntee a la signaletique ferroviaire. */
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .panel {
+    border: 1px solid var(--color-rule);
+    background: var(--color-panel);
+    border-radius: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes pulse-amber {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.pulse-amber {
+  animation: pulse-amber 1.8s ease-in-out infinite;
+}
