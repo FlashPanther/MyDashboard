@@ -98,11 +98,8 @@ voit pas la carte Wi-Fi : `lib/providers/presence.ts` interroge Windows via
 la maison sont dans `presence.homeSsids` de `dashboard.config.ts`.
 
 À la maison, le panneau Trajet disparaît et le repère « Partir » de la colonne du jour
-aussi. La météo ne s'étire pas pour autant : **les sept jours sortent dans leur propre
-panneau**, en liste verticale (jour, temps en toutes lettres, probabilité de pluie,
-maximum et minimum). La colonne se remplit de contenu réel au lieu d'espace vide, et la
-semaine y gagne en lisibilité. Les jours de bureau, elle reprend sa forme compacte en
-cellules sous la prévision horaire. Le sélecteur **Maison / Bureau / Auto** de
+aussi. La météo garde la même forme partout (prévision horaire, puis les sept jours en
+cellules) et occupe simplement la place laissée libre. Le sélecteur **Maison / Bureau / Auto** de
 l'en-tête force le choix quand le réseau ne dit rien : câble Ethernet, Wi-Fi invité,
 partage de connexion. Le dernier état détecté est mémorisé pour que le panneau Trajet
 n'apparaisse pas une fraction de seconde avant de disparaître à chaque chargement.
@@ -210,9 +207,9 @@ Trois colonnes qui occupent toute la largeur de l'écran, ordonnées par importa
 
 | Colonne | Contenu | Largeur |
 | --- | --- | --- |
-| Gauche | la journée heure par heure | 24 % (27 % au-delà de 1280 px) |
-| **Centre** | **courrier et tâches** — ce qu'on fait | la plus large |
-| Droite | trajet et météo — ce qu'on consulte | la plus étroite |
+| Gauche | la journée heure par heure, l'audience | 24 % (27 % au-delà de 1280 px) |
+| **Centre** | **courrier, WhatsApp et Messenger** — ce qui arrive | la plus large |
+| Droite | tâches, trajet et météo — ce qu'on planifie et consulte | la plus étroite |
 
 Les trois colonnes s'installent dès 1024 px. En dessous, tout s'empile dans le même ordre :
 le principal en premier, le consultatif en dernier.
