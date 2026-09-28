@@ -56,6 +56,31 @@ télécharge Puppeteer n'a pas de bac à sable utilisable sous Ubuntu 24.04.
 Ce n'est pas un usage prévu par WhatsApp : en lecture seule le risque est faible, mais un
 blocage du compte n'est pas exclu.
 
+## Relier Messenger
+
+Messenger n'a pas d'API pour les comptes personnels, et un Chrome piloté se fait repérer par
+Facebook. Le tableau passe donc par une petite extension, installée dans **ton Chrome de tous
+les jours** : elle lit la liste des discussions dans ton onglet messenger.com et la transmet
+à `localhost:3737`. Pour Facebook, c'est ton navigateur normal, avec ta session normale.
+
+1. Dans Chrome : `chrome://extensions`, active le **mode développeur** (en haut à droite).
+2. **Charger l'extension non empaquetée** et choisis le dossier `extension/messenger`.
+3. Ouvre [messenger.com](https://www.messenger.com/), connecte-toi, et **laisse l'onglet
+   ouvert** (épinglé, idéalement).
+
+L'extension ne clique sur rien et n'ouvre aucune discussion : elle ne marque rien comme lu.
+Messenger, lui, marque comme lue la discussion affichée quand l'onglet est au premier plan :
+garde-le en arrière-plan.
+
+Le panneau prévient quand l'onglet est fermé, déconnecté, mis en veille par l'économiseur de
+mémoire de Chrome (ajoute messenger.com aux sites toujours actifs dans Paramètres ›
+Performances), ou quand l'extension ne donne plus de nouvelles depuis 3 minutes (Chrome
+fermé). La page ne charge que les trente dernières discussions : les non-lues plus anciennes
+sont comptées, pas listées.
+
+Si Messenger change sa page, la lecture casse : les repères utilisés sont décrits en tête de
+`extension/messenger/content.js`.
+
 ## Maison ou bureau
 
 Le tableau lit d'abord **ton agenda** : un évènement du jour dont le titre contient un mot
