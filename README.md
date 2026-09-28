@@ -29,8 +29,11 @@ au bureau, minutes de marche. C'est le seul fichier à modifier au quotidien.
    écrit dans `.data/tokens.json` (permissions 600, ignoré par git). Pour changer de
    compte : supprime ce fichier et relie à nouveau.
 
-Les trois portées demandées sont en lecture seule (`calendar.readonly`, `tasks.readonly`,
-`gmail.readonly`). Le dashboard n'écrit jamais dans ton compte.
+Les portées demandées sont en lecture seule (`calendar.readonly`, `gmail.readonly`,
+`analytics.readonly`), sauf une : `tasks`, pour le champ « Nouvelle tâche » du panneau
+Tâches. C'est la seule écriture du dashboard dans ton compte : il crée une tâche dans ta
+liste par défaut quand tu la tapes, rien d'autre. Si tu as relié Google avant l'arrivée de
+ce champ, il le signale et propose de relier à nouveau.
 
 ## Relier WhatsApp
 
@@ -230,6 +233,10 @@ compteur du panneau annonce combien il en reste (« 15 à planifier »), la puce
 autres tâches portent leur date : c'est ce manque qui doit se voir.
 
 Quand il n'en reste aucune, le bloc dit « Tout est planifié. »
+
+En tête du panneau, un champ **Nouvelle tâche** : tape le titre, Entrée, et la tâche part
+dans ta liste par défaut de Google Tasks, sans échéance. Elle rejoint aussitôt « À
+planifier ».
 
 ## Mails suivis
 

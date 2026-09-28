@@ -2,7 +2,8 @@ import { readTokens, writeTokens, type StoredTokens } from './tokens';
 
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/tasks.readonly',
+  // Ecriture : le champ « Nouvelle tâche » du panneau Tâches en cree.
+  'https://www.googleapis.com/auth/tasks',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/analytics.readonly',
 ];

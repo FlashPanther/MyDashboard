@@ -1,3 +1,4 @@
+import { NextResponse } from 'next/server';
 import { handle } from '@/lib/api';
 import { googleFetch } from '@/lib/google/oauth';
 
@@ -73,5 +74,30 @@ export async function GET() {
       .sort((a, b) => rank(a) - rank(b) || (a.due ?? '9999').localeCompare(b.due ?? '9999'));
 
     return { tasks, fetchedAt: new Date().toISOString() };
+  });
+}
+
+/**
+ * Cree une tache dans la liste par defaut. JSON exige : une page web ne peut
+ * pas en envoyer ici sans une verification CORS a laquelle on ne repond pas.
+ */
+export async function POST(request: Request) {
+  if (!request.headers.get('content-type')?.startsWith('application/json')) {
+    return NextResponse.json({ error: 'JSON attendu' }, { status: 415 });
+  }
+  const body = await request.json().catch(() => ({}));
+  const title = typeof body.title === 'string' ? body.title.trim().slice(0, 1024) : '';
+  if (!title) return NextResponse.json({ error: 'Titre vide' }, { status: 400 });
+
+  return handle(async () => {
+    const task = await googleFetch<{ id: string }>(
+      'https://tasks.googleapis.com/tasks/v1/lists/@default/tasks',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title }),
+      },
+    );
+    return { id: task.id };
   });
 }
