@@ -32,6 +32,30 @@ au bureau, minutes de marche. C'est le seul fichier à modifier au quotidien.
 Les trois portées demandées sont en lecture seule (`calendar.readonly`, `tasks.readonly`,
 `gmail.readonly`). Le dashboard n'écrit jamais dans ton compte.
 
+## Relier WhatsApp
+
+WhatsApp n'a pas d'API pour les comptes personnels : le tableau fait tourner WhatsApp Web
+dans un Chrome sans fenêtre (`whatsapp-web.js`), comme un appareil connecté de plus.
+
+1. Ouvre le dashboard : le panneau WhatsApp affiche un QR code.
+2. Sur le téléphone : **WhatsApp > Appareils connectés > Connecter un appareil**, et scanne.
+3. La session est gardée dans `.data/whatsapp/` (ignoré par git). Pour délier : supprime
+   l'appareil « Tableau du jour » sur le téléphone, ou efface ce dossier.
+
+Le panneau ne fait que lire : il ne marque rien comme lu et se déclare « hors ligne » pour
+que le téléphone continue de sonner. Les conversations archivées et en sourdine sont
+ignorées (`whatsapp.includeMuted` dans `dashboard.config.ts`).
+
+Un clic ouvre la conversation dans WhatsApp Web. Seules les conversations privées ont un
+lien direct (par numéro de téléphone) : pour un groupe, WhatsApp Web n'en propose pas, et le
+clic ouvre simplement l'accueil.
+
+Chrome : celui du système (`/usr/bin/google-chrome`, ou `CHROME_PATH`). Celui que
+télécharge Puppeteer n'a pas de bac à sable utilisable sous Ubuntu 24.04.
+
+Ce n'est pas un usage prévu par WhatsApp : en lecture seule le risque est faible, mais un
+blocage du compte n'est pas exclu.
+
 ## Maison ou bureau
 
 Le tableau lit d'abord **ton agenda** : un évènement du jour dont le titre contient un mot

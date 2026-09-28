@@ -10,6 +10,7 @@ import { WeekWidget } from '@/components/widgets/WeekWidget';
 import { AudienceWidget } from '@/components/widgets/AudienceWidget';
 import { MailWidget } from '@/components/widgets/MailWidget';
 import { TasksWidget } from '@/components/widgets/TasksWidget';
+import { WhatsAppWidget } from '@/components/widgets/WhatsAppWidget';
 
 const AUTH_MESSAGES: Record<string, string> = {
   ok: 'Compte Google relié.',
@@ -81,6 +82,7 @@ export default function Dashboard() {
           {/* Ce qui se fait : au centre, et plus large que le reste. */}
           <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:flex-[1.15] xl:flex-[1.35]">
             <MailWidget now={now} />
+            <WhatsAppWidget now={now} />
             <TasksWidget />
           </div>
           {/* Ce qui se consulte : sur le cote. */}
