@@ -234,6 +234,13 @@ autres tâches portent leur date : c'est ce manque qui doit se voir.
 
 Quand il n'en reste aucune, le bloc dit « Tout est planifié. »
 
+## Mails suivis
+
+Les mails étoilés dans Gmail (« Messages suivis ») ont leur bloc au pied du panneau Courrier,
+lus ou non : ce sont ceux qu'on s'est promis de traiter. Les plus récents d'abord, en gras
+tant qu'ils ne sont pas lus ; le titre « Suivis » ouvre la liste complète dans Gmail.
+Recherche et nombre affiché : `gmail.starred` dans `dashboard.config.ts`.
+
 ## Liens vers les pages complètes
 
 Le titre de chaque panneau ouvre sa source : l'agenda sur la vue configurée, Gmail sur
