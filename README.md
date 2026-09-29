@@ -240,34 +240,32 @@ Trois colonnes qui occupent toute la largeur de l'écran, ordonnées par importa
 Les trois colonnes s'installent dès 1024 px. En dessous, tout s'empile dans le même ordre :
 le principal en premier, le consultatif en dernier.
 
-## Compteurs et onglets
+## Compteurs
 
-Courrier et Tâches ont deux onglets chacun, à droite de leur titre, dessinés comme le
-sélecteur Maison / Bureau / Auto : **Non lus / Suivis** et **Aujourd'hui / À planifier**.
-Chaque onglet porte son compteur, en ambre tant qu'il reste quelque chose, en jade à zéro :
-le tableau accuse réception du travail fait. Le dernier onglet choisi est retenu sur chaque
-appareil.
+Les compteurs qui comptent — non lus, à faire aujourd'hui, à planifier — restent dans
+l'en-tête de leur panneau, à leur taille, mais le **chiffre** est en gras et en ambre vif
+pendant que son libellé reste discret. Il passe au jade à zéro : le tableau accuse
+réception du travail fait.
 
-## Tâches
+## Tâches sans échéance
 
-**Aujourd'hui** : les tâches en retard (puce rose) et du jour (puce ambre), puis, sous « À
-venir », celles datées plus tard.
-
-**À planifier** : les tâches sans échéance, les plus anciennes d'abord — celles qu'on a le
-plus sûrement oubliées, triées sur le champ `updated` de Google Tasks. La puce est creuse
+Elles remontent dans un bloc séparé en bas du panneau, les plus anciennes d'abord — celles
+qu'on a le plus sûrement oubliées, triées sur le champ `updated` de Google Tasks. Le
+compteur du panneau annonce combien il en reste (« 15 à planifier »), la puce est creuse
 (rien n'est encore posé sur le calendrier) et la colonne de droite reste vide là où les
-autres tâches portent leur date : c'est ce manque qui doit se voir. Quand il n'en reste
-aucune : « Tout est planifié. »
+autres tâches portent leur date : c'est ce manque qui doit se voir.
 
-Au-dessus des deux onglets, un champ **Nouvelle tâche** : tape le titre, Entrée, et la tâche
-part dans ta liste par défaut de Google Tasks, sans échéance ; le panneau bascule sur « À
-planifier » pour la montrer.
+Quand il n'en reste aucune, le bloc dit « Tout est planifié. »
+
+En tête du panneau, un champ **Nouvelle tâche** : tape le titre, Entrée, et la tâche part
+dans ta liste par défaut de Google Tasks, sans échéance. Elle rejoint aussitôt « À
+planifier ».
 
 ## Mails suivis
 
-L'onglet **Suivis** du Courrier liste les mails étoilés dans Gmail (« Messages suivis »), lus
-ou non : ce sont ceux qu'on s'est promis de traiter. Les plus récents d'abord, en gras tant
-qu'ils ne sont pas lus. Le titre du panneau ouvre dans Gmail la vue de l'onglet affiché.
+Les mails étoilés dans Gmail (« Messages suivis ») ont leur bloc au pied du panneau Courrier,
+lus ou non : ce sont ceux qu'on s'est promis de traiter. Les plus récents d'abord, en gras
+tant qu'ils ne sont pas lus ; le titre « Suivis » ouvre la liste complète dans Gmail.
 Recherche et nombre affiché : `gmail.starred` dans `dashboard.config.ts`.
 
 ## Liens vers les pages complètes

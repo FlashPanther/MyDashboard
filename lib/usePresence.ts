@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { config } from '@/dashboard.config';
 import { useEndpoint } from '@/lib/useEndpoint';
-import { readStored as read, writeStored as write } from '@/lib/storage';
 import { findOfficeEvent } from '@/lib/officeDay';
 import type { CalendarEvent } from '@/app/api/calendar/route';
 
@@ -13,6 +12,23 @@ const MODE_KEY = 'presence-mode';
 const LAST_KEY = 'presence-last';
 
 type PresencePayload = { ssid: string | null; atHome: boolean | null };
+
+function read(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function write(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Stockage bloque : le choix ne vaut que pour cette session.
+  }
+}
 
 export function usePresence(now: number) {
   const [mode, setMode] = useState<PresenceMode>('auto');

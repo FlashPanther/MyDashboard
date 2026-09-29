@@ -119,10 +119,10 @@ export const config = {
     /** Requete Gmail. "is:unread in:inbox" = non lus de la boite principale. */
     query: 'is:unread in:inbox', /** category:primary',*/
     maxResults: 9,
-    /** Mails suivis (etoiles dans Gmail), lus ou non : onglet « Suivis » du panneau Courrier. */
+    /** Mails suivis (etoiles dans Gmail), lus ou non : bloc au pied du panneau Courrier. */
     starred: {
       query: 'is:starred',
-      maxResults: 9,
+      maxResults: 4,
     },
   },
 
