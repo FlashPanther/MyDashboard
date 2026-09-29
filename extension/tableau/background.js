@@ -10,8 +10,24 @@ const SITES = {
   whatsapp: 'https://web.whatsapp.com/*',
 };
 
-async function report(source, body) {
+// Identifiant de cette installation, tire une fois : le tableau distingue ainsi
+// les Chrome (plusieurs PC) qui lui rapportent. Memorise le temps que vit le
+// service worker : deux premiers rapports simultanes n'en tirent pas deux.
+let instance;
+function instanceId() {
+  instance ??= chrome.storage.local.get('instance').then(async (stored) => {
+    if (stored.instance) return stored.instance;
+    const created = crypto.randomUUID();
+    await chrome.storage.local.set({ instance: created });
+    return created;
+  });
+  return instance;
+}
+
+// `tab` : l'onglet dont vient le rapport, ou null pour tout ce Chrome (alarme).
+async function report(source, snapshot, tab = null) {
   const { dashboard, token } = await loadSettings();
+  const body = { ...snapshot, instance: await instanceId(), tab };
   const headers = { 'content-type': 'application/json' };
   if (token) headers.authorization = `Bearer ${token}`;
   try {
@@ -25,21 +41,13 @@ async function report(source, body) {
   }
 }
 
+// Plusieurs onglets ou plusieurs PC : c'est le tableau qui fait le tri (voir
+// feedSnapshot dans lib/providers/relay.ts).
 chrome.runtime.onMessage.addListener((message, sender) => {
-  if (message?.type !== 'snapshot' || !(message.source in SITES)) return;
-  void relay(message.source, message.snapshot, sender.tab?.id);
-});
-
-// Deux onglets d'une meme messagerie : l'un peut etre sur le QR code ou en
-// chargement pendant que l'autre montre la liste. Un tel rapport n'ecrase pas
-// l'etat du tableau tant qu'un autre onglet existe ; seuls les « ready » passent.
-async function relay(source, snapshot, tabId) {
-  if (snapshot?.state !== 'ready') {
-    const tabs = await chrome.tabs.query({ url: SITES[source] });
-    if (tabs.some((tab) => tab.id !== tabId)) return;
+  if (message?.type === 'snapshot' && message.source in SITES) {
+    void report(message.source, message.snapshot, sender.tab?.id ?? null);
   }
-  await report(source, snapshot);
-}
+});
 
 // Toutes les minutes : les onglets existent-ils encore ? Sans eux, plus personne
 // n'envoie rien, et le tableau doit pouvoir dire pourquoi.
