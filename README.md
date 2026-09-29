@@ -268,8 +268,8 @@ titre : `Réparer le vélo #maison #urgent`. Le tableau retire les `#mots` du ti
 les montre en pastilles, chacune toujours de la même couleur. Une rangée « Tout · #maison ·
 … » au-dessus de la liste filtre sur une étiquette à la fois (retenue sur chaque appareil),
 et les compteurs des onglets suivent ; un clic sur la pastille d'une tâche filtre aussi.
-Une étiquette : lettres (accents compris), chiffres, `-` ou `_`, précédée d'une espace ou en
-début de titre (`C#9` ou une adresse avec `#ancre` n'en sont pas).
+Une étiquette : lettres (accents compris), chiffres, `-` ou `_`, non collée à un mot, un `/`, un `#` ou un `&` (`C#9`, une adresse avec `#ancre` n'en sont
+pas ; `(#urgent)` si). Un titre sans étiquette s'affiche tel quel.
 
 ## Mails suivis
 

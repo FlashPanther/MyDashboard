@@ -5,8 +5,9 @@
  * casse.
  */
 
-// Le « # » ne suit ni lettre, ni chiffre, ni « / », ni « # » : « C#9 », une
-// adresse « site.be/#ancre » ou « ## » n'en sont pas ; « (#urgent) » si.
+// Le « # » ne suit ni lettre, ni chiffre, ni « / », « # » ou « & » : « C#9 », une
+// adresse « site.be/#ancre », « ## » ou une entite « &#39; » n'en sont pas ;
+// « (#urgent) » si.
 const TAG = /(?<![\p{L}\p{N}_/#&])#([\p{L}\p{N}_](?:[\p{L}\p{N}_-]*[\p{L}\p{N}_])?)/gu;
 
 export type Tagged = {
@@ -18,6 +19,9 @@ export type Tagged = {
 
 export function parseTags(title: string): Tagged {
   const tags = [...new Set([...title.matchAll(TAG)].map((match) => match[1].toLowerCase()))];
+  // Un titre sans etiquette reste tel quel : le nettoyage ne concerne que ce
+  // que le retrait des etiquettes laisse derriere lui.
+  if (tags.length === 0) return { label: title.trim(), tags };
   const label = title
     .replace(TAG, '')
     // Ce que l'etiquette laisse derriere elle : parentheses vides, espace avant « , » ou « . ».
