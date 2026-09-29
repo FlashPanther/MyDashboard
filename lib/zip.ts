@@ -16,6 +16,12 @@ const DOS_DATE = (0 << 9) | (1 << 5) | 1;
 const MAX_ENTRIES = 0xffff;
 const MAX_SIZE = 0xffffffff;
 
+function signature(value: number) {
+  const buffer = Buffer.alloc(4);
+  buffer.writeUInt32LE(value);
+  return buffer;
+}
+
 export function createZip(entries: ZipEntry[]): Buffer {
   if (entries.length > MAX_ENTRIES) throw new Error('Trop de fichiers pour une archive zip');
   const locals: Buffer[] = [];
@@ -30,33 +36,27 @@ export function createZip(entries: ZipEntry[]): Buffer {
       throw new Error(`Fichier trop grand pour une archive zip : ${name}`);
     }
 
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0); // signature
-    local.writeUInt16LE(20, 4); // version requise
-    local.writeUInt16LE(0x0800, 6); // noms en UTF-8
-    local.writeUInt16LE(8, 8); // deflate
-    local.writeUInt16LE(0, 10); // heure
-    local.writeUInt16LE(DOS_DATE, 12);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(compressed.length, 18);
-    local.writeUInt32LE(data.length, 22);
-    local.writeUInt16LE(fileName.length, 26);
-    local.writeUInt16LE(0, 28); // champ extra
+    // Champs communs aux en-tetes local et central (octets 4 a 29 du local) :
+    // version requise, drapeaux, methode, heure, date, CRC, tailles, nom.
+    const common = Buffer.alloc(26);
+    common.writeUInt16LE(20, 0); // version requise
+    common.writeUInt16LE(0x0800, 2); // noms en UTF-8
+    common.writeUInt16LE(8, 4); // deflate
+    common.writeUInt16LE(DOS_DATE, 8); // heure (octets 6-7) laissee a zero
+    common.writeUInt32LE(crc, 10);
+    common.writeUInt32LE(compressed.length, 14);
+    common.writeUInt32LE(data.length, 18);
+    common.writeUInt16LE(fileName.length, 22);
+    // octets 24-25 : champ extra, vide
+
+    const local = Buffer.concat([signature(0x04034b50), common]);
     locals.push(local, fileName, compressed);
 
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE(20, 4); // version auteur
-    central.writeUInt16LE(20, 6); // version requise
-    central.writeUInt16LE(0x0800, 8);
-    central.writeUInt16LE(8, 10);
-    central.writeUInt16LE(0, 12);
-    central.writeUInt16LE(DOS_DATE, 14);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(compressed.length, 20);
-    central.writeUInt32LE(data.length, 24);
-    central.writeUInt16LE(fileName.length, 28);
-    // extra, commentaire, disque, attributs internes et externes : a zero.
+    common.copy(central, 6);
+    // commentaire, disque, attributs : a zero.
     central.writeUInt32LE(offset, 42);
     centrals.push(central, fileName);
 

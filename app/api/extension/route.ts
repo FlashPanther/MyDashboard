@@ -1,4 +1,5 @@
 import { packageExtension, publicOrigin } from '@/lib/extensionPackage';
+import { redirectUri } from '@/lib/google/oauth';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +10,8 @@ export const dynamic = 'force-dynamic';
  * Derriere la connexion, comme le reste.
  */
 export async function GET() {
-  const { zip, fileName } = await packageExtension(publicOrigin(process.env.GOOGLE_REDIRECT_URI));
+  const { zip, fileName } = await packageExtension(publicOrigin(redirectUri()));
+  // Copie en Uint8Array : un Buffer n'est pas accepte tel quel comme corps de Response.
   return new Response(new Uint8Array(zip), {
     headers: {
       'content-type': 'application/zip',

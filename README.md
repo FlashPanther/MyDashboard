@@ -34,10 +34,9 @@ Pour ouvrir le tableau depuis n'importe quel appareil. L'image se construit avec
    redirection autorisées de l'ID client OAuth.
 6. Déploie, ouvre le domaine, connecte-toi, puis **Relier Google** (le jeton est propre au
    serveur : celui de ton poste n'y est pas).
-7. **Extension** : télécharge-la depuis le tableau en ligne (lien **la télécharger** des
-   panneaux WhatsApp et Messenger) : elle vise déjà ton domaine. Charge-la dans Chrome
-   (voir « Relier WhatsApp et Messenger »), puis clic droit sur son icône → *Options* →
-   colle le même `EXTENSION_TOKEN` et enregistre. Le jeton n'est jamais dans le .zip.
+7. **Extension** : installe-la depuis le tableau en ligne (voir « Relier WhatsApp et
+   Messenger »), puis clic droit sur son icône → *Options* → colle le même
+   `EXTENSION_TOKEN` et enregistre. Le jeton n'est jamais dans le .zip.
 
 **Accès.** Sans `DASHBOARD_PASSWORD`, tout est ouvert : c'est l'usage local. Avec, chaque
 appareil se connecte une fois et garde sa session 180 jours ; changer le mot de passe

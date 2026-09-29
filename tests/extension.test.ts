@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { inflateRawSync } from 'node:zlib';
-import { presetFor, publicOrigin } from '../lib/extensionPackage.ts';
+import { extensionFiles, presetFor, publicOrigin } from '../lib/extensionPackage.ts';
 import { createZip } from '../lib/zip.ts';
 
 /** Relit une archive par son repertoire central : nom et contenu de chaque fichier. */
@@ -32,35 +32,33 @@ test('l’archive rend chaque fichier intact', () => {
   assert.deepEqual(readZip(zip), { 'dossier/a.txt': 'bonjour', 'dossier/é.js': 'x'.repeat(1000) });
 });
 
-const files = [
-  {
-    name: 'tableau-du-jour/manifest.json',
-    data: Buffer.from(JSON.stringify({ host_permissions: ['http://localhost:3737/*'] })),
-  },
-  { name: 'tableau-du-jour/settings.js', data: Buffer.from("const DEFAULT_DASHBOARD = 'http://localhost:3737';\n") },
-];
-
-test('prérègle l’extension sur le domaine d’où elle est téléchargée', () => {
-  const [manifest, settings] = presetFor(files, 'https://tableau.exemple.be');
-  assert.deepEqual(JSON.parse(manifest.data.toString()).host_permissions, [
-    'http://localhost:3737/*',
-    'https://tableau.exemple.be/*',
-  ]);
-  assert.match(settings.data.toString(), /DEFAULT_DASHBOARD = "https:\/\/tableau\.exemple\.be";/);
+test('prérègle l’extension sur l’adresse publique du tableau', async () => {
+  const files = presetFor(await extensionFiles(), 'https://tableau.exemple.be');
+  const read = (name: string) => files.find((file) => file.name.endsWith(name))!.data.toString();
+  assert.ok(JSON.parse(read('/manifest.json')).host_permissions.includes('https://tableau.exemple.be/*'));
+  assert.equal(read('/preset.js'), 'self.PRESET_DASHBOARD = "https://tableau.exemple.be";\n');
 });
 
-test('laisse l’extension telle quelle sans adresse publique', () => {
+test('l’extension d’origine lit son adresse dans preset.js', async () => {
+  const files = await extensionFiles();
+  const read = (name: string) => files.find((file) => file.name.endsWith(name))!.data.toString();
+  assert.match(read('/preset.js'), /self\.PRESET_DASHBOARD = null;/);
+  assert.match(read('/settings.js'), /self\.PRESET_DASHBOARD \?\?/);
+});
+
+test('laisse l’extension telle quelle sans adresse publique', async () => {
+  const files = await extensionFiles();
   assert.equal(presetFor(files, null), files);
 });
 
 test('tire l’adresse publique de la configuration, en HTTPS seulement', () => {
   assert.equal(publicOrigin('https://tableau.exemple.be/api/auth/google/callback'), 'https://tableau.exemple.be');
   assert.equal(publicOrigin('http://localhost:3737/api/auth/google/callback'), null);
-  assert.equal(publicOrigin(undefined), null);
   assert.equal(publicOrigin('pas une adresse'), null);
 });
 
-test('écrit l’adresse comme une chaîne JavaScript, jamais comme du code', () => {
-  const [, settings] = presetFor(files, "https://a.be/'; alert(1); '");
-  assert.match(settings.data.toString(), /DEFAULT_DASHBOARD = "https:\/\/a\.be\/'; alert\(1\); '";/);
+test('écrit l’adresse comme une chaîne JavaScript, jamais comme du code', async () => {
+  const files = presetFor(await extensionFiles(), "https://a.be/'; alert(1); '");
+  const preset = files.find((file) => file.name.endsWith('/preset.js'))!.data.toString();
+  assert.equal(preset, 'self.PRESET_DASHBOARD = "https://a.be/\'; alert(1); \'";\n');
 });
