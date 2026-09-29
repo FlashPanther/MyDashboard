@@ -1,7 +1,8 @@
 # Tableau du jour
 
-Dashboard personnel local : agenda, tâches, courrier non lu, météo et trajet domicile–travail
-sur une seule page. Tout tourne sur ta machine ; aucun jeton ne quitte le poste.
+Dashboard personnel : agenda, tâches, courrier non lu, messageries, météo et trajet
+domicile–travail sur une seule page. En local, tout tourne sur ta machine ; en ligne
+(voir « Déployer sur Coolify »), sur ton serveur, derrière un mot de passe.
 
 ## Démarrer
 
@@ -13,6 +14,39 @@ npm run dev                  # http://localhost:3737
 
 Adapte ensuite `dashboard.config.ts` : domicile, lieu de travail, gares, heure d'arrivée
 au bureau, minutes de marche. C'est le seul fichier à modifier au quotidien.
+
+## Déployer sur Coolify
+
+Pour ouvrir le tableau depuis n'importe quel appareil. L'image se construit avec le
+`Dockerfile` du dépôt (Next.js en mode autonome, heure belge dans le conteneur).
+
+1. **Coolify** : nouvelle ressource → *Application* → dépôt `FlashPanther/MyDashboard`,
+   branche `main`, *Build Pack* : **Dockerfile**. Port exposé : **3737**. Domaine : le tien
+   (en `https://`).
+2. **Volume persistant** : *Storages* → volume monté sur **`/app/.data`** (jetons Google).
+   Sans lui, chaque redéploiement oublie ton compte Google.
+3. **Variables d'environnement** : celles de `.env.example`, avec
+   - `DASHBOARD_PASSWORD` : un mot de passe long ;
+   - `EXTENSION_TOKEN` : un jeton aléatoire (`openssl rand -base64 32`) ;
+   - `GOOGLE_REDIRECT_URI=https://<ton-domaine>/api/auth/google/callback`.
+4. **Sonde de santé** : chemin **`/api/health`** (répond sans connexion).
+5. **Google Cloud** : ajoute `https://<ton-domaine>/api/auth/google/callback` aux URI de
+   redirection autorisées de l'ID client OAuth.
+6. Déploie, ouvre le domaine, connecte-toi, puis **Relier Google** (le jeton est propre au
+   serveur : celui de ton poste n'y est pas).
+7. **Extension** : clic droit sur son icône → *Options* → adresse `https://<ton-domaine>` et
+   le même `EXTENSION_TOKEN`. Chrome demande l'accès à cette adresse : accepte.
+
+**Accès.** Sans `DASHBOARD_PASSWORD`, tout est ouvert : c'est l'usage local. Avec, chaque
+appareil se connecte une fois et garde sa session 180 jours ; changer le mot de passe
+déconnecte tous les appareils. Cinq essais ratés bloquent une adresse un quart d'heure.
+En ligne, l'extension doit présenter `EXTENSION_TOKEN` : sans jeton configuré, le serveur
+refuse ses rapports.
+
+**Ce qui change en ligne.** La détection Maison / Bureau par le Wi-Fi ne voit que le serveur
+et se tait : restent l'agenda (« Présentiel ») et le sélecteur de l'en-tête, mémorisé sur
+chaque appareil. WhatsApp et Messenger ne se mettent à jour que quand le Chrome qui porte
+l'extension et les deux onglets est allumé.
 
 ## Relier Google (agenda, tâches, Gmail)
 
@@ -41,11 +75,13 @@ Ni WhatsApp ni Messenger n'ont d'API pour les comptes personnels, et un navigate
 fait repérer par Meta. Le tableau passe donc par une petite extension, installée dans **ton
 Chrome de tous les jours** : elle lit la liste des discussions dans tes onglets
 [web.whatsapp.com](https://web.whatsapp.com/) et [messenger.com](https://www.messenger.com/),
-et la transmet à `localhost:3737`. Pour Meta, c'est ton navigateur normal, avec tes sessions
-normales : aucune automatisation.
+et la transmet au tableau (`localhost:3737`, ou ton domaine s'il est en ligne). Pour Meta,
+c'est ton navigateur normal, avec tes sessions normales : aucune automatisation.
 
 1. Dans Chrome : `chrome://extensions`, active le **mode développeur** (en haut à droite).
 2. **Charger l'extension non empaquetée** et choisis le dossier `extension/tableau`.
+   Par défaut, elle vise `http://localhost:3737` ; pour un tableau en ligne, règle son
+   adresse et son jeton dans ses *Options* (voir « Déployer sur Coolify »).
 3. Ouvre WhatsApp Web et Messenger, connecte-toi, et **laisse les deux onglets ouverts**
    (épinglés, idéalement), en arrière-plan.
 
@@ -59,8 +95,7 @@ toujours actifs dans Paramètres › Performances), ou quand l'extension ne donn
 nouvelles depuis 3 minutes (Chrome fermé). Les pages ne chargent qu'une partie des
 discussions : les non-lues plus anciennes sont comptées, pas listées.
 
-WhatsApp : les discussions en sourdine sont ignorées (`whatsapp.includeMuted` dans
-`dashboard.config.ts`). WhatsApp Web n'a pas d'adresse par discussion : un clic ouvre
+WhatsApp : les discussions en sourdine sont ignorées, comme sur le téléphone. WhatsApp Web n'a pas d'adresse par discussion : un clic ouvre
 l'accueil. Messenger : un clic ouvre la discussion.
 
 Si un site change sa page, la lecture casse : les repères utilisés sont décrits en tête de

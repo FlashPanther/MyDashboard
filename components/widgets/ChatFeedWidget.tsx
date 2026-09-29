@@ -5,44 +5,45 @@ import { config } from '@/dashboard.config';
 import { Panel, Empty } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { hhmm } from '@/lib/time';
-import type { FeedSnapshot } from '@/lib/providers/relay';
+import type { FeedSnapshot, Source } from '@/lib/providers/relay';
 
 type Feed = {
+  /** La route (/api/<source>) et le rythme (config.refresh.<source>) en decoulent. */
+  source: Source;
   title: string;
-  endpoint: string;
   /** Page ouverte par le titre, et a garder ouverte pour l'extension. */
   site: string;
   siteLabel: string;
   /** Ce que « connecte-toi » veut dire sur ce site. */
   loginHint: string;
-  refresh: number;
 };
 
-const FEEDS = {
-  whatsapp: {
-    title: 'WhatsApp',
-    endpoint: '/api/whatsapp',
-    site: 'https://web.whatsapp.com/',
-    siteLabel: 'web.whatsapp.com',
-    loginHint: 'L’onglet WhatsApp attend que tu scannes son QR code.',
-    refresh: config.refresh.whatsapp,
-  },
-  messenger: {
-    title: 'Messenger',
-    endpoint: '/api/messenger',
-    site: 'https://www.messenger.com/',
-    siteLabel: 'messenger.com',
-    loginHint: 'L’onglet Messenger attend que tu te connectes.',
-    refresh: config.refresh.messenger,
-  },
-} satisfies Record<string, Feed>;
-
 export function WhatsAppWidget() {
-  return <ChatFeedWidget feed={FEEDS.whatsapp} />;
+  return (
+    <ChatFeedWidget
+      feed={{
+        source: 'whatsapp',
+        title: 'WhatsApp',
+        site: 'https://web.whatsapp.com/',
+        siteLabel: 'web.whatsapp.com',
+        loginHint: 'L’onglet WhatsApp attend que tu scannes son QR code.',
+      }}
+    />
+  );
 }
 
 export function MessengerWidget() {
-  return <ChatFeedWidget feed={FEEDS.messenger} />;
+  return (
+    <ChatFeedWidget
+      feed={{
+        source: 'messenger',
+        title: 'Messenger',
+        site: 'https://www.messenger.com/',
+        siteLabel: 'messenger.com',
+        loginHint: 'L’onglet Messenger attend que tu te connectes.',
+      }}
+    />
+  );
 }
 
 function warning(feed: Feed, data: FeedSnapshot): ReactNode {
@@ -87,9 +88,23 @@ function warning(feed: Feed, data: FeedSnapshot): ReactNode {
 }
 
 function ChatFeedWidget({ feed }: { feed: Feed }) {
-  const { data, error } = useEndpoint<FeedSnapshot>(feed.endpoint, feed.refresh);
+  const { data, error } = useEndpoint<FeedSnapshot>(
+    `/api/${feed.source}`,
+    config.refresh[feed.source],
+  );
   const ready = data?.status === 'ready';
   const problem = data ? warning(feed, data) : null;
+
+  const meta = !data ? null : ready ? (
+    <>
+      <span className={`font-semibold ${data.conversations === 0 ? 'text-jade' : 'text-amber'}`}>
+        {data.conversations}
+      </span>{' '}
+      non lues
+    </>
+  ) : (
+    <span className="text-rose">hors ligne</span>
+  );
 
   return (
     <Panel
@@ -97,20 +112,7 @@ function ChatFeedWidget({ feed }: { feed: Feed }) {
       grow
       href={feed.site}
       hrefLabel={`Ouvrir ${feed.title}`}
-      meta={
-        ready ? (
-          <>
-            <span
-              className={`font-semibold ${data.conversations === 0 ? 'text-jade' : 'text-amber'}`}
-            >
-              {data.conversations}
-            </span>{' '}
-            non lues
-          </>
-        ) : data ? (
-          <span className="text-rose">hors ligne</span>
-        ) : null
-      }
+      meta={meta}
       error={error}
     >
       <div className="flex h-64 flex-col lg:h-full">
@@ -145,11 +147,7 @@ function ChatFeedWidget({ feed }: { feed: Feed }) {
                           <span className="tnum flex shrink-0 items-baseline gap-2 font-mono text-[11px] text-muted">
                             {chat.when}
                             {chat.unread !== null && (
-                              <span
-                                className={`min-w-5 rounded-full px-1.5 text-center font-semibold ${
-                                  chat.muted ? 'bg-muted/30 text-ink' : 'bg-jade text-panel'
-                                }`}
-                              >
+                              <span className="min-w-5 rounded-full bg-jade px-1.5 text-center font-semibold text-panel">
                                 {chat.unread || '•'}
                               </span>
                             )}

@@ -1,8 +1,8 @@
 // Relais entre les onglets de messagerie et le tableau. Les scripts de page ne
 // peuvent pas joindre le tableau eux-memes (politique de securite des sites) ;
-// l'extension, elle, en a la permission.
+// l'extension, elle, en a la permission. Adresse et jeton : page d'options.
 
-const DASHBOARD = 'http://localhost:3737';
+importScripts('settings.js');
 
 // Onglet a surveiller, par source (la route du tableau porte le meme nom).
 const SITES = {
@@ -11,10 +11,13 @@ const SITES = {
 };
 
 async function report(source, body) {
+  const { dashboard, token } = await loadSettings();
+  const headers = { 'content-type': 'application/json' };
+  if (token) headers.authorization = `Bearer ${token}`;
   try {
-    await fetch(`${DASHBOARD}/api/${source}`, {
+    await fetch(`${dashboard}/api/${source}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
   } catch {

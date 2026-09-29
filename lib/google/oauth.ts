@@ -51,9 +51,16 @@ function credentials() {
   return { clientId, clientSecret, redirectUri };
 }
 
-export function buildAuthUrl(): string {
+/** Cookie du jeton anti-rejeu `state`, pose par /api/auth/google et relu au retour. */
+export const STATE_COOKIE = 'tableau_oauth_state';
+/** Le cookie ne part que vers la liaison Google et son retour. */
+export const STATE_COOKIE_PATH = '/api/auth/google';
+
+/** `state` : valeur aleatoire rendue par Google au retour, voir app/api/auth/google. */
+export function buildAuthUrl(state: string): string {
   const { clientId, redirectUri } = credentials();
   const params = new URLSearchParams({
+    state,
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
