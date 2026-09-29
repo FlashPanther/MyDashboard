@@ -57,23 +57,56 @@ test('refuse un état inconnu', () => {
   assert.throws(() => receiveReport('whatsapp', { state: 'pirate' }));
 });
 
-test('un Chrome sans onglet n’efface pas la liste d’un autre Chrome encore frais', () => {
-  receiveReport('whatsapp', { state: 'ready', chats: [chat] }, 0);
-  receiveReport('whatsapp', { state: 'noTab', chats: [] }, 60_000);
-  receiveReport('whatsapp', { state: 'login', chats: [] }, 90_000);
-  const snapshot = feedSnapshot('whatsapp', 90_000);
-  assert.equal(snapshot.status, 'ready');
-  assert.equal(snapshot.chats.length, 1);
+const pc1 = { instance: 'pc-1' };
+const pc2 = { instance: 'pc-2' };
+const status = (at: number) => feedSnapshot('whatsapp', at).status;
+
+test('un seul PC : la déconnexion de l’onglet se voit tout de suite', () => {
+  receiveReport('whatsapp', { ...pc1, tab: 7, state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { ...pc1, tab: 7, state: 'login', chats: [] }, 10_000);
+  assert.equal(status(10_000), 'login');
 });
 
-test('reprend l’état des autres Chrome quand plus aucun ne rapporte de liste', () => {
-  receiveReport('whatsapp', { state: 'ready', chats: [chat] }, 0);
-  receiveReport('whatsapp', { state: 'noTab', chats: [] }, STALE_MS + 1);
-  assert.equal(feedSnapshot('whatsapp', STALE_MS + 1).status, 'noTab');
+test('un seul PC : le dernier onglet fermé se voit au contrôle suivant', () => {
+  receiveReport('whatsapp', { ...pc1, tab: 7, state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { ...pc1, tab: null, state: 'noTab', chats: [] }, 60_000);
+  assert.equal(status(60_000), 'noTab');
 });
 
-test('une liste plus récente remplace toujours la précédente', () => {
+test('un onglet sur le QR code n’efface pas l’onglet prêt du même PC', () => {
+  receiveReport('whatsapp', { ...pc1, tab: 7, state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { ...pc1, tab: 8, state: 'login', chats: [] }, 5_000);
+  assert.equal(status(5_000), 'ready');
+  assert.equal(feedSnapshot('whatsapp', 5_000).chats.length, 1);
+});
+
+test('un PC sans onglet n’efface pas la liste d’un autre PC', () => {
+  receiveReport('whatsapp', { ...pc1, tab: 7, state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { ...pc2, tab: null, state: 'noTab', chats: [] }, 30_000);
+  assert.equal(status(30_000), 'ready');
+});
+
+test('un seul PC prêt suffit, même si un autre est déconnecté', () => {
+  receiveReport('whatsapp', { ...pc1, tab: 7, state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { ...pc2, tab: 3, state: 'login', chats: [] }, 10_000);
+  assert.equal(status(10_000), 'ready');
+});
+
+test('quand le PC prêt se tait, l’état de l’autre PC reprend la main', () => {
+  receiveReport('whatsapp', { ...pc1, tab: 7, state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { ...pc2, tab: null, state: 'noTab', chats: [] }, STALE_MS);
+  assert.equal(status(STALE_MS), 'ready');
+  assert.equal(status(STALE_MS + 1), 'noTab');
+});
+
+test('entre deux listes fraîches, la plus récente l’emporte', () => {
+  receiveReport('whatsapp', { ...pc1, tab: 7, state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { ...pc2, tab: 3, state: 'ready', chats: [] }, 1_000);
+  assert.equal(feedSnapshot('whatsapp', 1_000).chats.length, 0);
+});
+
+test('une extension sans identifiant compte comme un seul Chrome', () => {
   receiveReport('whatsapp', { state: 'ready', chats: [chat] }, 0);
-  receiveReport('whatsapp', { state: 'ready', chats: [] }, 1000);
-  assert.equal(feedSnapshot('whatsapp', 1000).chats.length, 0);
+  receiveReport('whatsapp', { state: 'noTab', chats: [] }, 30_000);
+  assert.equal(status(30_000), 'noTab');
 });

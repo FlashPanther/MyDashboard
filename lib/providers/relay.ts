@@ -48,6 +48,16 @@ export type FeedSnapshot = {
 
 type Report = { state: ExtensionState; chats: FeedChat[]; total: number; at: number };
 
+/**
+ * Qui envoie : une installation de l'extension (un Chrome, sur un PC) et, pour
+ * les rapports d'une page, l'onglet. Le controle d'onglets fait par l'alarme
+ * de l'extension n'a pas d'onglet : il vaut pour tout ce Chrome.
+ */
+type Reporter = { instance: string; tab: number | null };
+
+/** Du plus au moins utile : une liste, puis ce qui explique son absence. */
+const PRIORITY: ExtensionState[] = ['ready', 'login', 'sleeping', 'noTab'];
+
 /** Liens qu'une discussion peut porter : rien d'autre que la messagerie elle-meme. */
 const HOSTS: Record<Source, string[]> = {
   messenger: ['www.messenger.com', 'www.facebook.com'],
@@ -58,10 +68,15 @@ const HOSTS: Record<Source, string[]> = {
 export const STALE_MS = 3 * 60_000;
 
 /** Survit au rechargement a chaud de `next dev`. */
+/** Par messagerie, le dernier rapport de chaque emetteur (« instance:onglet »). */
 const globalState = globalThis as typeof globalThis & {
-  __relay?: Partial<Record<Source, Report>>;
+  __relay?: Partial<Record<Source, Map<string, Report>>>;
 };
 const store = (globalState.__relay ??= {});
+
+function reportsOf(source: Source) {
+  return (store[source] ??= new Map());
+}
 
 function text(value: unknown, max: number): string {
   return typeof value === 'string' ? value.slice(0, max) : '';
@@ -99,42 +114,59 @@ function sanitizeChat(source: Source, raw: unknown): FeedChat | null {
   };
 }
 
+function reporterOf(raw: Record<string, unknown>): Reporter {
+  // Une extension anterieure a l'identifiant compte comme un seul Chrome.
+  return { instance: text(raw.instance, 64) || 'extension', tab: count(raw.tab) };
+}
+
 export function receiveReport(source: Source, body: unknown, now = Date.now()) {
   const raw = (body ?? {}) as Record<string, unknown>;
   const state = STATES.find((candidate) => candidate === raw.state);
   if (!state) throw new Error('État inconnu');
-
-  // Plusieurs Chrome (PC, onglets) peuvent rapporter pour la meme messagerie.
-  // Tant qu'un rapport « ready » est frais, un autre qui dit « pas d'onglet »,
-  // « en veille » ou « connexion » vient d'un Chrome moins utile : on l'ignore.
-  // Si le dernier onglet pret disparait, son rapport perime en STALE_MS et les
-  // autres reprennent la main.
-  const last = store[source];
-  if (state !== 'ready' && last?.state === 'ready' && now - last.at <= STALE_MS) return;
-
   const chats = Array.isArray(raw.chats)
     ? raw.chats
         .slice(0, 200)
         .map((chat) => sanitizeChat(source, chat))
         .filter((chat): chat is FeedChat => chat !== null)
     : [];
+
+  const { instance, tab } = reporterOf(raw);
+  const reports = reportsOf(source);
+  for (const [key, report] of reports) {
+    const sameChrome = key.startsWith(`${instance}:`);
+    // Un rapport pour tout ce Chrome (alarme) remplace ceux de ses onglets :
+    // un onglet ferme ne laisse pas sa liste derriere lui. Un rapport d'onglet
+    // remplace celui de l'alarme. Et on oublie ce qui a perime.
+    if ((sameChrome && (tab === null || key.endsWith(':*'))) || now - report.at > STALE_MS) {
+      reports.delete(key);
+    }
+  }
   // Jamais moins que la liste recue : le total de la page peut etre en retard.
-  store[source] = { state, chats, total: Math.max(count(raw.total) ?? 0, chats.length), at: now };
+  const total = Math.max(count(raw.total) ?? 0, chats.length);
+  reports.set(`${instance}:${tab ?? '*'}`, { state, chats, total, at: now });
 }
 
+/**
+ * Plusieurs Chrome peuvent rapporter pour une meme messagerie : on montre le
+ * meilleur rapport encore frais (une liste avant une explication, le plus
+ * recent a egalite). Sans rapport frais, le dernier recu, marque « stale ».
+ */
 export function feedSnapshot(source: Source, now = Date.now()): FeedSnapshot {
-  const last = store[source];
-  const status: FeedStatus = !last ? 'waiting' : now - last.at > STALE_MS ? 'stale' : last.state;
+  const all = [...(store[source]?.values() ?? [])].sort((a, b) => b.at - a.at);
+  const fresh = all.filter((report) => now - report.at <= STALE_MS);
+  const best = fresh.sort((a, b) => PRIORITY.indexOf(a.state) - PRIORITY.indexOf(b.state))[0];
+  const shown = best ?? all[0];
+  const status: FeedStatus = best ? best.state : shown ? 'stale' : 'waiting';
   return {
     status,
-    conversations: last?.total ?? 0,
+    conversations: shown?.total ?? 0,
     /** La derniere liste reste affichee, estompee, quand elle n'est plus a jour. */
-    chats: last?.chats ?? [],
-    receivedAt: last ? new Date(last.at).toISOString() : null,
+    chats: shown?.chats ?? [],
+    receivedAt: shown ? new Date(shown.at).toISOString() : null,
   };
 }
 
 /** Pour les tests. */
 export function resetFeeds() {
-  for (const source of Object.keys(store) as Source[]) delete store[source];
+  for (const source of Object.keys(store) as Source[]) store[source]?.clear();
 }

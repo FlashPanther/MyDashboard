@@ -10,8 +10,20 @@ const SITES = {
   whatsapp: 'https://web.whatsapp.com/*',
 };
 
-async function report(source, body) {
+// Identifiant de cette installation, tire une fois : le tableau distingue ainsi
+// les Chrome (plusieurs PC) qui lui rapportent.
+async function instanceId() {
+  const { instance } = await chrome.storage.local.get('instance');
+  if (instance) return instance;
+  const created = crypto.randomUUID();
+  await chrome.storage.local.set({ instance: created });
+  return created;
+}
+
+// `tab` : l'onglet dont vient le rapport, ou null pour tout ce Chrome (alarme).
+async function report(source, snapshot, tab = null) {
   const { dashboard, token } = await loadSettings();
+  const body = { ...snapshot, instance: await instanceId(), tab };
   const headers = { 'content-type': 'application/json' };
   if (token) headers.authorization = `Bearer ${token}`;
   try {
@@ -26,10 +38,10 @@ async function report(source, body) {
 }
 
 // Plusieurs onglets ou plusieurs PC : c'est le tableau qui fait le tri (voir
-// receiveReport dans lib/providers/relay.ts).
-chrome.runtime.onMessage.addListener((message) => {
+// feedSnapshot dans lib/providers/relay.ts).
+chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type === 'snapshot' && message.source in SITES) {
-    void report(message.source, message.snapshot);
+    void report(message.source, message.snapshot, sender.tab?.id ?? null);
   }
 });
 
