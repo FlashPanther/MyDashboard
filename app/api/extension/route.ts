@@ -1,4 +1,4 @@
-import { packageExtension } from '@/lib/extensionPackage';
+import { packageExtension, publicOrigin } from '@/lib/extensionPackage';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,13 +8,8 @@ export const dynamic = 'force-dynamic';
  * extension depuis un site : c'est le seul chemin hors Chrome Web Store.
  * Derriere la connexion, comme le reste.
  */
-export async function GET(request: Request) {
-  // L'adresse vue par le navigateur : derriere Traefik, Host et X-Forwarded-Proto.
-  const url = new URL(request.url);
-  const proto = request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '');
-  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? url.host;
-
-  const { zip, fileName } = await packageExtension(`${proto}://${host}`);
+export async function GET() {
+  const { zip, fileName } = await packageExtension(publicOrigin(process.env.GOOGLE_REDIRECT_URI));
   return new Response(new Uint8Array(zip), {
     headers: {
       'content-type': 'application/zip',

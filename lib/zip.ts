@@ -12,7 +12,12 @@ export type ZipEntry = { name: string; data: Buffer };
 // 01/01/1980 00:00, la plus petite date MS-DOS : l'archive ne depend pas du jour.
 const DOS_DATE = (0 << 9) | (1 << 5) | 1;
 
+// Zip classique, sans extension Zip64 : champs sur 16 et 32 bits.
+const MAX_ENTRIES = 0xffff;
+const MAX_SIZE = 0xffffffff;
+
 export function createZip(entries: ZipEntry[]): Buffer {
+  if (entries.length > MAX_ENTRIES) throw new Error('Trop de fichiers pour une archive zip');
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
@@ -21,6 +26,9 @@ export function createZip(entries: ZipEntry[]): Buffer {
     const fileName = Buffer.from(name, 'utf8');
     const compressed = deflateRawSync(data);
     const crc = crc32(data);
+    if (fileName.length > 0xffff || data.length > MAX_SIZE || offset > MAX_SIZE) {
+      throw new Error(`Fichier trop grand pour une archive zip : ${name}`);
+    }
 
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0); // signature

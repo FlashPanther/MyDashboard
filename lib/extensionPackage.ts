@@ -8,13 +8,28 @@ const SOURCE = path.join(process.cwd(), 'extension', 'tableau');
 const LOCAL = 'http://localhost:3737';
 
 /**
+ * Adresse publique du tableau, tiree de sa configuration et non des en-tetes de
+ * la requete (Host, X-Forwarded-*), qu'on ne choisit pas. GOOGLE_REDIRECT_URI
+ * pointe forcement vers elle : Google n'accepte que l'adresse enregistree.
+ * null en local ou hors HTTPS.
+ */
+export function publicOrigin(redirectUri: string | undefined): string | null {
+  try {
+    const url = new URL(redirectUri ?? '');
+    return url.protocol === 'https:' ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Prereglage pour un tableau en ligne : l'extension vise d'emblee cette adresse
  * (adresse par defaut et permission d'acces deja accordee). Le jeton, secret,
  * n'est jamais mis dans l'archive : il se colle dans les options.
- * En local, ou pour une adresse non HTTPS, les fichiers restent tels quels.
+ * Sans adresse publique, les fichiers restent tels quels (localhost:3737).
  */
-export function presetFor(files: ZipEntry[], origin: string): ZipEntry[] {
-  if (origin === LOCAL || !origin.startsWith('https://')) return files;
+export function presetFor(files: ZipEntry[], origin: string | null): ZipEntry[] {
+  if (!origin) return files;
   return files.map((file) => {
     const text = file.data.toString('utf8');
     if (file.name.endsWith('/manifest.json')) {
@@ -23,7 +38,10 @@ export function presetFor(files: ZipEntry[], origin: string): ZipEntry[] {
       return { ...file, data: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`) };
     }
     if (file.name.endsWith('/settings.js')) {
-      const preset = text.replace(`const DEFAULT_DASHBOARD = '${LOCAL}';`, `const DEFAULT_DASHBOARD = '${origin}';`);
+      const preset = text.replace(
+        `const DEFAULT_DASHBOARD = '${LOCAL}';`,
+        `const DEFAULT_DASHBOARD = ${JSON.stringify(origin)};`,
+      );
       return { ...file, data: Buffer.from(preset) };
     }
     return file;
@@ -31,8 +49,12 @@ export function presetFor(files: ZipEntry[], origin: string): ZipEntry[] {
 }
 
 /** L'extension en .zip, et le nom de fichier qui porte sa version. */
-export async function packageExtension(origin: string) {
-  const names = (await readdir(SOURCE)).sort();
+export async function packageExtension(origin: string | null) {
+  // Les fichiers du dossier, sans sous-dossier ni fichier cache (.DS_Store…).
+  const names = (await readdir(SOURCE, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && !entry.name.startsWith('.'))
+    .map((entry) => entry.name)
+    .sort();
   const files = await Promise.all(
     names.map(async (name) => ({ name: `${FOLDER}/${name}`, data: await readFile(path.join(SOURCE, name)) })),
   );

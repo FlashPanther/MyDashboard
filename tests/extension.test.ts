@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { inflateRawSync } from 'node:zlib';
-import { presetFor } from '../lib/extensionPackage.ts';
+import { presetFor, publicOrigin } from '../lib/extensionPackage.ts';
 import { createZip } from '../lib/zip.ts';
 
 /** Relit une archive par son repertoire central : nom et contenu de chaque fichier. */
@@ -46,10 +46,21 @@ test('prérègle l’extension sur le domaine d’où elle est téléchargée', 
     'http://localhost:3737/*',
     'https://tableau.exemple.be/*',
   ]);
-  assert.match(settings.data.toString(), /DEFAULT_DASHBOARD = 'https:\/\/tableau\.exemple\.be'/);
+  assert.match(settings.data.toString(), /DEFAULT_DASHBOARD = "https:\/\/tableau\.exemple\.be";/);
 });
 
-test('laisse l’extension telle quelle en local ou hors HTTPS', () => {
-  assert.equal(presetFor(files, 'http://localhost:3737'), files);
-  assert.equal(presetFor(files, 'http://192.168.1.10:3737'), files);
+test('laisse l’extension telle quelle sans adresse publique', () => {
+  assert.equal(presetFor(files, null), files);
+});
+
+test('tire l’adresse publique de la configuration, en HTTPS seulement', () => {
+  assert.equal(publicOrigin('https://tableau.exemple.be/api/auth/google/callback'), 'https://tableau.exemple.be');
+  assert.equal(publicOrigin('http://localhost:3737/api/auth/google/callback'), null);
+  assert.equal(publicOrigin(undefined), null);
+  assert.equal(publicOrigin('pas une adresse'), null);
+});
+
+test('écrit l’adresse comme une chaîne JavaScript, jamais comme du code', () => {
+  const [, settings] = presetFor(files, "https://a.be/'; alert(1); '");
+  assert.match(settings.data.toString(), /DEFAULT_DASHBOARD = "https:\/\/a\.be\/'; alert\(1\); '";/);
 });
