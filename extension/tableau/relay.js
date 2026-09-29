@@ -12,13 +12,19 @@ function startRelay(source, read) {
     const serialized = JSON.stringify(current);
     if (!force && serialized === last) return;
     last = serialized;
+    // Extension rechargee ou retiree : ce script est orphelin, il s'arrete.
+    if (!chrome.runtime?.id) return stop();
     try {
-      chrome.runtime.sendMessage({ type: 'snapshot', source, snapshot: current });
+      // Le relais endormi ou absent rejette la promesse : le prochain envoi reessaiera.
+      chrome.runtime.sendMessage({ type: 'snapshot', source, snapshot: current }).catch(() => {});
     } catch {
-      // Extension rechargee ou retiree : ce script est orphelin, il s'arrete.
-      clearInterval(heartbeat);
-      observer.disconnect();
+      stop();
     }
+  }
+
+  function stop() {
+    clearInterval(heartbeat);
+    observer.disconnect();
   }
 
   // Des qu'un message arrive ou qu'une discussion est lue, avec un petit delai

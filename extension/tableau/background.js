@@ -22,11 +22,21 @@ async function report(source, body) {
   }
 }
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === 'snapshot' && message.source in SITES) {
-    void report(message.source, message.snapshot);
-  }
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== 'snapshot' || !(message.source in SITES)) return;
+  void relay(message.source, message.snapshot, sender.tab?.id);
 });
+
+// Deux onglets d'une meme messagerie : l'un peut etre sur le QR code ou en
+// chargement pendant que l'autre montre la liste. Un tel rapport n'ecrase pas
+// l'etat du tableau tant qu'un autre onglet existe ; seuls les « ready » passent.
+async function relay(source, snapshot, tabId) {
+  if (snapshot?.state !== 'ready') {
+    const tabs = await chrome.tabs.query({ url: SITES[source] });
+    if (tabs.some((tab) => tab.id !== tabId)) return;
+  }
+  await report(source, snapshot);
+}
 
 // Toutes les minutes : les onglets existent-ils encore ? Sans eux, plus personne
 // n'envoie rien, et le tableau doit pouvoir dire pourquoi.

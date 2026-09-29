@@ -50,7 +50,7 @@ function readRow(row, index) {
     preview: clean(status?.getAttribute('title')) || text(status),
     when,
     // Une discussion marquee « non lue » a la main a une pastille sans chiffre.
-    unread: Number(text(badge)) || 0,
+    unread: Number(text(badge)) || Number(badge?.getAttribute('aria-label')?.match(/\d+/)?.[0]) || 0,
     muted: Boolean(row.querySelector(MUTED)),
     // WhatsApp Web n'a pas d'adresse par discussion : on ouvre l'accueil.
     url: HOME,

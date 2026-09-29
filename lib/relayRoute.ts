@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { handle } from '@/lib/api';
 import { feedSnapshot, receiveReport, type FeedChat, type Source } from '@/lib/providers/relay';
 
+const MAX_BODY = 256 * 1024;
+
 /** GET : ce que l'extension a pousse en dernier. `keep` filtre les discussions affichees. */
 export function relayGet(source: Source, keep: (chat: FeedChat) => boolean = () => true) {
   return handle(async () => {
@@ -19,12 +21,18 @@ export function relayGet(source: Source, keep: (chat: FeedChat) => boolean = () 
  */
 export async function relayPost(source: Source, request: Request) {
   const origin = request.headers.get('origin') ?? '';
-  const json = request.headers.get('content-type')?.startsWith('application/json');
-  if (!json || !origin.startsWith('chrome-extension://')) {
+  const type = request.headers.get('content-type')?.split(';')[0].trim();
+  if (type !== 'application/json' || !origin.startsWith('chrome-extension://')) {
     return NextResponse.json({ error: 'Réservé à l’extension du tableau' }, { status: 403 });
   }
+  // Une liste de discussions pese quelques ko : au-dela, ce n'est pas l'extension.
+  if (Number(request.headers.get('content-length') ?? 0) > MAX_BODY) {
+    return NextResponse.json({ error: 'Rapport trop volumineux' }, { status: 413 });
+  }
+  const body = await request.json().catch(() => undefined);
+  if (body === undefined) return NextResponse.json({ error: 'JSON illisible' }, { status: 400 });
   return handle(async () => {
-    receiveReport(source, await request.json());
+    receiveReport(source, body);
     return { ok: true };
   });
 }
