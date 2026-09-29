@@ -3,7 +3,7 @@ import { createHash, createHmac, scryptSync, timingSafeEqual } from 'node:crypto
 /**
  * Acces au tableau en ligne. Sans DASHBOARD_PASSWORD (usage local), tout est
  * ouvert, comme avant. Avec, chaque appareil se connecte une fois et garde un
- * cookie signe pour SESSION_DAYS.
+ * cookie signe pour SESSION_MAX_AGE.
  *
  * Le cookie ne contient que sa date d'expiration et une signature HMAC dont la
  * cle derive du mot de passe (scrypt : un cookie vole ne permet pas de tester
@@ -11,18 +11,34 @@ import { createHash, createHmac, scryptSync, timingSafeEqual } from 'node:crypto
  */
 
 export const SESSION_COOKIE = 'tableau_session';
-export const SESSION_DAYS = 180;
+/** 180 jours, en secondes (unite des cookies). */
+export const SESSION_MAX_AGE = 180 * 86_400;
 
-const keys = new Map<string, Buffer>();
+/**
+ * Reglages d'acces, lus a l'execution. Sans mot de passe, le tableau est en
+ * local et tout est ouvert.
+ */
+export function authSettings() {
+  return {
+    password: process.env.DASHBOARD_PASSWORD || null,
+    extensionToken: process.env.EXTENSION_TOKEN || null,
+  };
+}
 
-/** scrypt coute ~50 ms : calcule une fois par mot de passe. */
+/** Options communes aux cookies du tableau ; Secure des que la page est en HTTPS. */
+export function cookieOptions(request: Request, path: string, maxAge: number) {
+  const https = request.headers.get('x-forwarded-proto') === 'https' || request.url.startsWith('https:');
+  return { httpOnly: true, sameSite: 'lax' as const, secure: https, path, maxAge };
+}
+
+// scrypt coute ~50 ms : la cle n'est calculee qu'une fois (un seul mot de passe).
+let cached: { password: string; key: Buffer } | undefined;
+
 function key(password: string) {
-  let derived = keys.get(password);
-  if (!derived) {
-    derived = scryptSync(password, 'tableau-session', 32);
-    keys.set(password, derived);
+  if (cached?.password !== password) {
+    cached = { password, key: scryptSync(password, 'tableau-session', 32) };
   }
-  return derived;
+  return cached.key;
 }
 
 function sign(payload: string, password: string) {
@@ -50,7 +66,7 @@ export function clientIp(headers: Headers): string {
 }
 
 export function createSession(password: string, now = Date.now()): string {
-  const expires = String(now + SESSION_DAYS * 86_400_000);
+  const expires = String(now + SESSION_MAX_AGE * 1000);
   return `${expires}.${sign(expires, password)}`;
 }
 
@@ -69,16 +85,16 @@ export function verifySession(token: string | undefined, password: string, now =
  * Rend null si la requete passe, sinon la raison du refus.
  */
 export function extensionRefusal(
-  request: { authorization: string | null; origin: string | null; contentType: string | null },
-  env: { token?: string; password?: string },
+  headers: Headers,
+  settings: { password: string | null; extensionToken: string | null },
 ): string | null {
   // JSON exige : une page web ne peut pas en envoyer ici sans une verification
   // CORS a laquelle on ne repond pas.
-  if (request.contentType?.split(';')[0].trim() !== 'application/json') return 'JSON attendu';
-  if (env.token) {
-    const bearer = request.authorization?.match(/^Bearer (.+)$/)?.[1] ?? '';
-    return safeEqual(bearer, env.token) ? null : 'Jeton de l’extension invalide';
+  if (headers.get('content-type')?.split(';')[0].trim() !== 'application/json') return 'JSON attendu';
+  if (settings.extensionToken) {
+    const bearer = headers.get('authorization')?.match(/^Bearer (.+)$/)?.[1] ?? '';
+    return safeEqual(bearer, settings.extensionToken) ? null : 'Jeton de l’extension invalide';
   }
-  if (env.password) return 'EXTENSION_TOKEN n’est pas configuré sur le serveur';
-  return request.origin?.startsWith('chrome-extension://') ? null : 'Réservé à l’extension du tableau';
+  if (settings.password) return 'EXTENSION_TOKEN n’est pas configuré sur le serveur';
+  return headers.get('origin')?.startsWith('chrome-extension://') ? null : 'Réservé à l’extension du tableau';
 }

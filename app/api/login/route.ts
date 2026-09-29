@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server';
 import { clearFailures, isBlocked, recordFailure } from '@/lib/auth/limiter';
-import { clientIp, createSession, safeEqual, SESSION_COOKIE, SESSION_DAYS } from '@/lib/auth/session';
+import {
+  authSettings,
+  clientIp,
+  cookieOptions,
+  createSession,
+  safeEqual,
+  SESSION_COOKIE,
+  SESSION_MAX_AGE,
+} from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const password = process.env.DASHBOARD_PASSWORD;
+  const { password } = authSettings();
   if (!password) return NextResponse.json({ ok: true });
 
   const ip = clientIp(request.headers);
@@ -29,13 +37,6 @@ export async function POST(request: Request) {
 
   clearFailures(ip);
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(SESSION_COOKIE, createSession(password), {
-    httpOnly: true,
-    // Lax : le retour de Google (redirection de premier niveau) garde la session.
-    sameSite: 'lax',
-    secure: request.headers.get('x-forwarded-proto') === 'https' || request.url.startsWith('https:'),
-    path: '/',
-    maxAge: SESSION_DAYS * 86_400,
-  });
+  response.cookies.set(SESSION_COOKIE, createSession(password), cookieOptions(request, '/', SESSION_MAX_AGE));
   return response;
 }

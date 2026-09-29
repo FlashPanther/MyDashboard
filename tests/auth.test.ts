@@ -14,7 +14,7 @@ import {
   createSession,
   extensionRefusal,
   safeEqual,
-  SESSION_DAYS,
+  SESSION_MAX_AGE,
   verifySession,
 } from '../lib/auth/session.ts';
 
@@ -29,7 +29,7 @@ test('refuse une session après changement de mot de passe', () => {
 });
 
 test('refuse une session expirée', () => {
-  assert.equal(verifySession(createSession('secret', 0), 'secret', (SESSION_DAYS + 1) * DAY), false);
+  assert.equal(verifySession(createSession('secret', 0), 'secret', SESSION_MAX_AGE * 1000 + DAY), false);
 });
 
 test('refuse une session dont la date a été retouchée', () => {
@@ -42,33 +42,39 @@ test('refuse une session absente ou malformée', () => {
   assert.equal(verifySession('n-importe-quoi', 'secret'), false);
 });
 
-const json = { contentType: 'application/json', origin: 'chrome-extension://abc', authorization: null };
+const extension = { 'content-type': 'application/json', origin: 'chrome-extension://abc' };
+const online = { password: 'secret', extensionToken: 'jeton' };
+const local = { password: null, extensionToken: null };
 
 test('en ligne, accepte l’extension qui présente le bon jeton', () => {
-  const request = { ...json, authorization: 'Bearer jeton' };
-  assert.equal(extensionRefusal(request, { token: 'jeton', password: 'secret' }), null);
+  const headers = new Headers({ ...extension, authorization: 'Bearer jeton' });
+  assert.equal(extensionRefusal(headers, online), null);
 });
 
 test('en ligne, refuse une origine d’extension imitée sans jeton', () => {
-  assert.notEqual(extensionRefusal(json, { token: 'jeton', password: 'secret' }), null);
+  assert.notEqual(extensionRefusal(new Headers(extension), online), null);
 });
 
 test('en ligne, refuse tout rapport tant qu’aucun jeton n’est configuré', () => {
-  assert.notEqual(extensionRefusal(json, { password: 'secret' }), null);
+  assert.notEqual(extensionRefusal(new Headers(extension), { ...online, extensionToken: null }), null);
 });
 
 test('en local, l’origine d’extension suffit', () => {
-  assert.equal(extensionRefusal(json, {}), null);
-  assert.notEqual(extensionRefusal({ ...json, origin: 'https://evil.example' }, {}), null);
+  assert.equal(extensionRefusal(new Headers(extension), local), null);
+  assert.notEqual(extensionRefusal(new Headers({ ...extension, origin: 'https://evil.example' }), local), null);
 });
 
 test('refuse toujours un rapport qui n’est pas du JSON', () => {
-  for (const contentType of ['text/plain', 'application/jsonp']) {
-    const request = { ...json, contentType, authorization: 'Bearer jeton' };
-    assert.notEqual(extensionRefusal(request, { token: 'jeton' }), null);
+  for (const type of ['text/plain', 'application/jsonp']) {
+    const headers = new Headers({ ...extension, 'content-type': type, authorization: 'Bearer jeton' });
+    assert.notEqual(extensionRefusal(headers, online), null);
   }
-  const charset = { ...json, contentType: 'application/json; charset=utf-8', authorization: 'Bearer jeton' };
-  assert.equal(extensionRefusal(charset, { token: 'jeton' }), null);
+  const charset = new Headers({
+    ...extension,
+    'content-type': 'application/json; charset=utf-8',
+    authorization: 'Bearer jeton',
+  });
+  assert.equal(extensionRefusal(charset, online), null);
 });
 
 test('bloque une adresse après trop d’échecs, puis la libère', () => {

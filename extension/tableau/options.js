@@ -15,13 +15,12 @@ document.getElementById('save').addEventListener('click', async () => {
     status.textContent = 'Adresse invalide.';
     return;
   }
+  const origin = address.origin;
   // Le jeton part avec chaque envoi : jamais en clair sur le reseau.
-  const local = address.origin === 'http://localhost:3737';
-  if (address.protocol !== 'https:' && !local) {
-    status.textContent = 'Adresse en https:// obligatoire (sauf http://localhost:3737).';
+  if (address.protocol !== 'https:' && origin !== DEFAULT_DASHBOARD) {
+    status.textContent = `Adresse en https:// obligatoire (sauf ${DEFAULT_DASHBOARD}).`;
     return;
   }
-  const origin = address.origin;
   // L'extension ne peut joindre que les sites autorises : on demande l'acces a
   // cette adresse-la, et a rien d'autre.
   const granted = await chrome.permissions.request({ origins: [`${origin}/*`] });

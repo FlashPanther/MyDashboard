@@ -18,16 +18,15 @@ FROM node:24-alpine
 WORKDIR /app
 # Le tableau raisonne en heure belge (« aujourd'hui », « en retard ») : le
 # conteneur aussi.
-RUN apk add --no-cache tzdata
+# /app/.data cree avec le bon proprietaire : un volume neuf en herite au premier
+# montage.
+RUN apk add --no-cache tzdata && mkdir -p /app/.data && chown node:node /app/.data
 ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1 \
     TZ=Europe/Brussels \
     PORT=3737 \
     HOSTNAME=0.0.0.0
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
-# Cree avec le bon proprietaire : un volume neuf en herite au premier montage.
-RUN mkdir -p /app/.data && chown node:node /app/.data
 USER node
 EXPOSE 3737
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \

@@ -3,45 +3,25 @@
   "name": "Tableau du jour – messageries",
   "description": "Lit les discussions non lues des onglets messenger.com et web.whatsapp.com, et les transmet à ton tableau (localhost:3737 ou l'adresse réglée dans les options). Ne lit rien d'autre, n'envoie rien ailleurs.",
   "version": "2.1.0",
-  "permissions": [
-    "alarms",
-    "storage"
-  ],
+  "permissions": ["alarms", "storage"],
   "host_permissions": [
     "https://www.messenger.com/*",
     "https://web.whatsapp.com/*",
     "http://localhost:3737/*"
   ],
-  "background": {
-    "service_worker": "background.js"
-  },
+  "optional_host_permissions": ["https://*/*"],
+  "background": { "service_worker": "background.js" },
+  "options_ui": { "page": "options.html", "open_in_tab": false },
   "content_scripts": [
     {
-      "matches": [
-        "https://www.messenger.com/*"
-      ],
-      "js": [
-        "relay.js",
-        "messenger.js"
-      ],
+      "matches": ["https://www.messenger.com/*"],
+      "js": ["relay.js", "messenger.js"],
       "run_at": "document_idle"
     },
     {
-      "matches": [
-        "https://web.whatsapp.com/*"
-      ],
-      "js": [
-        "relay.js",
-        "whatsapp.js"
-      ],
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["relay.js", "whatsapp.js"],
       "run_at": "document_idle"
     }
-  ],
-  "optional_host_permissions": [
-    "https://*/*"
-  ],
-  "options_ui": {
-    "page": "options.html",
-    "open_in_tab": false
-  }
+  ]
 }

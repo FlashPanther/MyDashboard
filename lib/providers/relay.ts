@@ -6,7 +6,9 @@
  * stocke sur disque.
  */
 
-export type Source = 'messenger' | 'whatsapp';
+/** Une route /api/<source> par messagerie. */
+export const SOURCES = ['messenger', 'whatsapp'] as const;
+export type Source = (typeof SOURCES)[number];
 
 /**
  * Ce que l'extension voit de son cote : liste lue, onglet sur la page de
