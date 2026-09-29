@@ -1,8 +1,9 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
+import { PanelTabs, tabPanelProps, type PanelTab } from '@/components/PanelTabs';
 
-type PanelProps = {
+type PanelProps<K extends string> = {
   title: string;
   /** Page complete derriere le titre : Gmail, Google Tasks, l'agenda… */
   href?: string;
@@ -10,6 +11,11 @@ type PanelProps = {
   hrefLabel?: string;
   /** Valeur courte affichee a droite du titre : compteur, temperature, statut. */
   meta?: ReactNode;
+  /**
+   * Onglets a droite du titre : le corps du panneau devient leur tabpanel, y
+   * compris quand il affiche une erreur ou « relier Google ».
+   */
+  tabs?: { label: string; items: PanelTab<K>[]; value: K; onChange: (key: K) => void };
   error?: string | null;
   notConnected?: boolean;
   loading?: boolean;
@@ -18,26 +24,40 @@ type PanelProps = {
   children: ReactNode;
 };
 
-export function Panel({
+export function Panel<K extends string = string>({
   title,
   href,
   hrefLabel,
   meta,
+  tabs,
   error,
   notConnected,
   loading,
   grow,
   children,
-}: PanelProps) {
+}: PanelProps<K>) {
+  const id = useId();
   return (
     <section className={`panel flex min-h-0 w-full flex-col ${grow ? 'flex-1' : ''}`}>
       <header className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-2.5">
         <h2 className="eyebrow shrink-0">
           <PanelLink title={title} href={href} hrefLabel={hrefLabel} />
         </h2>
-        <div className="tnum min-w-0 truncate font-mono text-xs text-muted">{meta}</div>
+        {tabs && (
+          <PanelTabs
+            id={id}
+            label={tabs.label}
+            tabs={tabs.items}
+            value={tabs.value}
+            onChange={tabs.onChange}
+          />
+        )}
+        {meta && <div className="tnum min-w-0 truncate font-mono text-xs text-muted">{meta}</div>}
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div
+        {...(tabs && tabPanelProps(id, tabs.value))}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
+      >
         {notConnected ? (
           <ConnectPrompt />
         ) : error ? (
