@@ -4,7 +4,8 @@ import { useState, type FormEvent } from 'react';
 import { config } from '@/dashboard.config';
 import { Panel, Empty } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
-import { useStoredChoice } from '@/lib/storage';
+import { readStored, useStoredChoice, writeStored } from '@/lib/storage';
+import { tagColor } from '@/lib/tags';
 import { shortDate } from '@/lib/time';
 import type { TaskItem } from '@/app/api/tasks/route';
 
@@ -43,9 +44,21 @@ export function TasksWidget() {
     config.refresh.tasks,
   );
   const [tab, setTab] = useStoredChoice('tasks-tab', TABS);
+  const [tag, setTag] = useState<string | null>(() => readStored('tasks-tag'));
+  function chooseTag(next: string | null) {
+    setTag(next);
+    writeStored('tasks-tag', next);
+  }
+
+  // Les etiquettes en usage, les plus frequentes d'abord.
+  const counts = new Map<string, number>();
+  for (const task of data?.tasks ?? []) for (const t of task.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+  const tags = [...counts.keys()].sort((a, b) => counts.get(b)! - counts.get(a)! || a.localeCompare(b));
+  // Une etiquette retenue qui n'existe plus ne filtre rien.
+  const active = tag && counts.has(tag) ? tag : null;
 
   // Deja triees par l'API : en retard, puis du jour, puis par echeance.
-  const tasks = data?.tasks ?? [];
+  const tasks = (data?.tasks ?? []).filter((task) => !active || task.tags.includes(active));
   const pressing = tasks.filter((task) => task.overdue || task.dueToday);
   const upcoming = tasks.filter((task) => task.due && !pressing.includes(task));
   // Les plus anciennes d'abord : ce sont celles qu'on a le plus surement oubliees.
@@ -79,6 +92,7 @@ export function TasksWidget() {
             setTab('plan');
           }}
         />
+        {data && tags.length > 0 && <TagFilter tags={tags} active={active} onChange={chooseTag} />}
         {!data ? (
           <p className="font-mono text-sm text-muted">Chargement…</p>
         ) : (
@@ -87,12 +101,12 @@ export function TasksWidget() {
           <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
             {tab === 'today' && (
               <>
-                {pressing.length === 0 ? <Empty>Rien pour aujourd’hui.</Empty> : <TaskList tasks={pressing} />}
+                {pressing.length === 0 ? <Empty>Rien pour aujourd’hui.</Empty> : <TaskList tasks={pressing} onTag={chooseTag} />}
                 {/* Les taches datees plus tard n'ont plus d'autre place : elles suivent. */}
                 {upcoming.length > 0 && (
                   <>
                     <p className="eyebrow mt-3 mb-1.5">À venir</p>
-                    <TaskList tasks={upcoming} />
+                    <TaskList tasks={upcoming} onTag={chooseTag} />
                   </>
                 )}
               </>
@@ -101,7 +115,7 @@ export function TasksWidget() {
               (undated.length === 0 ? (
                 <p className="py-1 font-mono text-[11px] text-jade">Tout est planifié.</p>
               ) : (
-                <TaskList tasks={undated} />
+                <TaskList tasks={undated} onTag={chooseTag} />
               ))}
           </div>
         )}
@@ -110,7 +124,61 @@ export function TasksWidget() {
   );
 }
 
-function TaskList({ tasks }: { tasks: TaskItem[] }) {
+/** Pastille d'une etiquette : meme couleur partout pour un meme nom. */
+function TagChip({ tag, selected }: { tag: string; selected?: boolean }) {
+  return (
+    <span
+      className={`rounded-full px-1.5 font-mono text-[10px] leading-4 ${tagColor(tag)} ${
+        selected ? 'ring-1 ring-current' : ''
+      }`}
+    >
+      #{tag}
+    </span>
+  );
+}
+
+/** Filtre par etiquette : une a la fois, « Tout » pour l'enlever. */
+function TagFilter({
+  tags,
+  active,
+  onChange,
+}: {
+  tags: string[];
+  active: string | null;
+  onChange: (tag: string | null) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Filtrer par étiquette"
+      className="mb-2 flex shrink-0 items-center gap-1.5 overflow-x-auto pb-0.5"
+    >
+      <button
+        type="button"
+        aria-pressed={!active}
+        onClick={() => onChange(null)}
+        className={`shrink-0 rounded-full px-1.5 font-mono text-[10px] leading-4 ${
+          active ? 'text-muted hover:text-ink' : 'bg-ink text-ground'
+        }`}
+      >
+        Tout
+      </button>
+      {tags.map((tag) => (
+        <button
+          key={tag}
+          type="button"
+          aria-pressed={tag === active}
+          onClick={() => onChange(tag === active ? null : tag)}
+          className="shrink-0"
+        >
+          <TagChip tag={tag} selected={tag === active} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TaskList({ tasks, onTag }: { tasks: TaskItem[]; onTag: (tag: string) => void }) {
   return (
     <ul className="space-y-1.5">
       {tasks.map((task) => {
@@ -128,8 +196,20 @@ function TaskList({ tasks }: { tasks: TaskItem[] }) {
               rel="noreferrer"
               className="min-w-0 flex-1 truncate text-[13px] text-ink after:absolute after:inset-0 hover:underline"
             >
-              {task.title}
+              {task.label}
             </a>
+            {/* Au-dessus du lien qui couvre la ligne : un clic filtre sur l'etiquette. */}
+            {task.tags.map((t) => (
+              <button
+                key={t}
+                type="button"
+                title={`Filtrer sur #${t}`}
+                onClick={() => onTag(t)}
+                className="relative z-10 shrink-0"
+              >
+                <TagChip tag={t} />
+              </button>
+            ))}
             {due.text && <span className={`shrink-0 font-mono text-[11px] ${due.tone}`}>{due.text}</span>}
           </li>
         );
@@ -176,7 +256,7 @@ function QuickAdd({ onCreated }: { onCreated: () => void }) {
         <input
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder="Nouvelle tâche, puis Entrée"
+          placeholder="Nouvelle tâche (#étiquette), puis Entrée"
           aria-label="Nouvelle tâche"
           maxLength={1024}
           disabled={busy}

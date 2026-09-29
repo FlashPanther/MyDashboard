@@ -263,6 +263,14 @@ Au-dessus des deux onglets, un champ **Nouvelle tâche** : tape le titre, Entré
 part dans ta liste par défaut de Google Tasks, sans échéance ; le panneau bascule sur « À
 planifier » pour la montrer.
 
+**Étiquettes** : Google Tasks n'a ni catégories ni étiquettes, alors elles s'écrivent dans le
+titre : `Réparer le vélo #maison #urgent`. Le tableau retire les `#mots` du titre affiché et
+les montre en pastilles, chacune toujours de la même couleur. Une rangée « Tout · #maison ·
+… » au-dessus de la liste filtre sur une étiquette à la fois (retenue sur chaque appareil),
+et les compteurs des onglets suivent ; un clic sur la pastille d'une tâche filtre aussi.
+Une étiquette : lettres (accents compris), chiffres, `-` ou `_`, précédée d'une espace ou en
+début de titre (`C#9` ou une adresse avec `#ancre` n'en sont pas).
+
 ## Mails suivis
 
 L'onglet **Suivis** du Courrier liste les mails étoilés dans Gmail (« Messages suivis »), lus
