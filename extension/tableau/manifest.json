@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Tableau du jour – messageries",
+  "description": "Lit les discussions non lues des onglets messenger.com et web.whatsapp.com, et les transmet au tableau (localhost:3737). Ne lit rien d'autre, n'envoie rien ailleurs.",
+  "version": "2.0.0",
+  "permissions": ["alarms"],
+  "host_permissions": [
+    "https://www.messenger.com/*",
+    "https://web.whatsapp.com/*",
+    "http://localhost:3737/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.messenger.com/*"],
+      "js": ["relay.js", "messenger.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["relay.js", "whatsapp.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

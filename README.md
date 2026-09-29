@@ -35,54 +35,36 @@ Tâches. C'est la seule écriture du dashboard dans ton compte : il crée une t�
 liste par défaut quand tu la tapes, rien d'autre. Si tu as relié Google avant l'arrivée de
 ce champ, il le signale et propose de relier à nouveau.
 
-## Relier WhatsApp
+## Relier WhatsApp et Messenger
 
-WhatsApp n'a pas d'API pour les comptes personnels : le tableau fait tourner WhatsApp Web
-dans un Chrome sans fenêtre (`whatsapp-web.js`), comme un appareil connecté de plus.
-
-1. Ouvre le dashboard : le panneau WhatsApp affiche un QR code.
-2. Sur le téléphone : **WhatsApp > Appareils connectés > Connecter un appareil**, et scanne.
-3. La session est gardée dans `.data/whatsapp/` (ignoré par git). Pour délier : supprime
-   l'appareil « Tableau du jour » sur le téléphone, ou efface ce dossier.
-
-Le panneau ne fait que lire : il ne marque rien comme lu et se déclare « hors ligne » pour
-que le téléphone continue de sonner. Les conversations archivées et en sourdine sont
-ignorées (`whatsapp.includeMuted` dans `dashboard.config.ts`).
-
-Un clic ouvre la conversation dans WhatsApp Web. Seules les conversations privées ont un
-lien direct (par numéro de téléphone) : pour un groupe, WhatsApp Web n'en propose pas, et le
-clic ouvre simplement l'accueil.
-
-Chrome : celui du système (`/usr/bin/google-chrome`, ou `CHROME_PATH`). Celui que
-télécharge Puppeteer n'a pas de bac à sable utilisable sous Ubuntu 24.04.
-
-Ce n'est pas un usage prévu par WhatsApp : en lecture seule le risque est faible, mais un
-blocage du compte n'est pas exclu.
-
-## Relier Messenger
-
-Messenger n'a pas d'API pour les comptes personnels, et un Chrome piloté se fait repérer par
-Facebook. Le tableau passe donc par une petite extension, installée dans **ton Chrome de tous
-les jours** : elle lit la liste des discussions dans ton onglet messenger.com et la transmet
-à `localhost:3737`. Pour Facebook, c'est ton navigateur normal, avec ta session normale.
+Ni WhatsApp ni Messenger n'ont d'API pour les comptes personnels, et un navigateur piloté se
+fait repérer par Meta. Le tableau passe donc par une petite extension, installée dans **ton
+Chrome de tous les jours** : elle lit la liste des discussions dans tes onglets
+[web.whatsapp.com](https://web.whatsapp.com/) et [messenger.com](https://www.messenger.com/),
+et la transmet à `localhost:3737`. Pour Meta, c'est ton navigateur normal, avec tes sessions
+normales : aucune automatisation.
 
 1. Dans Chrome : `chrome://extensions`, active le **mode développeur** (en haut à droite).
-2. **Charger l'extension non empaquetée** et choisis le dossier `extension/messenger`.
-3. Ouvre [messenger.com](https://www.messenger.com/), connecte-toi, et **laisse l'onglet
-   ouvert** (épinglé, idéalement).
+2. **Charger l'extension non empaquetée** et choisis le dossier `extension/tableau`.
+3. Ouvre WhatsApp Web et Messenger, connecte-toi, et **laisse les deux onglets ouverts**
+   (épinglés, idéalement), en arrière-plan.
 
 L'extension ne clique sur rien et n'ouvre aucune discussion : elle ne marque rien comme lu.
-Messenger, lui, marque comme lue la discussion affichée quand l'onglet est au premier plan :
-garde-le en arrière-plan.
+Les deux sites, eux, marquent comme lue la discussion affichée quand leur onglet est au
+premier plan : garde-les en arrière-plan, sur la liste.
 
-Le panneau prévient quand l'onglet est fermé, déconnecté, mis en veille par l'économiseur de
-mémoire de Chrome (ajoute messenger.com aux sites toujours actifs dans Paramètres ›
-Performances), ou quand l'extension ne donne plus de nouvelles depuis 3 minutes (Chrome
-fermé). La page ne charge que les trente dernières discussions : les non-lues plus anciennes
-sont comptées, pas listées.
+Chaque panneau prévient quand son onglet est fermé, déconnecté (QR code pour WhatsApp),
+mis en veille par l'économiseur de mémoire de Chrome (ajoute les deux sites aux sites
+toujours actifs dans Paramètres › Performances), ou quand l'extension ne donne plus de
+nouvelles depuis 3 minutes (Chrome fermé). Les pages ne chargent qu'une partie des
+discussions : les non-lues plus anciennes sont comptées, pas listées.
 
-Si Messenger change sa page, la lecture casse : les repères utilisés sont décrits en tête de
-`extension/messenger/content.js`.
+WhatsApp : les discussions en sourdine sont ignorées (`whatsapp.includeMuted` dans
+`dashboard.config.ts`). WhatsApp Web n'a pas d'adresse par discussion : un clic ouvre
+l'accueil. Messenger : un clic ouvre la discussion.
+
+Si un site change sa page, la lecture casse : les repères utilisés sont décrits en tête de
+`extension/tableau/whatsapp.js` et `extension/tableau/messenger.js`.
 
 ## Maison ou bureau
 
@@ -274,12 +256,14 @@ variable, jamais l'utilitaire dans un composant. Les deux palettes tiennent le n
 
 ```
 app/api/          une route par source de données, tout en serveur
-lib/providers/    iRail, Open-Meteo, itinéraires voiture
+lib/providers/    iRail, Open-Meteo, itinéraires voiture, relais des messageries
 lib/google/       OAuth et renouvellement du jeton
 lib/leave.ts      choix du train et calcul de l'heure de départ
 components/ThemeToggle.tsx   sélecteur clair / sombre / auto
 components/       DayColumn (la colonne temps) + widgets
 dashboard.config.ts   tes réglages
+extension/tableau/    extension Chrome : WhatsApp Web et Messenger → tableau
+tests/            npm test (lanceur de tests de Node)
 ```
 
 ## Notes

@@ -5,46 +5,73 @@ import { config } from '@/dashboard.config';
 import { Panel, Empty } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { hhmm } from '@/lib/time';
-import type { MessengerChat, MessengerStatus } from '@/lib/providers/messenger';
+import type { FeedSnapshot } from '@/lib/providers/relay';
 
-type MessengerPayload = {
-  status: MessengerStatus;
-  conversations: number;
-  chats: MessengerChat[];
-  receivedAt: string | null;
+type Feed = {
+  title: string;
+  endpoint: string;
+  /** Page ouverte par le titre, et a garder ouverte pour l'extension. */
+  site: string;
+  siteLabel: string;
+  /** Ce que « connecte-toi » veut dire sur ce site. */
+  loginHint: string;
+  refresh: number;
 };
 
-const MESSENGER = 'https://www.messenger.com/';
+const FEEDS = {
+  whatsapp: {
+    title: 'WhatsApp',
+    endpoint: '/api/whatsapp',
+    site: 'https://web.whatsapp.com/',
+    siteLabel: 'web.whatsapp.com',
+    loginHint: 'L’onglet WhatsApp attend que tu scannes son QR code.',
+    refresh: config.refresh.whatsapp,
+  },
+  messenger: {
+    title: 'Messenger',
+    endpoint: '/api/messenger',
+    site: 'https://www.messenger.com/',
+    siteLabel: 'messenger.com',
+    loginHint: 'L’onglet Messenger attend que tu te connectes.',
+    refresh: config.refresh.messenger,
+  },
+} satisfies Record<string, Feed>;
 
-function warning(data: MessengerPayload): ReactNode {
+export function WhatsAppWidget() {
+  return <ChatFeedWidget feed={FEEDS.whatsapp} />;
+}
+
+export function MessengerWidget() {
+  return <ChatFeedWidget feed={FEEDS.messenger} />;
+}
+
+function warning(feed: Feed, data: FeedSnapshot): ReactNode {
+  const site = <SiteLink feed={feed}>{feed.siteLabel}</SiteLink>;
   switch (data.status) {
     case 'waiting':
       return (
         <>
           L&rsquo;extension ne s&rsquo;est pas encore manifestée. Vérifie qu&rsquo;elle est
-          installée (voir le README) et qu&rsquo;un onglet{' '}
-          <MessengerLink>messenger.com</MessengerLink> est ouvert.
+          installée (voir le README) et qu&rsquo;un onglet {site} est ouvert.
         </>
       );
     case 'noTab':
       return (
         <>
-          Aucun onglet Messenger ouvert. <MessengerLink>Ouvre messenger.com</MessengerLink> dans
-          Chrome et laisse-le ouvert.
+          Aucun onglet {feed.title} ouvert. Ouvre {site} dans Chrome et laisse-le ouvert.
         </>
       );
     case 'login':
       return (
         <>
-          L&rsquo;onglet Messenger attend que tu te connectes.{' '}
-          <MessengerLink>Y aller</MessengerLink>
+          {feed.loginHint} <SiteLink feed={feed}>Y aller</SiteLink>
         </>
       );
     case 'sleeping':
       return (
         <>
-          Chrome a mis l&rsquo;onglet Messenger en veille. Clique dessus pour le réveiller, ou
-          ajoute messenger.com aux sites toujours actifs (Paramètres › Performances).
+          Chrome a mis l&rsquo;onglet {feed.title} en veille. Clique dessus pour le réveiller, ou
+          ajoute {feed.siteLabel} aux sites toujours actifs (Paramètres › Performances).
         </>
       );
     case 'stale':
@@ -59,20 +86,17 @@ function warning(data: MessengerPayload): ReactNode {
   }
 }
 
-export function MessengerWidget() {
-  const { data, error } = useEndpoint<MessengerPayload>(
-    '/api/messenger',
-    config.refresh.messenger,
-  );
+function ChatFeedWidget({ feed }: { feed: Feed }) {
+  const { data, error } = useEndpoint<FeedSnapshot>(feed.endpoint, feed.refresh);
   const ready = data?.status === 'ready';
-  const problem = data ? warning(data) : null;
+  const problem = data ? warning(feed, data) : null;
 
   return (
     <Panel
-      title="Messenger"
+      title={feed.title}
       grow
-      href={MESSENGER}
-      hrefLabel="Ouvrir Messenger"
+      href={feed.site}
+      hrefLabel={`Ouvrir ${feed.title}`}
       meta={
         ready ? (
           <>
@@ -118,21 +142,31 @@ export function MessengerWidget() {
                           <span className="truncate text-[13px] font-semibold text-ink">
                             {chat.name}
                           </span>
-                          <span className="tnum shrink-0 font-mono text-[11px] text-muted">
+                          <span className="tnum flex shrink-0 items-baseline gap-2 font-mono text-[11px] text-muted">
                             {chat.when}
+                            {chat.unread !== null && (
+                              <span
+                                className={`min-w-5 rounded-full px-1.5 text-center font-semibold ${
+                                  chat.muted ? 'bg-muted/30 text-ink' : 'bg-jade text-panel'
+                                }`}
+                              >
+                                {chat.unread || '•'}
+                              </span>
+                            )}
                           </span>
                         </div>
                         <p className="truncate text-[13px] text-ink/75 group-hover:text-ink">
+                          {chat.author && <span className="text-muted">{chat.author} : </span>}
                           {chat.preview}
                         </p>
                       </a>
                     </li>
                   ))}
-                  {/* La page ne charge que les trente dernieres discussions. */}
+                  {/* La page ne charge qu'une partie des discussions. */}
                   {data.conversations > data.chats.length && (
                     <li className="pt-1.5 font-mono text-[11px] text-muted">
-                      +{data.conversations - data.chats.length} plus anciennes, à voir dans
-                      Messenger
+                      +{data.conversations - data.chats.length} plus anciennes, à voir dans{' '}
+                      {feed.title}
                     </li>
                   )}
                 </ul>
@@ -145,10 +179,10 @@ export function MessengerWidget() {
   );
 }
 
-function MessengerLink({ children }: { children: ReactNode }) {
+function SiteLink({ feed, children }: { feed: Feed; children: ReactNode }) {
   return (
     <a
-      href={MESSENGER}
+      href={feed.site}
       target="_blank"
       rel="noreferrer"
       className="text-amber underline-offset-2 hover:underline"

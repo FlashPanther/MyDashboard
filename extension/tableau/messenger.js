@@ -1,5 +1,5 @@
-// Lit la liste « Discussions » de messenger.com et la confie au relais
-// (background.js). Ne touche a rien dans la page : aucun clic, aucune lecture
+// Lit la liste « Discussions » de messenger.com (relay.js se charge de
+// l'envoi). Ne touche a rien dans la page : aucun clic, aucune lecture
 // de conversation, donc rien n'est marque comme lu.
 //
 // Reperes, releves sur messenger.com en septembre 2026 :
@@ -26,9 +26,12 @@ function readChat(link) {
   const when = blocks.length > 1 && blocks.at(-1).length <= 12 ? blocks.pop() : '';
   return {
     id: href,
+    author: null,
     name,
     preview: blocks.join(' '),
     when,
+    unread: null,
+    muted: false,
     url: new URL(href, location.origin).toString(),
   };
 }
@@ -50,32 +53,4 @@ function snapshot() {
   return { state: 'ready', chats, total: Math.max(total, chats.length) };
 }
 
-let last = '';
-let timer = null;
-
-function send(force = false) {
-  const current = snapshot();
-  if (!current) return;
-  const serialized = JSON.stringify(current);
-  if (!force && serialized === last) return;
-  last = serialized;
-  try {
-    chrome.runtime.sendMessage({ type: 'snapshot', snapshot: current });
-  } catch {
-    // Extension rechargee ou retiree : ce script est orphelin, il s'arrete.
-    clearInterval(heartbeat);
-    observer.disconnect();
-  }
-}
-
-// Des qu'un message arrive ou qu'une discussion est lue, avec un petit delai
-// pour laisser Messenger finir de redessiner la liste.
-const observer = new MutationObserver(() => {
-  clearTimeout(timer);
-  timer = setTimeout(send, 1500);
-});
-observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-
-// Battement de coeur : meme sans changement, le tableau sait que l'onglet vit.
-const heartbeat = setInterval(() => send(true), 20_000);
-send(true);
+startRelay('messenger', snapshot);
