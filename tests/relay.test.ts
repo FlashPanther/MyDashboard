@@ -56,3 +56,24 @@ test('garde les sources séparées', () => {
 test('refuse un état inconnu', () => {
   assert.throws(() => receiveReport('whatsapp', { state: 'pirate' }));
 });
+
+test('un Chrome sans onglet n’efface pas la liste d’un autre Chrome encore frais', () => {
+  receiveReport('whatsapp', { state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { state: 'noTab', chats: [] }, 60_000);
+  receiveReport('whatsapp', { state: 'login', chats: [] }, 90_000);
+  const snapshot = feedSnapshot('whatsapp', 90_000);
+  assert.equal(snapshot.status, 'ready');
+  assert.equal(snapshot.chats.length, 1);
+});
+
+test('reprend l’état des autres Chrome quand plus aucun ne rapporte de liste', () => {
+  receiveReport('whatsapp', { state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { state: 'noTab', chats: [] }, STALE_MS + 1);
+  assert.equal(feedSnapshot('whatsapp', STALE_MS + 1).status, 'noTab');
+});
+
+test('une liste plus récente remplace toujours la précédente', () => {
+  receiveReport('whatsapp', { state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { state: 'ready', chats: [] }, 1000);
+  assert.equal(feedSnapshot('whatsapp', 1000).chats.length, 0);
+});

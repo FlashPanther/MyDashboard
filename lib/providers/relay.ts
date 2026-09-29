@@ -103,6 +103,15 @@ export function receiveReport(source: Source, body: unknown, now = Date.now()) {
   const raw = (body ?? {}) as Record<string, unknown>;
   const state = STATES.find((candidate) => candidate === raw.state);
   if (!state) throw new Error('État inconnu');
+
+  // Plusieurs Chrome (PC, onglets) peuvent rapporter pour la meme messagerie.
+  // Tant qu'un rapport « ready » est frais, un autre qui dit « pas d'onglet »,
+  // « en veille » ou « connexion » vient d'un Chrome moins utile : on l'ignore.
+  // Si le dernier onglet pret disparait, son rapport perime en STALE_MS et les
+  // autres reprennent la main.
+  const last = store[source];
+  if (state !== 'ready' && last?.state === 'ready' && now - last.at <= STALE_MS) return;
+
   const chats = Array.isArray(raw.chats)
     ? raw.chats
         .slice(0, 200)
