@@ -53,7 +53,8 @@ function warning(feed: Feed, data: FeedSnapshot): ReactNode {
       return (
         <>
           L&rsquo;extension ne s&rsquo;est pas encore manifestée. Vérifie qu&rsquo;elle est
-          installée (voir le README) et qu&rsquo;un onglet {site} est ouvert.
+          installée (<DownloadLink />, puis voir le README) et qu&rsquo;un onglet {site} est
+          ouvert.
         </>
       );
     case 'noTab':
@@ -177,15 +178,26 @@ function ChatFeedWidget({ feed }: { feed: Feed }) {
   );
 }
 
+const LINK = 'text-amber underline-offset-2 hover:underline';
+
 function SiteLink({ feed, children }: { feed: Feed; children: ReactNode }) {
   return (
     <a
       href={feed.site}
       target="_blank"
       rel="noreferrer"
-      className="text-amber underline-offset-2 hover:underline"
+      className={LINK}
     >
       {children}
+    </a>
+  );
+}
+
+/** L'extension en .zip (voir app/api/extension). */
+function DownloadLink() {
+  return (
+    <a href="/api/extension" download className={LINK}>
+      la télécharger
     </a>
   );
 }

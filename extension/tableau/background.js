@@ -2,7 +2,7 @@
 // peuvent pas joindre le tableau eux-memes (politique de securite des sites) ;
 // l'extension, elle, en a la permission. Adresse et jeton : page d'options.
 
-importScripts('settings.js');
+importScripts('preset.js', 'settings.js');
 
 // Onglet a surveiller, par source (la route du tableau porte le meme nom).
 const SITES = {

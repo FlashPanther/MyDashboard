@@ -40,15 +40,18 @@ export class NotConnectedError extends Error {
   }
 }
 
+/** Adresse de retour de Google : forcement l'adresse publique du tableau. */
+export function redirectUri() {
+  return process.env.GOOGLE_REDIRECT_URI ?? 'http://localhost:3737/api/auth/google/callback';
+}
+
 function credentials() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri =
-    process.env.GOOGLE_REDIRECT_URI ?? 'http://localhost:3737/api/auth/google/callback';
   if (!clientId || !clientSecret) {
     throw new NotConnectedError('GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET manquants dans .env.local');
   }
-  return { clientId, clientSecret, redirectUri };
+  return { clientId, clientSecret, redirectUri: redirectUri() };
 }
 
 /** Cookie du jeton anti-rejeu `state`, pose par /api/auth/google et relu au retour. */

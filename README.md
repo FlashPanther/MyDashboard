@@ -34,8 +34,9 @@ Pour ouvrir le tableau depuis n'importe quel appareil. L'image se construit avec
    redirection autorisées de l'ID client OAuth.
 6. Déploie, ouvre le domaine, connecte-toi, puis **Relier Google** (le jeton est propre au
    serveur : celui de ton poste n'y est pas).
-7. **Extension** : clic droit sur son icône → *Options* → adresse `https://<ton-domaine>` et
-   le même `EXTENSION_TOKEN`. Chrome demande l'accès à cette adresse : accepte.
+7. **Extension** : installe-la depuis le tableau en ligne (voir « Relier WhatsApp et
+   Messenger »), puis clic droit sur son icône → *Options* → colle le même
+   `EXTENSION_TOKEN` et enregistre. Le jeton n'est jamais dans le .zip.
 
 **Accès.** Sans `DASHBOARD_PASSWORD`, tout est ouvert : c'est l'usage local. Avec, chaque
 appareil se connecte une fois et garde sa session 180 jours ; changer le mot de passe
@@ -78,10 +79,15 @@ Chrome de tous les jours** : elle lit la liste des discussions dans tes onglets
 et la transmet au tableau (`localhost:3737`, ou ton domaine s'il est en ligne). Pour Meta,
 c'est ton navigateur normal, avec tes sessions normales : aucune automatisation.
 
-1. Dans Chrome : `chrome://extensions`, active le **mode développeur** (en haut à droite).
-2. **Charger l'extension non empaquetée** et choisis le dossier `extension/tableau`.
-   Par défaut, elle vise `http://localhost:3737` ; pour un tableau en ligne, règle son
-   adresse et son jeton dans ses *Options* (voir « Déployer sur Coolify »).
+1. Récupère l'extension : le dossier `extension/tableau` du dépôt, ou, depuis le tableau
+   (en ligne ou non), le lien **la télécharger** des panneaux WhatsApp et Messenger
+   (`/api/extension`), à décompresser.
+2. Dans Chrome : `chrome://extensions`, active le **mode développeur** (en haut à droite),
+   puis **Charger l'extension non empaquetée** et choisis ce dossier.
+   Chrome n'installe pas d'extension depuis un site : c'est le seul chemin hors Chrome Web
+   Store. Pour une nouvelle version, remplace le dossier puis clique sur ↻ (Recharger).
+   Téléchargée depuis ton domaine, l'extension vise déjà ce domaine ; sinon elle vise
+   `http://localhost:3737`, et l'adresse se change dans ses *Options*.
 3. Ouvre WhatsApp Web et Messenger, connecte-toi, et **laisse les deux onglets ouverts**
    (épinglés, idéalement), en arrière-plan.
 
