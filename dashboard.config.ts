@@ -100,9 +100,8 @@ export const config = {
     commute: 60,
     presence: 120,
     analytics: 120,
-    // Lecture en memoire, quasi gratuite : on suit de pres ce qui est lu ailleurs.
-    whatsapp: 15,
-    // Lecture de ce que l'extension a pousse : rien ne part vers Facebook.
+    // Lecture de ce que l'extension a pousse : rien ne part vers Meta.
+    whatsapp: 30,
     messenger: 30,
   },
 

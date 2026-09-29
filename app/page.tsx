@@ -9,8 +9,7 @@ import { WeatherWidget } from '@/components/widgets/WeatherWidget';
 import { AudienceWidget } from '@/components/widgets/AudienceWidget';
 import { MailWidget } from '@/components/widgets/MailWidget';
 import { TasksWidget } from '@/components/widgets/TasksWidget';
-import { WhatsAppWidget } from '@/components/widgets/WhatsAppWidget';
-import { MessengerWidget } from '@/components/widgets/MessengerWidget';
+import { MessengerWidget, WhatsAppWidget } from '@/components/widgets/ChatFeedWidget';
 
 const AUTH_MESSAGES: Record<string, string> = {
   ok: 'Compte Google relié.',
@@ -85,7 +84,7 @@ export default function Dashboard() {
             <div className="flex min-h-0 flex-col lg:flex-[2]">
               <MailWidget now={now} />
             </div>
-            <WhatsAppWidget now={now} />
+            <WhatsAppWidget />
             <MessengerWidget />
           </div>
           {/* Le reste, sur le cote : ce qu'on planifie et ce qu'on consulte. */}
