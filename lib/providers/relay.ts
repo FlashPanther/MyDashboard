@@ -11,11 +11,12 @@ export const SOURCES = ['messenger', 'whatsapp'] as const;
 export type Source = (typeof SOURCES)[number];
 
 /**
- * Ce que l'extension voit de son cote : liste lue, onglet sur la page de
- * connexion (ou le QR code de WhatsApp), aucun onglet ouvert, ou onglet mis en
- * veille par Chrome (economiseur de memoire).
+ * Ce que l'extension voit de son cote, du plus au moins utile (c'est l'ordre
+ * de priorite quand plusieurs Chrome rapportent) : liste lue, onglet sur la
+ * page de connexion (ou le QR code de WhatsApp), onglet mis en veille par
+ * Chrome (economiseur de memoire), aucun onglet ouvert.
  */
-const STATES = ['ready', 'login', 'noTab', 'sleeping'] as const;
+const STATES = ['ready', 'login', 'sleeping', 'noTab'] as const;
 type ExtensionState = (typeof STATES)[number];
 
 type FeedStatus =
@@ -48,16 +49,6 @@ export type FeedSnapshot = {
 
 type Report = { state: ExtensionState; chats: FeedChat[]; total: number; at: number };
 
-/**
- * Qui envoie : une installation de l'extension (un Chrome, sur un PC) et, pour
- * les rapports d'une page, l'onglet. Le controle d'onglets fait par l'alarme
- * de l'extension n'a pas d'onglet : il vaut pour tout ce Chrome.
- */
-type Reporter = { instance: string; tab: number | null };
-
-/** Du plus au moins utile : une liste, puis ce qui explique son absence. */
-const PRIORITY: ExtensionState[] = ['ready', 'login', 'sleeping', 'noTab'];
-
 /** Liens qu'une discussion peut porter : rien d'autre que la messagerie elle-meme. */
 const HOSTS: Record<Source, string[]> = {
   messenger: ['www.messenger.com', 'www.facebook.com'],
@@ -67,14 +58,17 @@ const HOSTS: Record<Source, string[]> = {
 /** L'extension envoie toutes les 20 s ; Chrome ralentit un onglet cache a une fois par minute. */
 export const STALE_MS = 3 * 60_000;
 
-/** Survit au rechargement a chaud de `next dev`. */
-/** Par messagerie, le dernier rapport de chaque emetteur (« instance:onglet »). */
-const globalState = globalThis as typeof globalThis & {
-  __relay?: Partial<Record<Source, Map<string, Report>>>;
-};
+/**
+ * Par messagerie, le dernier rapport de chaque emetteur : une installation de
+ * l'extension (un Chrome, sur un PC), puis l'onglet d'ou vient le rapport, ou
+ * « * » pour le controle d'onglets de l'alarme, qui vaut pour tout ce Chrome.
+ * Sur globalThis pour survivre au rechargement a chaud de `next dev`.
+ */
+type Reports = Map<string, Map<number | '*', Report>>;
+const globalState = globalThis as typeof globalThis & { __relay?: Partial<Record<Source, Reports>> };
 const store = (globalState.__relay ??= {});
 
-function reportsOf(source: Source) {
+function reportsOf(source: Source): Reports {
   return (store[source] ??= new Map());
 }
 
@@ -114,11 +108,6 @@ function sanitizeChat(source: Source, raw: unknown): FeedChat | null {
   };
 }
 
-function reporterOf(raw: Record<string, unknown>): Reporter {
-  // Une extension anterieure a l'identifiant compte comme un seul Chrome.
-  return { instance: text(raw.instance, 64) || 'extension', tab: count(raw.tab) };
-}
-
 export function receiveReport(source: Source, body: unknown, now = Date.now()) {
   const raw = (body ?? {}) as Record<string, unknown>;
   const state = STATES.find((candidate) => candidate === raw.state);
@@ -130,20 +119,21 @@ export function receiveReport(source: Source, body: unknown, now = Date.now()) {
         .filter((chat): chat is FeedChat => chat !== null)
     : [];
 
-  const { instance, tab } = reporterOf(raw);
-  const reports = reportsOf(source);
-  for (const [key, report] of reports) {
-    const sameChrome = key.startsWith(`${instance}:`);
-    // Un rapport pour tout ce Chrome (alarme) remplace ceux de ses onglets :
-    // un onglet ferme ne laisse pas sa liste derriere lui. Un rapport d'onglet
-    // remplace celui de l'alarme. Et on oublie ce qui a perime.
-    if ((sameChrome && (tab === null || key.endsWith(':*'))) || now - report.at > STALE_MS) {
-      reports.delete(key);
-    }
-  }
+  // Une extension anterieure a l'identifiant compte comme un seul Chrome.
+  const instance = text(raw.instance, 64) || 'extension';
+  const tab = Number.isSafeInteger(raw.tab) ? (raw.tab as number) : null;
   // Jamais moins que la liste recue : le total de la page peut etre en retard.
-  const total = Math.max(count(raw.total) ?? 0, chats.length);
-  reports.set(`${instance}:${tab ?? '*'}`, { state, chats, total, at: now });
+  const report = { state, chats, total: Math.max(count(raw.total) ?? 0, chats.length), at: now };
+
+  const reports = reportsOf(source);
+  // Le controle d'onglets (alarme) repart de zero pour ce Chrome : un onglet
+  // ferme ne laisse pas sa liste derriere lui.
+  const tabs = tab === null ? new Map() : (reports.get(instance) ?? new Map());
+  reports.set(instance, tabs.set(tab ?? '*', report));
+  // On oublie les Chrome qui se sont tus.
+  for (const [chrome, byTab] of reports) {
+    if ([...byTab.values()].every((old) => now - old.at > STALE_MS)) reports.delete(chrome);
+  }
 }
 
 /**
@@ -152,10 +142,13 @@ export function receiveReport(source: Source, body: unknown, now = Date.now()) {
  * recent a egalite). Sans rapport frais, le dernier recu, marque « stale ».
  */
 export function feedSnapshot(source: Source, now = Date.now()): FeedSnapshot {
-  const all = [...(store[source]?.values() ?? [])].sort((a, b) => b.at - a.at);
-  const fresh = all.filter((report) => now - report.at <= STALE_MS);
-  const best = fresh.sort((a, b) => PRIORITY.indexOf(a.state) - PRIORITY.indexOf(b.state))[0];
-  const shown = best ?? all[0];
+  const all = [...(store[source]?.values() ?? [])].flatMap((byTab) => [...byTab.values()]);
+  const rank = (report: Report) => STATES.indexOf(report.state);
+  const [best] = all
+    .filter((report) => now - report.at <= STALE_MS)
+    .sort((a, b) => rank(a) - rank(b) || b.at - a.at);
+  const latest = all.reduce<Report | undefined>((last, report) => (last && last.at >= report.at ? last : report), undefined);
+  const shown = best ?? latest;
   const status: FeedStatus = best ? best.state : shown ? 'stale' : 'waiting';
   return {
     status,

@@ -11,13 +11,17 @@ const SITES = {
 };
 
 // Identifiant de cette installation, tire une fois : le tableau distingue ainsi
-// les Chrome (plusieurs PC) qui lui rapportent.
-async function instanceId() {
-  const { instance } = await chrome.storage.local.get('instance');
-  if (instance) return instance;
-  const created = crypto.randomUUID();
-  await chrome.storage.local.set({ instance: created });
-  return created;
+// les Chrome (plusieurs PC) qui lui rapportent. Memorise le temps que vit le
+// service worker : deux premiers rapports simultanes n'en tirent pas deux.
+let instance;
+function instanceId() {
+  instance ??= chrome.storage.local.get('instance').then(async (stored) => {
+    if (stored.instance) return stored.instance;
+    const created = crypto.randomUUID();
+    await chrome.storage.local.set({ instance: created });
+    return created;
+  });
+  return instance;
 }
 
 // `tab` : l'onglet dont vient le rapport, ou null pour tout ce Chrome (alarme).

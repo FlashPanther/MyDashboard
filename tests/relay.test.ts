@@ -110,3 +110,9 @@ test('une extension sans identifiant compte comme un seul Chrome', () => {
   receiveReport('whatsapp', { state: 'noTab', chats: [] }, 30_000);
   assert.equal(status(30_000), 'noTab');
 });
+
+test('deux onglets aux grands numéros restent distincts', () => {
+  receiveReport('whatsapp', { ...pc1, tab: 1_234_567, state: 'ready', chats: [chat] }, 0);
+  receiveReport('whatsapp', { ...pc1, tab: 1_234_568, state: 'login', chats: [] }, 1_000);
+  assert.equal(status(1_000), 'ready');
+});
