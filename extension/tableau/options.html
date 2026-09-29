@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Tableau du jour – réglages</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 16px; min-width: 360px; color: #1b2433; }
+  label { display: block; margin-bottom: 12px; }
+  span { display: block; margin-bottom: 4px; color: #5b6576; font-size: 12px; }
+  input { width: 100%; box-sizing: border-box; padding: 6px; font: inherit; }
+  button { padding: 6px 12px; font: inherit; }
+  #status { margin-left: 8px; font-size: 12px; }
+</style>
+<label>
+  <span>Adresse du tableau</span>
+  <input id="url" type="url" placeholder="http://localhost:3737" />
+</label>
+<label>
+  <span>Jeton de l'extension (EXTENSION_TOKEN du serveur ; vide en local)</span>
+  <input id="token" type="password" autocomplete="off" />
+</label>
+<button id="save">Enregistrer</button><span id="status"></span>
+<script src="settings.js"></script>
+<script src="options.js"></script>

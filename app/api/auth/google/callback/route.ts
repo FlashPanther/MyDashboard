@@ -4,23 +4,29 @@ import { exchangeCode } from '@/lib/google/oauth';
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
   const denied = request.nextUrl.searchParams.get('error');
-  const home = new URL('/', request.nextUrl.origin);
+  // Adresse relative : derriere le proxy de Coolify, l'origine vue par le
+  // serveur n'est pas celle du navigateur.
+  const home = new URLSearchParams();
 
   if (denied) {
-    home.searchParams.set('auth', 'refuse');
-    return NextResponse.redirect(home);
+    home.set('auth', 'refuse');
+    return back(home);
   }
   if (!code) {
-    home.searchParams.set('auth', 'incomplet');
-    return NextResponse.redirect(home);
+    home.set('auth', 'incomplet');
+    return back(home);
   }
 
   try {
     await exchangeCode(code);
-    home.searchParams.set('auth', 'ok');
+    home.set('auth', 'ok');
   } catch (error) {
-    home.searchParams.set('auth', 'echec');
-    home.searchParams.set('detail', error instanceof Error ? error.message : 'Erreur inconnue');
+    home.set('auth', 'echec');
+    home.set('detail', error instanceof Error ? error.message : 'Erreur inconnue');
   }
-  return NextResponse.redirect(home);
+  return back(home);
+}
+
+function back(params: URLSearchParams) {
+  return new NextResponse(null, { status: 307, headers: { location: `/?${params}` } });
 }
