@@ -25,21 +25,25 @@ export function writeStored(key: string, value: string | null) {
 }
 
 /**
- * Un choix parmi `options`, retenu d'une visite a l'autre ; le premier par
- * defaut. Lu des le premier rendu, pour ne pas afficher d'abord le choix par
- * defaut : a reserver aux composants rendus seulement cote client (c'est le cas
- * du tableau, affiche apres montage, voir app/page.tsx).
+ * Une valeur retenue d'une visite a l'autre, ou null. Lue des le premier rendu,
+ * pour ne pas afficher d'abord la valeur par defaut : a reserver aux composants
+ * rendus seulement cote client (c'est le cas du tableau, affiche apres montage,
+ * voir app/page.tsx).
  */
-export function useStoredChoice<T extends string>(key: string, options: readonly T[]) {
-  const [choice, setChoice] = useState<T>(() => {
-    const stored = readStored(key);
-    return stored && (options as readonly string[]).includes(stored) ? (stored as T) : options[0];
-  });
+export function useStored(key: string) {
+  const [value, setValue] = useState<string | null>(() => readStored(key));
 
-  function choose(next: T) {
-    setChoice(next);
+  function store(next: string | null) {
+    setValue(next);
     writeStored(key, next);
   }
 
-  return [choice, choose] as const;
+  return [value, store] as const;
+}
+
+/** Un choix parmi `options`, retenu d'une visite a l'autre ; le premier par defaut. */
+export function useStoredChoice<T extends string>(key: string, options: readonly T[]) {
+  const [stored, store] = useStored(key);
+  const choice = stored && (options as readonly string[]).includes(stored) ? (stored as T) : options[0];
+  return [choice, store as (next: T) => void] as const;
 }

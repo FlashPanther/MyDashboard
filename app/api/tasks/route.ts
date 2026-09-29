@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server';
 import { handle } from '@/lib/api';
 import { googleFetch } from '@/lib/google/oauth';
+import { parseTags } from '@/lib/tags';
 
 export const dynamic = 'force-dynamic';
 
 export type TaskItem = {
   id: string;
   title: string;
+  /** Le titre sans ses « #etiquettes », pour l'affichage. */
+  label: string;
+  /** Les « #etiquettes » du titre, en minuscules (voir lib/tags.ts). */
+  tags: string[];
   due: string | null;
   notes: string | null;
   list: string;
@@ -52,9 +57,11 @@ export async function GET() {
           .filter((task) => task.status !== 'completed' && task.title?.trim())
           .map<TaskItem>((task) => {
             const due = task.due ? new Date(task.due) : null;
+            const title = task.title!.trim();
             return {
               id: task.id,
-              title: task.title!.trim(),
+              title,
+              ...parseTags(title),
               due: task.due ?? null,
               notes: task.notes ?? null,
               list: list.title,
