@@ -1,8 +1,9 @@
 'use client';
 
+import { useId } from 'react';
 import { config } from '@/dashboard.config';
 import { Panel, Empty } from '@/components/Panel';
-import { PanelTabs } from '@/components/PanelTabs';
+import { PanelTabs, tabPanelProps } from '@/components/PanelTabs';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { useStoredChoice } from '@/lib/storage';
 import { relative } from '@/lib/time';
@@ -32,6 +33,7 @@ const GMAIL = {
 export function MailWidget({ now }: { now: number }) {
   const { data, error, notConnected } = useEndpoint<MailPayload>('/api/gmail', config.refresh.gmail);
   const [tab, setTab] = useStoredChoice('mail-tab', TABS);
+  const id = useId();
 
   const starred = tab === 'starred';
   const messages = starred ? data?.starred.messages : data?.messages;
@@ -45,6 +47,7 @@ export function MailWidget({ now }: { now: number }) {
       hrefLabel={GMAIL[tab].label}
       meta={
         <PanelTabs
+          id={id}
           label="Courrier"
           value={tab}
           onChange={setTab}
@@ -65,7 +68,7 @@ export function MailWidget({ now }: { now: number }) {
       {/* Ecran etroit : la liste occupe une hauteur fixe et defile chez elle,
           pour que l'arrivee des mails ne repousse pas le bas de la page.
           Ecran large : le panneau tient deja la moitie de sa colonne. */}
-      <div role="tabpanel" className="flex h-72 flex-col lg:h-full">
+      <div {...tabPanelProps(id, tab)} className="flex h-72 flex-col lg:h-full">
         {!messages ? (
           <p className="font-mono text-sm text-muted">Chargement…</p>
         ) : (

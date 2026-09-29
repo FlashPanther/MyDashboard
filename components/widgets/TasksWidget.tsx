@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { config } from '@/dashboard.config';
 import { Panel, Empty } from '@/components/Panel';
-import { PanelTabs } from '@/components/PanelTabs';
+import { PanelTabs, tabPanelProps } from '@/components/PanelTabs';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { useStoredChoice } from '@/lib/storage';
 import { shortDate } from '@/lib/time';
@@ -30,6 +30,7 @@ export function TasksWidget() {
     config.refresh.tasks,
   );
   const [tab, setTab] = useStoredChoice('tasks-tab', TABS);
+  const id = useId();
 
   const tasks = data?.tasks ?? [];
   // Deja triees par l'API : en retard, puis du jour, puis par echeance.
@@ -48,6 +49,7 @@ export function TasksWidget() {
       hrefLabel="Ouvrir Google Tasks"
       meta={
         <PanelTabs
+          id={id}
           label="Tâches"
           value={tab}
           onChange={setTab}
@@ -71,7 +73,10 @@ export function TasksWidget() {
         {!data ? (
           <p className="font-mono text-sm text-muted">Chargement…</p>
         ) : (
-          <div role="tabpanel" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div
+            {...tabPanelProps(id, tab)}
+            className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          >
             {tab === 'today' ? (
               <>
                 {pressing.length === 0 ? (
