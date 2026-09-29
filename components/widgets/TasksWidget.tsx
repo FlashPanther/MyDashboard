@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, type FormEvent } from 'react';
 import { config } from '@/dashboard.config';
 import { Panel, Empty } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
@@ -20,7 +21,7 @@ function dueLabel(task: TaskItem): { text: string; tone: string } {
 }
 
 export function TasksWidget() {
-  const { data, error, notConnected } = useEndpoint<TasksPayload>(
+  const { data, error, notConnected, refresh } = useEndpoint<TasksPayload>(
     '/api/tasks',
     config.refresh.tasks,
   );
@@ -59,6 +60,7 @@ export function TasksWidget() {
       notConnected={notConnected}
     >
       <div className="flex h-[19rem] flex-col lg:h-full">
+        <QuickAdd onCreated={refresh} />
         {!data ? (
           <p className="font-mono text-sm text-muted">Chargement…</p>
         ) : (
@@ -153,5 +155,73 @@ export function TasksWidget() {
         )}
       </div>
     </Panel>
+  );
+}
+
+/** Une ligne, Entree : la tache part dans la liste par defaut de Google Tasks. */
+function QuickAdd({ onCreated }: { onCreated: () => void }) {
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<{ text: string; relink?: boolean } | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const value = title.trim();
+    if (!value || busy) return;
+    setBusy(true);
+    setProblem(null);
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: value }),
+    }).catch(() => null);
+    const body = await res?.json().catch(() => ({}));
+    setBusy(false);
+    if (res?.ok) {
+      setTitle('');
+      onCreated();
+    } else if (body?.scopeMissing) {
+      setProblem({ text: 'Google n’autorise encore que la lecture des tâches.', relink: true });
+    } else {
+      setProblem({ text: body?.error ?? 'La tâche n’a pas pu être créée.' });
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="mb-2 shrink-0">
+      <div className="flex items-center gap-2 border-b border-rule pb-1.5">
+        <span aria-hidden className="font-mono text-[13px] text-muted">
+          +
+        </span>
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Nouvelle tâche, puis Entrée"
+          aria-label="Nouvelle tâche"
+          maxLength={1024}
+          disabled={busy}
+          className="min-w-0 flex-1 bg-transparent text-[13px] text-ink placeholder:text-muted focus:outline-none disabled:opacity-50"
+        />
+        {title.trim() && (
+          <button
+            type="submit"
+            disabled={busy}
+            className="shrink-0 font-mono text-[11px] text-amber hover:underline disabled:opacity-50"
+          >
+            {busy ? '…' : 'Ajouter'}
+          </button>
+        )}
+      </div>
+      {problem && (
+        <p className="mt-1 text-[12px] text-rose">
+          {problem.text}{' '}
+          {problem.relink && (
+            <a href="/api/auth/google" className="text-amber underline-offset-2 hover:underline">
+              Relier Google à nouveau
+            </a>
+          )}
+        </p>
+      )}
+    </form>
   );
 }

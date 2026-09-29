@@ -6,10 +6,11 @@ import { usePresence } from '@/lib/usePresence';
 import { DayColumn } from '@/components/DayColumn';
 import { CommuteWidget } from '@/components/widgets/CommuteWidget';
 import { WeatherWidget } from '@/components/widgets/WeatherWidget';
-import { WeekWidget } from '@/components/widgets/WeekWidget';
 import { AudienceWidget } from '@/components/widgets/AudienceWidget';
 import { MailWidget } from '@/components/widgets/MailWidget';
 import { TasksWidget } from '@/components/widgets/TasksWidget';
+import { WhatsAppWidget } from '@/components/widgets/WhatsAppWidget';
+import { MessengerWidget } from '@/components/widgets/MessengerWidget';
 
 const AUTH_MESSAGES: Record<string, string> = {
   ok: 'Compte Google relié.',
@@ -78,19 +79,22 @@ export default function Dashboard() {
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 lg:flex-row">
-          {/* Ce qui se fait : au centre, et plus large que le reste. */}
+          {/* Ce qui arrive : courrier et messages, au centre et plus large que le reste. */}
           <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:flex-[1.15] xl:flex-[1.35]">
-            <MailWidget now={now} />
-            <TasksWidget />
+            {/* Le courrier porte deux listes (non lus, suivis) : double part de hauteur. */}
+            <div className="flex min-h-0 flex-col lg:flex-[2]">
+              <MailWidget now={now} />
+            </div>
+            <WhatsAppWidget now={now} />
+            <MessengerWidget />
           </div>
-          {/* Ce qui se consulte : sur le cote. */}
+          {/* Le reste, sur le cote : ce qu'on planifie et ce qu'on consulte. */}
           <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:flex-1">
-            {/* A la maison le trajet n'a rien a dire ; plutot que d'etirer la
-                meteo sur toute la colonne, les sept jours prennent sa place
-                dans leur propre panneau, en liste. */}
+            <TasksWidget />
+            {/* A la maison le trajet n'a rien a dire ; la meteo, elle, garde
+                la meme forme partout et prend simplement la place laissee. */}
             {!atHome && <CommuteWidget now={now} />}
-            <WeatherWidget withWeek={!atHome} />
-            {atHome && <WeekWidget />}
+            <WeatherWidget />
           </div>
         </div>
       </main>

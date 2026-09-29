@@ -18,7 +18,7 @@ function tooltip(hour: WeatherHour): string {
   return `${hhmm(hour.time)} · ${weatherLabel(hour.code)} · ${Math.round(hour.temperature)}° · ${hour.precipitationProbability} % de pluie`;
 }
 
-export function WeatherWidget({ withWeek = true }: { withWeek?: boolean }) {
+export function WeatherWidget() {
   const { data, error } = useEndpoint<WeatherPayload>('/api/weather', config.refresh.weather);
 
   const hours = data?.hours.slice(0, 10) ?? [];
@@ -29,7 +29,7 @@ export function WeatherWidget({ withWeek = true }: { withWeek?: boolean }) {
   return (
     <Panel
       title="Météo"
-      grow={withWeek}
+      grow
       href={config.links.weather}
       hrefLabel="Ouvrir les prévisions complètes"
       meta={
@@ -39,7 +39,7 @@ export function WeatherWidget({ withWeek = true }: { withWeek?: boolean }) {
       }
       error={error}
     >
-      <div className={`flex h-[22rem] flex-col ${withWeek ? 'lg:h-full' : 'lg:h-60'}`}>
+      <div className="flex h-[22rem] flex-col lg:h-full">
         {!data ? (
           <p className="font-mono text-sm text-muted">Chargement…</p>
         ) : (
@@ -117,37 +117,35 @@ export function WeatherWidget({ withWeek = true }: { withWeek?: boolean }) {
               </div>
             </div>
 
-            {withWeek && (
-              <div className="mt-3 border-t border-rule pt-2">
-                <span className="eyebrow">Sept jours</span>
-                <ul className="mt-1.5 flex items-stretch gap-[3px]">
-                  {data.days.slice(0, 7).map((day, index) => (
-                    <li
-                      key={day.date}
-                      title={`${weekdayShort(day.date)} · ${weatherLabel(day.code)} · ${Math.round(day.max)}° / ${Math.round(day.min)}° · ${day.precipitationProbability} % de pluie`}
-                      className={`flex flex-1 flex-col items-center gap-1 rounded-sm border py-1.5 ${
-                        index === 0 ? 'border-amber/50 bg-amber/10' : 'border-rule bg-panel-soft/50'
+            <div className="mt-3 border-t border-rule pt-2">
+              <span className="eyebrow">Sept jours</span>
+              <ul className="mt-1.5 flex items-stretch gap-[3px]">
+                {data.days.slice(0, 7).map((day, index) => (
+                  <li
+                    key={day.date}
+                    title={`${weekdayShort(day.date)} · ${weatherLabel(day.code)} · ${Math.round(day.max)}° / ${Math.round(day.min)}° · ${day.precipitationProbability} % de pluie`}
+                    className={`flex flex-1 flex-col items-center gap-1 rounded-sm border py-1.5 ${
+                      index === 0 ? 'border-amber/50 bg-amber/10' : 'border-rule bg-panel-soft/50'
+                    }`}
+                  >
+                    <span
+                      className={`font-mono text-[10px] leading-none ${
+                        index === 0 ? 'text-amber' : 'text-muted'
                       }`}
                     >
-                      <span
-                        className={`font-mono text-[10px] leading-none ${
-                          index === 0 ? 'text-amber' : 'text-muted'
-                        }`}
-                      >
-                        {index === 0 ? 'auj.' : weekdayShort(day.date)}
-                      </span>
-                      <WeatherIcon code={day.code} size={20} />
-                      <span className="tnum font-mono text-[11px] leading-none text-ink">
-                        {Math.round(day.max)}°
-                      </span>
-                      <span className="tnum font-mono text-[10px] leading-none text-muted">
-                        {Math.round(day.min)}°
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                      {index === 0 ? 'auj.' : weekdayShort(day.date)}
+                    </span>
+                    <WeatherIcon code={day.code} size={20} />
+                    <span className="tnum font-mono text-[11px] leading-none text-ink">
+                      {Math.round(day.max)}°
+                    </span>
+                    <span className="tnum font-mono text-[10px] leading-none text-muted">
+                      {Math.round(day.min)}°
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </>
         )}
       </div>

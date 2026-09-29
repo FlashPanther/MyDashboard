@@ -6,7 +6,12 @@ import { useEndpoint } from '@/lib/useEndpoint';
 import { relative } from '@/lib/time';
 import type { MailItem } from '@/app/api/gmail/route';
 
-type MailPayload = { unread: number; truncated: boolean; messages: MailItem[] };
+type MailPayload = {
+  unread: number;
+  truncated: boolean;
+  messages: MailItem[];
+  starred: { count: number; truncated: boolean; messages: MailItem[] };
+};
 
 export function MailWidget({ now }: { now: number }) {
   const { data, error, notConnected } = useEndpoint<MailPayload>('/api/gmail', config.refresh.gmail);
@@ -24,7 +29,8 @@ export function MailWidget({ now }: { now: number }) {
               {data.unread}
               {data.truncated ? '+' : ''}
             </span>{' '}
-            non lus
+            non lus · {data.starred.count}
+            {data.starred.truncated ? '+' : ''} suivis
           </>
         ) : null
       }
@@ -73,6 +79,65 @@ export function MailWidget({ now }: { now: number }) {
                 </ul>
               )}
             </div>
+
+            {/* Les mails suivis sont ceux qu'on s'est promis de traiter : lus ou
+                non, ils ont leur bloc au pied du panneau, comme les taches sans
+                echeance. */}
+            {data.starred.count > 0 && (
+              <div className="mt-2 shrink-0 border-t border-rule pt-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <a
+                    href="https://mail.google.com/mail/u/0/#starred"
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Ouvrir les messages suivis dans Gmail"
+                    className="eyebrow transition-colors hover:text-ink"
+                  >
+                    Suivis
+                  </a>
+                  <span className="font-mono text-[10px] text-muted">
+                    {data.starred.count}
+                    {data.starred.truncated ? '+' : ''} étoilés
+                  </span>
+                </div>
+                <ul className="mt-1.5 space-y-1">
+                  {data.starred.messages.map((mail) => (
+                    <li key={mail.id}>
+                      <a
+                        href={mail.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`${mail.subject}\n${mail.snippet}`}
+                        className="group -mx-1 flex items-baseline gap-2 rounded-sm px-1 py-0.5 transition-colors hover:bg-panel-soft"
+                      >
+                        <span aria-hidden className="shrink-0 text-[11px] text-amber">
+                          &#9733;
+                        </span>
+                        <span
+                          className={`min-w-0 flex-1 truncate text-[13px] text-ink ${
+                            mail.unread ? 'font-semibold' : ''
+                          }`}
+                        >
+                          {mail.from}
+                          <span className="font-normal text-ink/75 group-hover:text-ink">
+                            {' '}
+                            · {mail.subject}
+                          </span>
+                        </span>
+                        <span className="tnum shrink-0 font-mono text-[11px] text-muted">
+                          {mail.date ? relative(mail.date, now) : ''}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+                {data.starred.count > data.starred.messages.length && (
+                  <p className="mt-1 font-mono text-[11px] text-muted">
+                    +{data.starred.count - data.starred.messages.length} autres suivis
+                  </p>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

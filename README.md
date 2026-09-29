@@ -29,8 +29,60 @@ au bureau, minutes de marche. C'est le seul fichier à modifier au quotidien.
    écrit dans `.data/tokens.json` (permissions 600, ignoré par git). Pour changer de
    compte : supprime ce fichier et relie à nouveau.
 
-Les trois portées demandées sont en lecture seule (`calendar.readonly`, `tasks.readonly`,
-`gmail.readonly`). Le dashboard n'écrit jamais dans ton compte.
+Les portées demandées sont en lecture seule (`calendar.readonly`, `gmail.readonly`,
+`analytics.readonly`), sauf une : `tasks`, pour le champ « Nouvelle tâche » du panneau
+Tâches. C'est la seule écriture du dashboard dans ton compte : il crée une tâche dans ta
+liste par défaut quand tu la tapes, rien d'autre. Si tu as relié Google avant l'arrivée de
+ce champ, il le signale et propose de relier à nouveau.
+
+## Relier WhatsApp
+
+WhatsApp n'a pas d'API pour les comptes personnels : le tableau fait tourner WhatsApp Web
+dans un Chrome sans fenêtre (`whatsapp-web.js`), comme un appareil connecté de plus.
+
+1. Ouvre le dashboard : le panneau WhatsApp affiche un QR code.
+2. Sur le téléphone : **WhatsApp > Appareils connectés > Connecter un appareil**, et scanne.
+3. La session est gardée dans `.data/whatsapp/` (ignoré par git). Pour délier : supprime
+   l'appareil « Tableau du jour » sur le téléphone, ou efface ce dossier.
+
+Le panneau ne fait que lire : il ne marque rien comme lu et se déclare « hors ligne » pour
+que le téléphone continue de sonner. Les conversations archivées et en sourdine sont
+ignorées (`whatsapp.includeMuted` dans `dashboard.config.ts`).
+
+Un clic ouvre la conversation dans WhatsApp Web. Seules les conversations privées ont un
+lien direct (par numéro de téléphone) : pour un groupe, WhatsApp Web n'en propose pas, et le
+clic ouvre simplement l'accueil.
+
+Chrome : celui du système (`/usr/bin/google-chrome`, ou `CHROME_PATH`). Celui que
+télécharge Puppeteer n'a pas de bac à sable utilisable sous Ubuntu 24.04.
+
+Ce n'est pas un usage prévu par WhatsApp : en lecture seule le risque est faible, mais un
+blocage du compte n'est pas exclu.
+
+## Relier Messenger
+
+Messenger n'a pas d'API pour les comptes personnels, et un Chrome piloté se fait repérer par
+Facebook. Le tableau passe donc par une petite extension, installée dans **ton Chrome de tous
+les jours** : elle lit la liste des discussions dans ton onglet messenger.com et la transmet
+à `localhost:3737`. Pour Facebook, c'est ton navigateur normal, avec ta session normale.
+
+1. Dans Chrome : `chrome://extensions`, active le **mode développeur** (en haut à droite).
+2. **Charger l'extension non empaquetée** et choisis le dossier `extension/messenger`.
+3. Ouvre [messenger.com](https://www.messenger.com/), connecte-toi, et **laisse l'onglet
+   ouvert** (épinglé, idéalement).
+
+L'extension ne clique sur rien et n'ouvre aucune discussion : elle ne marque rien comme lu.
+Messenger, lui, marque comme lue la discussion affichée quand l'onglet est au premier plan :
+garde-le en arrière-plan.
+
+Le panneau prévient quand l'onglet est fermé, déconnecté, mis en veille par l'économiseur de
+mémoire de Chrome (ajoute messenger.com aux sites toujours actifs dans Paramètres ›
+Performances), ou quand l'extension ne donne plus de nouvelles depuis 3 minutes (Chrome
+fermé). La page ne charge que les trente dernières discussions : les non-lues plus anciennes
+sont comptées, pas listées.
+
+Si Messenger change sa page, la lecture casse : les repères utilisés sont décrits en tête de
+`extension/messenger/content.js`.
 
 ## Maison ou bureau
 
@@ -49,11 +101,8 @@ voit pas la carte Wi-Fi : `lib/providers/presence.ts` interroge Windows via
 la maison sont dans `presence.homeSsids` de `dashboard.config.ts`.
 
 À la maison, le panneau Trajet disparaît et le repère « Partir » de la colonne du jour
-aussi. La météo ne s'étire pas pour autant : **les sept jours sortent dans leur propre
-panneau**, en liste verticale (jour, temps en toutes lettres, probabilité de pluie,
-maximum et minimum). La colonne se remplit de contenu réel au lieu d'espace vide, et la
-semaine y gagne en lisibilité. Les jours de bureau, elle reprend sa forme compacte en
-cellules sous la prévision horaire. Le sélecteur **Maison / Bureau / Auto** de
+aussi. La météo garde la même forme partout (prévision horaire, puis les sept jours en
+cellules) et occupe simplement la place laissée libre. Le sélecteur **Maison / Bureau / Auto** de
 l'en-tête force le choix quand le réseau ne dit rien : câble Ethernet, Wi-Fi invité,
 partage de connexion. Le dernier état détecté est mémorisé pour que le panneau Trajet
 n'apparaisse pas une fraction de seconde avant de disparaître à chaque chargement.
@@ -161,9 +210,9 @@ Trois colonnes qui occupent toute la largeur de l'écran, ordonnées par importa
 
 | Colonne | Contenu | Largeur |
 | --- | --- | --- |
-| Gauche | la journée heure par heure | 24 % (27 % au-delà de 1280 px) |
-| **Centre** | **courrier et tâches** — ce qu'on fait | la plus large |
-| Droite | trajet et météo — ce qu'on consulte | la plus étroite |
+| Gauche | la journée heure par heure, l'audience | 24 % (27 % au-delà de 1280 px) |
+| **Centre** | **courrier, WhatsApp et Messenger** — ce qui arrive | la plus large |
+| Droite | tâches, trajet et météo — ce qu'on planifie et consulte | la plus étroite |
 
 Les trois colonnes s'installent dès 1024 px. En dessous, tout s'empile dans le même ordre :
 le principal en premier, le consultatif en dernier.
@@ -184,6 +233,17 @@ compteur du panneau annonce combien il en reste (« 15 à planifier »), la puce
 autres tâches portent leur date : c'est ce manque qui doit se voir.
 
 Quand il n'en reste aucune, le bloc dit « Tout est planifié. »
+
+En tête du panneau, un champ **Nouvelle tâche** : tape le titre, Entrée, et la tâche part
+dans ta liste par défaut de Google Tasks, sans échéance. Elle rejoint aussitôt « À
+planifier ».
+
+## Mails suivis
+
+Les mails étoilés dans Gmail (« Messages suivis ») ont leur bloc au pied du panneau Courrier,
+lus ou non : ce sont ceux qu'on s'est promis de traiter. Les plus récents d'abord, en gras
+tant qu'ils ne sont pas lus ; le titre « Suivis » ouvre la liste complète dans Gmail.
+Recherche et nombre affiché : `gmail.starred` dans `dashboard.config.ts`.
 
 ## Liens vers les pages complètes
 

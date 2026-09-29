@@ -100,6 +100,10 @@ export const config = {
     commute: 60,
     presence: 120,
     analytics: 120,
+    // Lecture en memoire, quasi gratuite : on suit de pres ce qui est lu ailleurs.
+    whatsapp: 15,
+    // Lecture de ce que l'extension a pousse : rien ne part vers Facebook.
+    messenger: 30,
   },
 
   /**
@@ -116,6 +120,16 @@ export const config = {
     /** Requete Gmail. "is:unread in:inbox" = non lus de la boite principale. */
     query: 'is:unread in:inbox', /** category:primary',*/
     maxResults: 9,
+    /** Mails suivis (etoiles dans Gmail), lus ou non : bloc au pied du panneau Courrier. */
+    starred: {
+      query: 'is:starred',
+      maxResults: 4,
+    },
+  },
+
+  whatsapp: {
+    /** Les conversations en sourdine restent hors du tableau, comme sur le telephone. */
+    includeMuted: false,
   },
 
   calendar: {
