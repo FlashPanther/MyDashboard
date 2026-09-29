@@ -2,10 +2,15 @@
 
 import { useState, type FormEvent } from 'react';
 
-/** Seules les adresses internes : « next » ne doit pas pouvoir renvoyer ailleurs. */
+/**
+ * Seules les adresses internes : « next » ne doit pas pouvoir renvoyer ailleurs.
+ * On laisse le navigateur l'interpreter (« /\\site » y est une adresse externe)
+ * et on verifie l'origine obtenue.
+ */
 function destination(): string {
   const next = new URLSearchParams(window.location.search).get('next') ?? '/';
-  return next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  const url = new URL(next, window.location.origin);
+  return url.origin === window.location.origin ? url.pathname + url.search + url.hash : '/';
 }
 
 export default function Login() {

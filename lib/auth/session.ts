@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, scryptSync, timingSafeEqual } from 'node:crypto';
 
 /**
  * Acces au tableau en ligne. Sans DASHBOARD_PASSWORD (usage local), tout est
@@ -6,25 +6,47 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
  * cookie signe pour SESSION_DAYS.
  *
  * Le cookie ne contient que sa date d'expiration et une signature HMAC dont la
- * cle derive du mot de passe : changer le mot de passe deconnecte tout le monde.
+ * cle derive du mot de passe (scrypt : un cookie vole ne permet pas de tester
+ * des mots de passe a la chaine). Changer le mot de passe deconnecte tout le monde.
  */
 
 export const SESSION_COOKIE = 'tableau_session';
 export const SESSION_DAYS = 180;
 
+const keys = new Map<string, Buffer>();
+
+/** scrypt coute ~50 ms : calcule une fois par mot de passe. */
 function key(password: string) {
-  return createHash('sha256').update(`tableau-session:${password}`).digest();
+  let derived = keys.get(password);
+  if (!derived) {
+    derived = scryptSync(password, 'tableau-session', 32);
+    keys.set(password, derived);
+  }
+  return derived;
 }
 
 function sign(payload: string, password: string) {
   return createHmac('sha256', key(password)).update(payload).digest('base64url');
 }
 
-/** Comparaison en temps constant, pour ne rien laisser deviner a la duree. */
+/**
+ * Comparaison en temps constant, longueur comprise : on compare des empreintes
+ * de taille fixe, pour ne rien laisser deviner a la duree.
+ */
 export function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
+  const digest = (value: string) => createHash('sha256').update(value).digest();
+  return timingSafeEqual(digest(a), digest(b));
+}
+
+/**
+ * Adresse du visiteur derriere le proxy de Coolify (Traefik). X-Real-Ip est
+ * pose par Traefik ; a defaut, la derniere entree de X-Forwarded-For est celle
+ * qu'il ajoute. La premiere, elle, vient du client et s'invente librement.
+ */
+export function clientIp(headers: Headers): string {
+  const real = headers.get('x-real-ip')?.trim();
+  if (real) return real;
+  return headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || 'inconnue';
 }
 
 export function createSession(password: string, now = Date.now()): string {

@@ -8,13 +8,20 @@ loadSettings().then((settings) => {
 });
 
 document.getElementById('save').addEventListener('click', async () => {
-  let origin;
+  let address;
   try {
-    origin = new URL(url.value.trim()).origin;
+    address = new URL(url.value.trim());
   } catch {
     status.textContent = 'Adresse invalide.';
     return;
   }
+  // Le jeton part avec chaque envoi : jamais en clair sur le reseau.
+  const local = address.origin === 'http://localhost:3737';
+  if (address.protocol !== 'https:' && !local) {
+    status.textContent = 'Adresse en https:// obligatoire (sauf http://localhost:3737).';
+    return;
+  }
+  const origin = address.origin;
   // L'extension ne peut joindre que les sites autorises : on demande l'acces a
   // cette adresse-la, et a rien d'autre.
   const granted = await chrome.permissions.request({ origins: [`${origin}/*`] });
@@ -22,6 +29,6 @@ document.getElementById('save').addEventListener('click', async () => {
     status.textContent = 'Accès refusé : rien n’est enregistré.';
     return;
   }
-  await chrome.storage.sync.set({ dashboard: origin, token: token.value.trim() });
+  await chrome.storage.local.set({ dashboard: origin, token: token.value.trim() });
   status.textContent = 'Enregistré.';
 });

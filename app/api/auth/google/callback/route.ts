@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { exchangeCode } from '@/lib/google/oauth';
+import { safeEqual } from '@/lib/auth/session';
+import { exchangeCode, STATE_COOKIE } from '@/lib/google/oauth';
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
@@ -16,6 +17,14 @@ export async function GET(request: NextRequest) {
     home.set('auth', 'incomplet');
     return back(home);
   }
+  // Le retour doit repondre a une demande partie d'ici, dans ce navigateur.
+  const expected = request.cookies.get(STATE_COOKIE)?.value;
+  const state = request.nextUrl.searchParams.get('state') ?? '';
+  if (!expected || !safeEqual(state, expected)) {
+    home.set('auth', 'echec');
+    home.set('detail', 'Demande de liaison inconnue : relance « Relier Google » depuis le tableau.');
+    return back(home);
+  }
 
   try {
     await exchangeCode(code);
@@ -28,5 +37,7 @@ export async function GET(request: NextRequest) {
 }
 
 function back(params: URLSearchParams) {
-  return new NextResponse(null, { status: 307, headers: { location: `/?${params}` } });
+  const response = new NextResponse(null, { status: 307, headers: { location: `/?${params}` } });
+  response.cookies.delete({ name: STATE_COOKIE, path: '/api/auth/google' });
+  return response;
 }
