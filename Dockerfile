@@ -27,6 +27,8 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
+# Servie en .zip par /api/extension.
+COPY --from=build --chown=node:node /app/extension ./extension
 USER node
 EXPOSE 3737
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
