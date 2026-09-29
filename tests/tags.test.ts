@@ -31,11 +31,35 @@ test('ne prend pas un # collé à un mot', () => {
   });
 });
 
+const cases: [string, string, string[]][] = [
+  ['Réunion (#urgent)', 'Réunion', ['urgent']],
+  ['Voir « #perso » demain', 'Voir demain', ['perso']],
+  ['#maison, puis ranger', 'puis ranger', ['maison']],
+  ['Ranger #maison.', 'Ranger.', ['maison']],
+  ['Laver #maison- bis', 'Laver - bis', ['maison']],
+  ['Fête 🎉 #été', 'Fête 🎉', ['été']],
+  ['Payer #3 factures', 'Payer factures', ['3']],
+  ['##urgent', '##urgent', []],
+  ['Lire https://exemple.be/#urgent', 'Lire https://exemple.be/#urgent', []],
+  ['Citer &#39;ok&#39;', 'Citer &#39;ok&#39;', []],
+  ['Rien # ici', 'Rien # ici', []],
+];
+
+for (const [title, label, tags] of cases) {
+  test(`lit « ${title} »`, () => {
+    assert.deepEqual(parseTags(title), { label, tags });
+  });
+}
+
+test('garde le titre entier quand il ne reste que de la ponctuation', () => {
+  assert.deepEqual(parseTags('#maison,'), { label: '#maison,', tags: ['maison'] });
+});
+
 test('garde le texte d’un titre fait seulement d’étiquettes', () => {
   assert.deepEqual(parseTags('#maison #urgent'), { label: '#maison #urgent', tags: ['maison', 'urgent'] });
 });
 
 test('donne toujours la même couleur à une même étiquette', () => {
   assert.equal(tagColor('maison'), tagColor('maison'));
-  assert.match(tagColor('maison'), /^bg-/);
+  for (const tag of ['maison', 'urgent', 'été', '3', 'x']) assert.match(tagColor(tag), /^bg-(amber|jade|sky|ink)\//);
 });
