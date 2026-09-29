@@ -59,8 +59,7 @@ toujours actifs dans Paramètres › Performances), ou quand l'extension ne donn
 nouvelles depuis 3 minutes (Chrome fermé). Les pages ne chargent qu'une partie des
 discussions : les non-lues plus anciennes sont comptées, pas listées.
 
-WhatsApp : les discussions en sourdine sont ignorées (`whatsapp.includeMuted` dans
-`dashboard.config.ts`). WhatsApp Web n'a pas d'adresse par discussion : un clic ouvre
+WhatsApp : les discussions en sourdine sont ignorées, comme sur le téléphone. WhatsApp Web n'a pas d'adresse par discussion : un clic ouvre
 l'accueil. Messenger : un clic ouvre la discussion.
 
 Si un site change sa page, la lecture casse : les repères utilisés sont décrits en tête de

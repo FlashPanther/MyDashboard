@@ -126,11 +126,6 @@ export const config = {
     },
   },
 
-  whatsapp: {
-    /** Les conversations en sourdine restent hors du tableau, comme sur le telephone. */
-    includeMuted: false,
-  },
-
   calendar: {
     /**
      * 'visible' = tous les agendas coches dans Google Agenda. Decoche-en un

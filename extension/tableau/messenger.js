@@ -26,12 +26,9 @@ function readChat(link) {
   const when = blocks.length > 1 && blocks.at(-1).length <= 12 ? blocks.pop() : '';
   return {
     id: href,
-    author: null,
     name,
     preview: blocks.join(' '),
     when,
-    unread: null,
-    muted: false,
     url: new URL(href, location.origin).toString(),
   };
 }
@@ -45,12 +42,11 @@ function snapshot() {
 
   const chats = [...grid.querySelectorAll('a[href*="/t/"]')]
     .filter((link) => ROW_HREF.test(link.getAttribute('href')) && UNREAD.test(link.textContent))
-    .map(readChat)
-    .filter((chat) => chat.name);
+    .map(readChat);
 
   const label = document.querySelector(TOTAL_LINK)?.getAttribute('aria-label') ?? '';
   const total = Number(label.match(/(\d+)/)?.[1] ?? 0);
-  return { state: 'ready', chats, total: Math.max(total, chats.length) };
+  return { state: 'ready', chats, total };
 }
 
 startRelay('messenger', snapshot);

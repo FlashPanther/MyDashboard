@@ -8,17 +8,15 @@
 
 export type Source = 'messenger' | 'whatsapp';
 
-/** Ce que l'extension voit de son cote. */
-export type ExtensionState =
-  | 'ready'
-  /** Onglet ouvert, mais sur la page de connexion (ou le QR code de WhatsApp). */
-  | 'login'
-  /** Aucun onglet ouvert. */
-  | 'noTab'
-  /** Onglet mis en veille par Chrome (economiseur de memoire). */
-  | 'sleeping';
+/**
+ * Ce que l'extension voit de son cote : liste lue, onglet sur la page de
+ * connexion (ou le QR code de WhatsApp), aucun onglet ouvert, ou onglet mis en
+ * veille par Chrome (economiseur de memoire).
+ */
+const STATES = ['ready', 'login', 'noTab', 'sleeping'] as const;
+type ExtensionState = (typeof STATES)[number];
 
-export type FeedStatus =
+type FeedStatus =
   | ExtensionState
   /** L'extension ne s'est jamais manifestee depuis le demarrage du serveur. */
   | 'waiting'
@@ -35,7 +33,6 @@ export type FeedChat = {
   when: string;
   /** Nombre de messages non lus, quand la page le donne. */
   unread: number | null;
-  muted: boolean;
   url: string;
 };
 
@@ -57,7 +54,6 @@ const HOSTS: Record<Source, string[]> = {
 
 /** L'extension envoie toutes les 20 s ; Chrome ralentit un onglet cache a une fois par minute. */
 export const STALE_MS = 3 * 60_000;
-const STATES: ExtensionState[] = ['ready', 'login', 'noTab', 'sleeping'];
 
 /** Survit au rechargement a chaud de `next dev`. */
 const globalState = globalThis as typeof globalThis & {
@@ -67,6 +63,11 @@ const store = (globalState.__relay ??= {});
 
 function text(value: unknown, max: number): string {
   return typeof value === 'string' ? value.slice(0, max) : '';
+}
+
+/** Un compteur venu de la page : entier, borne, ou null s'il manque. */
+function count(value: unknown): number | null {
+  return Number.isInteger(value) ? Math.min(Math.max(value as number, 0), 9999) : null;
 }
 
 /**
@@ -85,15 +86,13 @@ function sanitizeChat(source: Source, raw: unknown): FeedChat | null {
   if (url.protocol !== 'https:' || !HOSTS[source].includes(url.hostname)) return null;
   const name = text(chat.name, 200);
   if (!name) return null;
-  const unread = Number.isInteger(chat.unread) ? Math.min(Math.max(chat.unread as number, 0), 9999) : null;
   return {
     id: text(chat.id, 200) || url.pathname,
     name,
     author: text(chat.author, 200) || null,
     preview: text(chat.preview, 500),
     when: text(chat.when, 40),
-    unread,
-    muted: chat.muted === true,
+    unread: count(chat.unread),
     url: url.toString(),
   };
 }
@@ -108,8 +107,8 @@ export function receiveReport(source: Source, body: unknown, now = Date.now()) {
         .map((chat) => sanitizeChat(source, chat))
         .filter((chat): chat is FeedChat => chat !== null)
     : [];
-  const total = Number.isInteger(raw.total) ? Math.min(Math.max(raw.total as number, 0), 9999) : 0;
-  store[source] = { state, chats, total: Math.max(total, chats.length), at: now };
+  // Jamais moins que la liste recue : le total de la page peut etre en retard.
+  store[source] = { state, chats, total: Math.max(count(raw.total) ?? 0, chats.length), at: now };
 }
 
 export function feedSnapshot(source: Source, now = Date.now()): FeedSnapshot {
