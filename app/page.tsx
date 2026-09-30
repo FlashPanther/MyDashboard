@@ -72,7 +72,7 @@ export default function Dashboard() {
         {/* La colonne du jour a le plus de mou : l'audience se loge dessous. */}
         <div className="flex min-h-0 flex-col gap-4 lg:w-[24%] xl:w-[27%]">
           <div className="flex h-[65vh] min-h-0 flex-1 lg:h-auto">
-            <DayColumn now={now} atHome={atHome} officeEvent={officeEvent} />
+            <DayColumn now={now} />
           </div>
           <AudienceWidget />
         </div>
@@ -90,8 +90,8 @@ export default function Dashboard() {
           {/* Le reste, sur le cote : ce qu'on planifie et ce qu'on consulte. */}
           <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:flex-1">
             <TasksWidget />
-            {/* A la maison le trajet n'a rien a dire ; la meteo, elle, garde
-                la meme forme partout et prend simplement la place laissee. */}
+            {/* A la maison le trajet n'a rien a dire. La meteo garde sa hauteur :
+                etiree, elle se lit moins bien ; les taches prennent le reste. */}
             {!atHome && <CommuteWidget now={now} />}
             <WeatherWidget />
           </div>

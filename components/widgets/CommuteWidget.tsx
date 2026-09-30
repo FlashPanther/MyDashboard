@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { config } from '@/dashboard.config';
+import { TrainFront } from 'lucide-react';
 import { Panel, Empty } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { hhmm, minutesUntil, relative } from '@/lib/time';
@@ -28,6 +29,7 @@ export function CommuteWidget({ now }: { now: number }) {
   return (
     <Panel
       title="Trajet"
+      icon={TrainFront}
       grow
       href={config.links.train}
       hrefLabel="Ouvrir le planificateur SNCB"

@@ -1,6 +1,7 @@
 'use client';
 
 import { config } from '@/dashboard.config';
+import { CloudSun } from 'lucide-react';
 import { Panel } from '@/components/Panel';
 import { WeatherIcon } from '@/components/WeatherIcon';
 import { useEndpoint } from '@/lib/useEndpoint';
@@ -29,7 +30,7 @@ export function WeatherWidget() {
   return (
     <Panel
       title="Météo"
-      grow
+      icon={CloudSun}
       href={config.links.weather}
       hrefLabel="Ouvrir les prévisions complètes"
       meta={
@@ -39,7 +40,7 @@ export function WeatherWidget() {
       }
       error={error}
     >
-      <div className="flex h-[22rem] flex-col lg:h-full">
+      <div className="flex h-[22rem] flex-col">
         {!data ? (
           <p className="font-mono text-sm text-muted">Chargement…</p>
         ) : (

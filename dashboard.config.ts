@@ -29,20 +29,10 @@ export const config = {
     lon: 4.3300396,
   } as Place,
 
-  /** Heure a laquelle tu veux etre au bureau (24h, heure locale). */
-  workStart: '09:00',
-
-  /** Jours ouvres (0 = dimanche). Le widget trajet se met en veille les autres jours. */
-  workDays: [1, 2, 3, 4, 5],
-
   train: {
     /** Noms de gares tels que les comprend iRail (ex: "Namur", "Bruxelles-Central"). */
     from: 'Leuze',
     to: 'Bruxelles-Midi',
-    /** Minutes de marche entre chez toi et la gare de depart. */
-    walkToStation: 12,
-    /** Minutes de marche entre la gare d'arrivée et le bureau. */
-    walkFromStation: 8,
   },
 
   weather: {
@@ -57,7 +47,7 @@ export const config = {
   },
 
   /**
-   * Ou tu travailles. Le tableau masque le trajet et le repere « Partir »
+   * Ou tu travailles. Le tableau masque le trajet
    * quand tu es a la maison. La detection se fait sur le nom du reseau Wi-Fi ;
    * l'en-tete permet de forcer Maison ou Bureau quand elle se trompe.
    */

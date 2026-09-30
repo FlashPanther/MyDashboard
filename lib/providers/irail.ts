@@ -15,10 +15,6 @@ export type TrainDeparture = {
   vehicle: string;
   transfers: number;
   canceled: boolean;
-  /** Heure a laquelle il faut quitter la maison, epoch ms. */
-  leaveAt: number;
-  /** Heure d'arrivée au bureau marche comprise, epoch ms. */
-  atWork: number;
 };
 
 const IRAIL = 'https://api.irail.be/connections/';
@@ -49,8 +45,6 @@ export async function fetchTrains(reverse = false): Promise<TrainDeparture[]> {
   const data = await res.json();
 
   const connections: any[] = Array.isArray(data.connection) ? data.connection : [];
-  const walkOut = (reverse ? train.walkFromStation : train.walkToStation) * 60_000;
-  const walkIn = (reverse ? train.walkToStation : train.walkFromStation) * 60_000;
 
   return connections.map((c) => {
     const departure = toInt(c.departure.time) * 1000;
@@ -68,8 +62,6 @@ export async function fetchTrains(reverse = false): Promise<TrainDeparture[]> {
       vehicle: (c.departure.vehicle ?? '').replace(/^BE\.NMBS\./, ''),
       transfers: toInt(c.vias?.number),
       canceled: toInt(c.departure.canceled) === 1 || toInt(c.arrival.canceled) === 1,
-      leaveAt: departure - walkOut,
-      atWork: arrival + arrivalDelay + walkIn,
     };
   });
 }

@@ -2,18 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { config } from '@/dashboard.config';
+import { PanelTitle } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
-import { planDeparture } from '@/lib/leave';
-import {
-  decimalHour,
-  hhmm,
-  minutesUntil,
-  relative,
-  shortDate,
-  todayAt,
-} from '@/lib/time';
+import { CalendarDays } from 'lucide-react';
+import { decimalHour, hhmm, shortDate } from '@/lib/time';
 import type { CalendarEvent } from '@/app/api/calendar/route';
-import type { TrainDeparture } from '@/lib/providers/irail';
 
 const PX_PER_HOUR = 58;
 const MS_PER_DAY = 86_400_000;
@@ -85,23 +78,8 @@ function place(events: CalendarEvent[], startHour: number, dayStartMs: number): 
   return placed;
 }
 
-export function DayColumn({
-  now,
-  atHome,
-  officeEvent,
-}: {
-  now: number;
-  atHome: boolean;
-  /** L'evenement « Présentiel » du jour, s'il existe. */
-  officeEvent: CalendarEvent | null;
-}) {
+export function DayColumn({ now }: { now: number }) {
   const calendar = useEndpoint<{ events: CalendarEvent[] }>('/api/calendar', config.refresh.calendar);
-  const isWorkDay = (config.workDays as readonly number[]).includes(new Date(now).getDay());
-  const trains = useEndpoint<{ departures: TrainDeparture[] }>(
-    isWorkDay && !atHome ? '/api/commute/train' : null,
-    config.refresh.commute,
-  );
-
   const events = calendar.data?.events ?? [];
   const dayStartMs = new Date(now).setHours(0, 0, 0, 0);
   const dayEndMs = dayStartMs + MS_PER_DAY;
@@ -119,29 +97,13 @@ export function DayColumn({
   );
   const allDay = today.filter((e) => e.allDay);
 
-  // Le repere de depart ne concerne que le trajet du matin : passe l'heure de
-  // bureau (plus un quart d'heure de tolerance), il n'a plus rien a dire.
-  /*
-   * L'heure a viser vient de l'evenement du jour quand il y en a un : « Présentiel »
-   * commence a 09:30 un jour et 10:00 un autre, et c'est cette heure-la qui compte,
-   * pas une valeur figee dans la configuration.
-   */
-  const arriveBy = officeEvent ? hhmm(officeEvent.start) : config.workStart;
-
-  const plan = useMemo(() => {
-    if (!trains.data) return null;
-    if (now > todayAt(arriveBy).getTime() + 15 * 60_000) return null;
-    return planDeparture(trains.data.departures, arriveBy, now);
-  }, [trains.data, now, arriveBy]);
-
   const nowDecimal = decimalHour(now);
-  const leaveDecimal = plan ? decimalHour(plan.leaveAt) : null;
 
   const spans = today.filter((e) => !e.allDay).map((e) => spanToday(e, dayStartMs));
   const startHour = Math.max(
     0,
     Math.floor(
-      Math.min(nowDecimal, leaveDecimal ?? 24, ...spans.map((s) => s.from), config.calendar.dayStart),
+      Math.min(nowDecimal, ...spans.map((s) => s.from), config.calendar.dayStart),
     ),
   );
   const endHour = Math.min(
@@ -167,20 +129,12 @@ export function DayColumn({
   return (
     <section className="panel flex min-h-0 w-full flex-col">
       <header className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-2.5">
-        <h2 className="eyebrow">
-          <a
-            href={`https://calendar.google.com/calendar/r/${config.calendar.view}`}
-            target="_blank"
-            rel="noreferrer"
-            title="Ouvrir Google Agenda"
-            className="inline-flex items-baseline gap-1 transition-colors hover:text-ink"
-          >
-            Aujourd&rsquo;hui
-            <span aria-hidden className="text-[9px]">
-              &#8599;
-            </span>
-          </a>
-        </h2>
+        <PanelTitle
+          title="Aujourd’hui"
+          icon={CalendarDays}
+          href={`https://calendar.google.com/calendar/r/${config.calendar.view}`}
+          hrefLabel="Ouvrir Google Agenda"
+        />
         <span className="tnum font-mono text-xs text-muted">
           {calendar.data ? `${today.filter((e) => !e.allDay).length} rendez-vous` : null}
         </span>
@@ -238,14 +192,6 @@ export function DayColumn({
                 <EventBlock key={event.id} event={event} now={now} />
               ))}
             </div>
-
-            {leaveDecimal !== null && leaveDecimal >= startHour && leaveDecimal < endHour && plan && (
-              <LeaveMarker
-                top={(leaveDecimal - startHour) * PX_PER_HOUR}
-                plan={plan}
-                now={now}
-              />
-            )}
 
             {nowDecimal >= startHour && nowDecimal < endHour && (
               <NowLine top={(nowDecimal - startHour) * PX_PER_HOUR} now={now} />
@@ -345,46 +291,6 @@ function NowLine({ top, now }: { top: number; now: number }) {
         {hhmm(now)}
       </span>
       <span className="ml-3 h-px flex-1 bg-amber" />
-    </div>
-  );
-}
-
-function LeaveMarker({
-  top,
-  plan,
-  now,
-}: {
-  top: number;
-  plan: NonNullable<ReturnType<typeof planDeparture>>;
-  now: number;
-}) {
-  const minutes = minutesUntil(plan.leaveAt, now);
-  const imminent = minutes >= 0 && minutes <= 15;
-  const passed = minutes < 0;
-  const tone = passed ? 'border-muted/60' : plan.late ? 'border-rose' : 'border-amber';
-  const text = passed ? 'text-muted' : plan.late ? 'text-rose' : 'text-amber';
-
-  return (
-    <div
-      className={`absolute left-11 right-0 z-30 ${passed ? 'opacity-60' : ''}`}
-      style={{ top: top - 11 }}
-    >
-      <div
-        className={`flex items-baseline gap-2 border-y border-dashed bg-panel px-2 py-[3px] ${tone}`}
-      >
-        <span
-          className={`shrink-0 font-display text-[11px] font-extrabold uppercase tracking-[0.2em] ${text} ${
-            imminent && !passed ? 'pulse-amber' : ''
-          }`}
-        >
-          Partir {hhmm(plan.leaveAt)}
-        </span>
-        <span className="tnum truncate font-mono text-[11px] text-muted">
-          {relative(plan.leaveAt, now)} · train {hhmm(plan.train.departure)}
-          {plan.train.platform ? ` voie ${plan.train.platform}` : ''}
-          {plan.late ? ' · trop tard' : ` · ${plan.slack} min de marge`}
-        </span>
-      </div>
     </div>
   );
 }

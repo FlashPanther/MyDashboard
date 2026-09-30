@@ -5,7 +5,9 @@ import { config } from '@/dashboard.config';
 import { Panel, Empty } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { useStored, useStoredChoice } from '@/lib/storage';
+import { ListChecks } from 'lucide-react';
 import { tagColor } from '@/lib/tags';
+import { taskAlert } from '@/lib/taskAlert';
 import { shortDate } from '@/lib/time';
 import type { TaskItem } from '@/app/api/tasks/route';
 
@@ -70,6 +72,8 @@ export function TasksWidget() {
   return (
     <Panel
       title="Tâches"
+      icon={ListChecks}
+      alert={data && taskAlert(data.tasks)}
       grow
       href="https://tasks.google.com/"
       hrefLabel="Ouvrir Google Tasks"
