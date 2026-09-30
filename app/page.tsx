@@ -90,8 +90,7 @@ export default function Dashboard() {
           {/* Le reste, sur le cote : ce qu'on planifie et ce qu'on consulte. */}
           <div className="flex min-h-0 min-w-0 flex-col gap-4 lg:flex-1">
             <TasksWidget />
-            {/* A la maison le trajet n'a rien a dire. La meteo garde sa hauteur :
-                etiree, elle se lit moins bien ; les taches prennent le reste. */}
+            {/* A la maison, pas de trajet ; la meteo garde sa hauteur, les taches prennent le reste. */}
             {!atHome && <CommuteWidget now={now} />}
             <WeatherWidget />
           </div>

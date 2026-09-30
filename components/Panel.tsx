@@ -4,6 +4,9 @@ import { useId, type ReactNode } from 'react';
 import { TriangleAlert, type LucideIcon } from 'lucide-react';
 import { PanelTabs, tabPanelProps, type PanelTab } from '@/components/PanelTabs';
 
+/** Pastille : etiquettes des taches, badge d'alerte. */
+export const CHIP = 'rounded-full px-1.5 font-mono text-[10px] leading-4';
+
 export type PanelAlert = { count: number; detail: string; severe: boolean };
 
 type PanelProps<K extends string> = {
@@ -92,33 +95,24 @@ export function PanelTitle({
   href?: string;
   hrefLabel?: string;
 }) {
-  const label = (
-    <>
-      <Icon aria-hidden size={13} strokeWidth={2.25} className="shrink-0 self-center" />
-      {title}
-    </>
-  );
+  const Wrapper = href ? 'a' : 'span';
   return (
     <div className="flex shrink-0 items-baseline gap-2">
       <h2 className="eyebrow">
-        {href ? (
-          <a
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            title={hrefLabel}
-            className="inline-flex items-baseline gap-1.5 transition-colors hover:text-ink"
-          >
-            {label}
+        <Wrapper
+          {...(href && { href, target: '_blank', rel: 'noreferrer', title: hrefLabel })}
+          className="inline-flex items-baseline gap-1.5 transition-colors hover:text-ink"
+        >
+          <Icon aria-hidden size={13} strokeWidth={2.25} className="shrink-0 self-center" />
+          {title}
+          {href && (
             <span aria-hidden className="text-[9px]">
               &#8599;
             </span>
-          </a>
-        ) : (
-          <span className="inline-flex items-baseline gap-1.5">{label}</span>
-        )}
+          )}
+        </Wrapper>
       </h2>
-      {alert && alert.count > 0 && <AlertBadge alert={alert} />}
+      {alert && <AlertBadge alert={alert} />}
     </div>
   );
 }
@@ -129,7 +123,7 @@ function AlertBadge({ alert }: { alert: PanelAlert }) {
       role="img"
       title={alert.detail}
       aria-label={alert.detail}
-      className={`tnum inline-flex items-center gap-1 self-center rounded-full px-1.5 font-mono text-[10px] leading-4 ${
+      className={`${CHIP} tnum inline-flex items-center gap-1 self-center ${
         alert.severe ? 'bg-rose/15 text-rose' : 'bg-amber/15 text-amber'
       }`}
     >

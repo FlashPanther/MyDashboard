@@ -6,7 +6,6 @@ export type TrainDeparture = {
   /** Retard au depart, en minutes. */
   delay: number;
   arrival: number;
-  arrivalDelay: number;
   /** Duree porte-a-porte annoncee, en minutes. */
   duration: number;
   platform: string | null;
@@ -49,12 +48,10 @@ export async function fetchTrains(reverse = false): Promise<TrainDeparture[]> {
   return connections.map((c) => {
     const departure = toInt(c.departure.time) * 1000;
     const arrival = toInt(c.arrival.time) * 1000;
-    const arrivalDelay = toInt(c.arrival.delay) * 1000;
     return {
       departure,
       delay: Math.round(toInt(c.departure.delay) / 60),
       arrival,
-      arrivalDelay: Math.round(arrivalDelay / 60_000),
       duration: Math.round(toInt(c.duration) / 60),
       platform: c.departure.platform && c.departure.platform !== '?' ? c.departure.platform : null,
       platformChanged: c.departure.platforminfo?.normal === '0',

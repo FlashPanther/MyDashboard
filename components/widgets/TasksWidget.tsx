@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { config } from '@/dashboard.config';
-import { Panel, Empty } from '@/components/Panel';
+import { Panel, Empty, CHIP } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { useStored, useStoredChoice } from '@/lib/storage';
 import { ListChecks } from 'lucide-react';
@@ -129,8 +129,6 @@ export function TasksWidget() {
     </Panel>
   );
 }
-
-const CHIP = 'rounded-full px-1.5 font-mono text-[10px] leading-4';
 
 /** Pastille d'une etiquette : meme couleur partout pour un meme nom. */
 function TagChip({ tag, selected }: { tag: string; selected?: boolean }) {
