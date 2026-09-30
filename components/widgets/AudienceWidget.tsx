@@ -1,6 +1,7 @@
 'use client';
 
 import { config } from '@/dashboard.config';
+import { ChartLine } from 'lucide-react';
 import { Panel, Empty } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 import type { AnalyticsPayload, PropertyStats } from '@/lib/providers/analytics';
@@ -23,6 +24,7 @@ export function AudienceWidget() {
   return (
     <Panel
       title="Audience"
+      icon={ChartLine}
       href="https://analytics.google.com/"
       hrefLabel="Ouvrir Google Analytics"
       meta={

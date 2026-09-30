@@ -1,6 +1,7 @@
 'use client';
 
 import { config } from '@/dashboard.config';
+import { Mail } from 'lucide-react';
 import { Panel, Empty } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { useStoredChoice } from '@/lib/storage';
@@ -41,6 +42,7 @@ export function MailWidget({ now }: { now: number }) {
   return (
     <Panel
       title="Courrier"
+      icon={Mail}
       grow
       href={VIEWS[tab].href}
       hrefLabel={VIEWS[tab].hrefLabel}

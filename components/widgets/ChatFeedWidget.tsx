@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { config } from '@/dashboard.config';
+import { MessageCircle, MessagesSquare, type LucideIcon } from 'lucide-react';
 import { Panel, Empty } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { hhmm } from '@/lib/time';
@@ -11,6 +12,7 @@ type Feed = {
   /** La route (/api/<source>) et le rythme (config.refresh.<source>) en decoulent. */
   source: Source;
   title: string;
+  icon: LucideIcon;
   /** Page ouverte par le titre, et a garder ouverte pour l'extension. */
   site: string;
   siteLabel: string;
@@ -24,6 +26,7 @@ export function WhatsAppWidget() {
       feed={{
         source: 'whatsapp',
         title: 'WhatsApp',
+        icon: MessageCircle,
         site: 'https://web.whatsapp.com/',
         siteLabel: 'web.whatsapp.com',
         loginHint: 'L’onglet WhatsApp attend que tu scannes son QR code.',
@@ -38,6 +41,7 @@ export function MessengerWidget() {
       feed={{
         source: 'messenger',
         title: 'Messenger',
+        icon: MessagesSquare,
         site: 'https://www.messenger.com/',
         siteLabel: 'messenger.com',
         loginHint: 'L’onglet Messenger attend que tu te connectes.',
@@ -110,6 +114,7 @@ function ChatFeedWidget({ feed }: { feed: Feed }) {
   return (
     <Panel
       title={feed.title}
+      icon={feed.icon}
       grow
       href={feed.site}
       hrefLabel={`Ouvrir ${feed.title}`}

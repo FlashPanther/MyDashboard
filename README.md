@@ -115,17 +115,13 @@ signal parce qu'il vaut **dès le matin**, quand tu es encore chez toi mais qu'i
 attraper un train — le Wi-Fi, lui, dirait « maison » et masquerait le panneau Trajet au pire
 moment.
 
-L'heure de début de cet évènement devient l'heure à viser pour le repère « Partir » :
-un « Présentiel » à 09:30 fait choisir un autre train qu'un à 09:00, sans rien reconfigurer.
-
 À défaut d'évènement, le tableau retombe sur le **nom du réseau Wi-Fi**. Sous WSL, Linux ne
 voit pas la carte Wi-Fi : `lib/providers/presence.ts` interroge Windows via
 `netsh wlan show interfaces` (et retombe sur `iwgetid` ailleurs). Les SSID reconnus comme
 la maison sont dans `presence.homeSsids` de `dashboard.config.ts`.
 
-À la maison, le panneau Trajet disparaît et le repère « Partir » de la colonne du jour
-aussi. La météo garde la même forme partout (prévision horaire, puis les sept jours en
-cellules) et occupe simplement la place laissée libre. Le sélecteur **Maison / Bureau / Auto** de
+À la maison, le panneau Trajet disparaît et les Tâches prennent sa place ; la météo garde
+sa hauteur, en bas à droite. Le sélecteur **Maison / Bureau / Auto** de
 l'en-tête force le choix quand le réseau ne dit rien : câble Ethernet, Wi-Fi invité,
 partage de connexion. Le dernier état détecté est mémorisé pour que le panneau Trajet
 n'apparaisse pas une fraction de seconde avant de disparaître à chaque chargement.
@@ -164,12 +160,11 @@ Pour la voiture, `CAR_PROVIDER` accepte trois valeurs :
 Si un fournisseur payant est mal configuré, le dashboard retombe sur OSRM plutôt que de
 faire disparaître le panneau.
 
-## Le repère « Partir »
+## Avertissements
 
-Sur la colonne de gauche, un bandeau ambre indique l'heure à laquelle quitter la maison.
-Il prend le dernier train qui te dépose au bureau avant l'heure visée
-(`workStart`), marche jusqu'à la gare comprise, et affiche la marge restante. Passé
-l'heure de bureau, le repère disparaît : il n'a plus rien à dire.
+Un badge ⚠ à côté du titre d'un panneau signale ce qui demande ton attention, avec le
+détail au survol. Dans Tâches : les tâches en retard (badge rose) et celles sans
+`#étiquette` (badge ambre).
 
 ## Ouvrir un élément
 
@@ -309,7 +304,7 @@ variable, jamais l'utilitaire dans un composant. Les deux palettes tiennent le n
 app/api/          une route par source de données, tout en serveur
 lib/providers/    iRail, Open-Meteo, itinéraires voiture, relais des messageries
 lib/google/       OAuth et renouvellement du jeton
-lib/leave.ts      choix du train et calcul de l'heure de départ
+lib/taskAlert.ts  tâches à signaler (en retard, sans étiquette)
 components/ThemeToggle.tsx   sélecteur clair / sombre / auto
 components/       DayColumn (la colonne temps) + widgets
 dashboard.config.ts   tes réglages

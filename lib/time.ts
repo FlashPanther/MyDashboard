@@ -100,11 +100,3 @@ export function ymdPath(value: Date | string | number): string {
   const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
   return `${part('year')}/${Number(part('month'))}/${Number(part('day'))}`;
 }
-
-/** Convertit "09:00" en Date d'aujourd'hui. */
-export function todayAt(clock: string): Date {
-  const [hours, minutes] = clock.split(':').map(Number);
-  const date = new Date();
-  date.setHours(hours, minutes ?? 0, 0, 0);
-  return date;
-}

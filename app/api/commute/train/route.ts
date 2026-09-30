@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
   return handle(async () => ({
     from: reverse ? config.train.to : config.train.from,
     to: reverse ? config.train.from : config.train.to,
-    walkToStation: reverse ? config.train.walkFromStation : config.train.walkToStation,
     departures: await fetchTrains(reverse),
     fetchedAt: new Date().toISOString(),
   }));

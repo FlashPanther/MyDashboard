@@ -1,10 +1,19 @@
 'use client';
 
 import { useId, type ReactNode } from 'react';
+import { TriangleAlert, type LucideIcon } from 'lucide-react';
 import { PanelTabs, tabPanelProps, type PanelTab } from '@/components/PanelTabs';
+
+/** Pastille : etiquettes des taches, badge d'alerte. */
+export const CHIP = 'rounded-full px-1.5 font-mono text-[10px] leading-4';
+
+export type PanelAlert = { count: number; detail: string; severe: boolean };
 
 type PanelProps<K extends string> = {
   title: string;
+  icon: LucideIcon;
+  /** Ce qui demande ton attention : un badge a cote du titre, le detail au survol. */
+  alert?: PanelAlert | null;
   /** Page complete derriere le titre : Gmail, Google Tasks, l'agenda… */
   href?: string;
   /** Ce que le lien ouvre, en clair, pour l'infobulle et les lecteurs d'ecran. */
@@ -26,6 +35,8 @@ type PanelProps<K extends string> = {
 
 export function Panel<K extends string = string>({
   title,
+  icon,
+  alert,
   href,
   hrefLabel,
   meta,
@@ -39,10 +50,8 @@ export function Panel<K extends string = string>({
   const id = useId();
   return (
     <section className={`panel flex min-h-0 w-full flex-col ${grow ? 'flex-1' : ''}`}>
-      <header className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-2.5">
-        <h2 className="eyebrow shrink-0">
-          <PanelLink title={title} href={href} hrefLabel={hrefLabel} />
-        </h2>
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1.5 border-b border-rule px-4 py-2.5">
+        <PanelTitle title={title} icon={icon} alert={alert} href={href} hrefLabel={hrefLabel} />
         {tabs && (
           <PanelTabs
             id={id}
@@ -73,21 +82,54 @@ export function Panel<K extends string = string>({
 }
 
 /** Titre de panneau, cliquable quand une page complete existe. */
-function PanelLink({ title, href, hrefLabel }: { title: string; href?: string; hrefLabel?: string }) {
-  if (!href) return <>{title}</>;
+export function PanelTitle({
+  title,
+  icon: Icon,
+  alert,
+  href,
+  hrefLabel,
+}: {
+  title: string;
+  icon: LucideIcon;
+  alert?: PanelAlert | null;
+  href?: string;
+  hrefLabel?: string;
+}) {
+  const Wrapper = href ? 'a' : 'span';
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      title={hrefLabel}
-      className="inline-flex items-baseline gap-1 transition-colors hover:text-ink"
+    <div className="flex shrink-0 items-baseline gap-2">
+      <h2 className="eyebrow">
+        <Wrapper
+          {...(href && { href, target: '_blank', rel: 'noreferrer', title: hrefLabel })}
+          className="inline-flex items-baseline gap-1.5 transition-colors hover:text-ink"
+        >
+          <Icon aria-hidden size={13} strokeWidth={2.25} className="shrink-0 self-center" />
+          {title}
+          {href && (
+            <span aria-hidden className="text-[9px]">
+              &#8599;
+            </span>
+          )}
+        </Wrapper>
+      </h2>
+      {alert && <AlertBadge alert={alert} />}
+    </div>
+  );
+}
+
+function AlertBadge({ alert }: { alert: PanelAlert }) {
+  return (
+    <span
+      role="img"
+      title={alert.detail}
+      aria-label={alert.detail}
+      className={`${CHIP} tnum inline-flex items-center gap-1 self-center ${
+        alert.severe ? 'bg-rose/15 text-rose' : 'bg-amber/15 text-amber'
+      }`}
     >
-      {title}
-      <span aria-hidden className="text-[9px]">
-        &#8599;
-      </span>
-    </a>
+      <TriangleAlert aria-hidden size={11} strokeWidth={2.5} />
+      {alert.count}
+    </span>
   );
 }
 
