@@ -38,10 +38,11 @@ export function WeatherWidget() {
           ? `${data.place} · ${Math.round(data.today.min)}° / ${Math.round(data.today.max)}°`
           : null
       }
-      error={error}
     >
       <div className="flex h-[22rem] flex-col">
-        {!data ? (
+        {error ? (
+          <p className="text-sm text-rose">{error}</p>
+        ) : !data ? (
           <p className="font-mono text-sm text-muted">Chargement…</p>
         ) : (
           <>

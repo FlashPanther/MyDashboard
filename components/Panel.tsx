@@ -50,7 +50,7 @@ export function Panel<K extends string = string>({
   const id = useId();
   return (
     <section className={`panel flex min-h-0 w-full flex-col ${grow ? 'flex-1' : ''}`}>
-      <header className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-2.5">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1.5 border-b border-rule px-4 py-2.5">
         <PanelTitle title={title} icon={icon} alert={alert} href={href} hrefLabel={hrefLabel} />
         {tabs && (
           <PanelTabs
