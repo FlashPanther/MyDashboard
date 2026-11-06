@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { handle } from '@/lib/api';
+import { allPages } from '@/lib/google/allPages';
 import { googleFetch } from '@/lib/google/oauth';
 import { parseTags } from '@/lib/tags';
 
@@ -25,9 +26,11 @@ export type TaskItem = {
 
 export async function GET() {
   return handle(async () => {
-    const lists = await googleFetch<{ items?: { id: string; title: string }[] }>(
-      'https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=10',
-    );
+    const lists = await allPages<{ id: string; title: string }>((pageToken) => {
+      const params = new URLSearchParams({ maxResults: '100' });
+      if (pageToken) params.set('pageToken', pageToken);
+      return googleFetch(`https://tasks.googleapis.com/tasks/v1/users/@me/lists?${params}`);
+    });
 
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
@@ -35,25 +38,26 @@ export async function GET() {
     startOfDay.setHours(0, 0, 0, 0);
 
     const all = await Promise.all(
-      (lists.items ?? []).map(async (list) => {
-        const params = new URLSearchParams({
-          showCompleted: 'false',
-          showHidden: 'false',
-          maxResults: '50',
+      lists.map(async (list) => {
+        const items = await allPages<{
+          id: string;
+          title?: string;
+          due?: string;
+          notes?: string;
+          status?: string;
+          webViewLink?: string;
+          updated?: string;
+        }>((pageToken) => {
+          const params = new URLSearchParams({
+            showCompleted: 'false',
+            showHidden: 'false',
+            maxResults: '100',
+          });
+          if (pageToken) params.set('pageToken', pageToken);
+          return googleFetch(`https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?${params}`);
         });
-        const data = await googleFetch<{
-          items?: {
-            id: string;
-            title?: string;
-            due?: string;
-            notes?: string;
-            status?: string;
-            webViewLink?: string;
-            updated?: string;
-          }[];
-        }>(`https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?${params}`);
 
-        return (data.items ?? [])
+        return items
           .filter((task) => task.status !== 'completed' && task.title?.trim())
           .map<TaskItem>((task) => {
             const due = task.due ? new Date(task.due) : null;
