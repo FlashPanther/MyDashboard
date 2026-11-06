@@ -60,9 +60,13 @@ export function TasksWidget() {
   const [tab, setTab] = useStoredChoice('tasks-tab', TABS);
   const [tag, chooseTag] = useStored('tasks-tag');
   const [changeError, setChangeError] = useState<string | null>(null);
+  const [writing, setWriting] = useState(false);
   const lists = data?.lists ?? [];
 
+  // Une ecriture a la fois : SWR ne revalide pas apres deux mutations croisees, et un
+  // double clic atteindrait la tache remontee sous le pointeur.
   async function change(task: TaskItem, payload: { done: true } | { moveTo: string }) {
+    setWriting(true);
     setChangeError(null);
     await mutate<TasksPayload>(
       TASKS_URL,
@@ -71,7 +75,13 @@ export function TasksWidget() {
           listId: task.listId,
           ...payload,
         });
-        if (!ok) throw new Error(body?.error ?? 'La tâche n’a pas pu être modifiée.');
+        if (!ok) {
+          throw new Error(
+            'moveTo' in payload
+              ? 'Google a refusé le déplacement : une tâche récurrente ne peut pas changer de liste.'
+              : (body?.error ?? 'La tâche n’a pas pu être modifiée.'),
+          );
+        }
         return undefined;
       },
       {
@@ -83,10 +93,12 @@ export function TasksWidget() {
         rollbackOnError: true,
       },
     ).catch((error: Error) => setChangeError(error.message));
+    setWriting(false);
   }
 
   const row = {
     lists,
+    writing,
     onTag: chooseTag,
     onFinish: (task: TaskItem) => change(task, { done: true }),
     onMove: (task: TaskItem, moveTo: string) => change(task, { moveTo }),
@@ -239,12 +251,14 @@ function ListOptions({ lists }: { lists: TaskList[] }) {
 function TaskRows({
   tasks,
   lists,
+  writing,
   onTag,
   onFinish,
   onMove,
 }: {
   tasks: TaskItem[];
   lists: TaskList[];
+  writing: boolean;
   onTag: (tag: string) => void;
   onFinish: (task: TaskItem) => void;
   onMove: (task: TaskItem, listId: string) => void;
@@ -263,6 +277,7 @@ function TaskRows({
               type="button"
               title="Marquer comme terminée"
               aria-label={`Marquer « ${task.label} » comme terminée`}
+              disabled={writing}
               onClick={() => onFinish(task)}
               className="relative z-10 -m-1 shrink-0 rounded-full p-1 hover:bg-jade/30"
             >
@@ -294,6 +309,7 @@ function TaskRows({
                 →
                 <select
                   value={task.listId}
+                  disabled={writing}
                   title={`Dans « ${task.list} » : déplacer vers…`}
                   aria-label={`Déplacer « ${task.label} » vers une autre liste`}
                   onChange={(event) => onMove(task, event.target.value)}

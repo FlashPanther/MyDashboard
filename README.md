@@ -259,8 +259,8 @@ Entrée, et la tâche part dans Google Tasks, sans échéance ; le panneau bascu
 planifier » pour la montrer.
 
 Sur chaque ligne, un clic sur la **puce** marque la tâche comme terminée, et le petit menu qui
-apparaît au survol à droite la **déplace** vers une autre liste. Une tâche récurrente déplacée
-peut perdre sa répétition : à vérifier dans Google Tasks.
+apparaît au survol à droite la **déplace** vers une autre liste. Selon la documentation de
+Google, une tâche récurrente ne peut pas changer de liste : le panneau affiche alors le refus.
 
 **Étiquettes** : Google Tasks n'a ni catégories ni étiquettes, alors elles s'écrivent dans le
 titre : `Réparer le vélo #maison #urgent`. Le tableau retire les `#mots` du titre affiché et
