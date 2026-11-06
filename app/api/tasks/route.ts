@@ -24,13 +24,19 @@ export type TaskItem = {
   updated: string | null;
 };
 
+function listAll<T>(url: string, query: Record<string, string> = {}) {
+  return allPages<T>((pageToken) => {
+    const params = new URLSearchParams({ maxResults: '100', ...query });
+    if (pageToken) params.set('pageToken', pageToken);
+    return googleFetch(`${url}?${params}`);
+  });
+}
+
 export async function GET() {
   return handle(async () => {
-    const lists = await allPages<{ id: string; title: string }>((pageToken) => {
-      const params = new URLSearchParams({ maxResults: '100' });
-      if (pageToken) params.set('pageToken', pageToken);
-      return googleFetch(`https://tasks.googleapis.com/tasks/v1/users/@me/lists?${params}`);
-    });
+    const lists = await listAll<{ id: string; title: string }>(
+      'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
+    );
 
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
@@ -39,7 +45,7 @@ export async function GET() {
 
     const all = await Promise.all(
       lists.map(async (list) => {
-        const items = await allPages<{
+        const items = await listAll<{
           id: string;
           title?: string;
           due?: string;
@@ -47,14 +53,9 @@ export async function GET() {
           status?: string;
           webViewLink?: string;
           updated?: string;
-        }>((pageToken) => {
-          const params = new URLSearchParams({
-            showCompleted: 'false',
-            showHidden: 'false',
-            maxResults: '100',
-          });
-          if (pageToken) params.set('pageToken', pageToken);
-          return googleFetch(`https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?${params}`);
+        }>(`https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks`, {
+          showCompleted: 'false',
+          showHidden: 'false',
         });
 
         return items
