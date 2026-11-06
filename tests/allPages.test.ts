@@ -22,6 +22,13 @@ test('toutes les pages sont lues, dans l ordre, en repassant le jeton reçu', as
   assert.deepEqual(jetons, [undefined, 'p2', 'p3']);
 });
 
+test('un jeton déjà rencontré lève une erreur au lieu de boucler sans fin', async () => {
+  await assert.rejects(
+    allPages(async () => ({ items: ['a'], nextPageToken: 'p2' })),
+    /jeton déjà rencontré/,
+  );
+});
+
 test('une page sans items ne rompt pas la lecture', async () => {
   const items = await allPages<string>(async (jeton) =>
     jeton ? { items: ['a'] } : { nextPageToken: 'p2' },
