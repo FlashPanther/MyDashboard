@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { handle } from '@/lib/api';
+import { allPages } from '@/lib/google/allPages';
 import { googleFetch } from '@/lib/google/oauth';
 import { parseTags } from '@/lib/tags';
 
@@ -23,10 +24,18 @@ export type TaskItem = {
   updated: string | null;
 };
 
+function listAll<T>(url: string, query: Record<string, string> = {}) {
+  return allPages<T>((pageToken) => {
+    const params = new URLSearchParams({ maxResults: '100', ...query });
+    if (pageToken) params.set('pageToken', pageToken);
+    return googleFetch(`${url}?${params}`);
+  });
+}
+
 export async function GET() {
   return handle(async () => {
-    const lists = await googleFetch<{ items?: { id: string; title: string }[] }>(
-      'https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=10',
+    const lists = await listAll<{ id: string; title: string }>(
+      'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
     );
 
     const endOfDay = new Date();
@@ -35,25 +44,21 @@ export async function GET() {
     startOfDay.setHours(0, 0, 0, 0);
 
     const all = await Promise.all(
-      (lists.items ?? []).map(async (list) => {
-        const params = new URLSearchParams({
+      lists.map(async (list) => {
+        const items = await listAll<{
+          id: string;
+          title?: string;
+          due?: string;
+          notes?: string;
+          status?: string;
+          webViewLink?: string;
+          updated?: string;
+        }>(`https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks`, {
           showCompleted: 'false',
           showHidden: 'false',
-          maxResults: '50',
         });
-        const data = await googleFetch<{
-          items?: {
-            id: string;
-            title?: string;
-            due?: string;
-            notes?: string;
-            status?: string;
-            webViewLink?: string;
-            updated?: string;
-          }[];
-        }>(`https://tasks.googleapis.com/tasks/v1/lists/${list.id}/tasks?${params}`);
 
-        return (data.items ?? [])
+        return items
           .filter((task) => task.status !== 'completed' && task.title?.trim())
           .map<TaskItem>((task) => {
             const due = task.due ? new Date(task.due) : null;
