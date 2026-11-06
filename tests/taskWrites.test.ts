@@ -12,7 +12,7 @@ test('une nouvelle tâche part dans la liste choisie', () => {
 });
 
 test('sans liste choisie, la nouvelle tâche part dans la liste par défaut', () => {
-  assert.equal(newTaskRequest('Pain', undefined).url, `${API}/lists/%40default/tasks`);
+  assert.equal(newTaskRequest('Pain', undefined).url, `${API}/lists/@default/tasks`);
 });
 
 test('terminer une tâche passe son statut à completed', () => {

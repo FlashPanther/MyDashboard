@@ -6,12 +6,14 @@ import { Panel, Empty, CHIP } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { useStored, useStoredChoice } from '@/lib/storage';
 import { ListChecks } from 'lucide-react';
+import { mutate } from 'swr';
 import { tagColor } from '@/lib/tags';
 import { taskAlert } from '@/lib/taskAlert';
 import { shortDate } from '@/lib/time';
-import type { TaskItem } from '@/app/api/tasks/route';
+import type { TaskItem, TaskList } from '@/app/api/tasks/route';
 
-type TaskList = { id: string; title: string };
+const TASKS_URL = '/api/tasks';
+
 type TasksPayload = { tasks: TaskItem[]; lists: TaskList[] };
 
 async function send(url: string, method: 'POST' | 'PATCH', payload: object) {
@@ -52,37 +54,43 @@ const TABS = ['today', 'plan'] as const;
 
 export function TasksWidget() {
   const { data, error, notConnected, refresh } = useEndpoint<TasksPayload>(
-    '/api/tasks',
+    TASKS_URL,
     config.refresh.tasks,
   );
   const [tab, setTab] = useStoredChoice('tasks-tab', TABS);
   const [tag, chooseTag] = useStored('tasks-tag');
-  const [finished, setFinished] = useState<ReadonlySet<string>>(new Set());
   const [changeError, setChangeError] = useState<string | null>(null);
   const lists = data?.lists ?? [];
 
   async function change(task: TaskItem, payload: { done: true } | { moveTo: string }) {
     setChangeError(null);
-    const { ok, body } = await send(`/api/tasks/${encodeURIComponent(task.id)}`, 'PATCH', {
-      listId: task.listId,
-      ...payload,
-    });
-    if (!ok) setChangeError(body?.error ?? 'La tâche n’a pas pu être modifiée.');
-    refresh();
-    return ok;
+    await mutate<TasksPayload>(
+      TASKS_URL,
+      async () => {
+        const { ok, body } = await send(`${TASKS_URL}/${encodeURIComponent(task.id)}`, 'PATCH', {
+          listId: task.listId,
+          ...payload,
+        });
+        if (!ok) throw new Error(body?.error ?? 'La tâche n’a pas pu être modifiée.');
+        return undefined;
+      },
+      {
+        optimisticData:
+          'done' in payload && data
+            ? { ...data, tasks: data.tasks.filter((other) => other.id !== task.id) }
+            : undefined,
+        populateCache: false,
+        rollbackOnError: true,
+      },
+    ).catch((error: Error) => setChangeError(error.message));
   }
 
-  async function finish(task: TaskItem) {
-    setFinished((ids) => new Set(ids).add(task.id));
-    if (await change(task, { done: true })) return;
-    setFinished((ids) => {
-      const next = new Set(ids);
-      next.delete(task.id);
-      return next;
-    });
-  }
-
-  const row = { lists, onTag: chooseTag, onFinish: finish, onMove: (task: TaskItem, moveTo: string) => change(task, { moveTo }) };
+  const row = {
+    lists,
+    onTag: chooseTag,
+    onFinish: (task: TaskItem) => change(task, { done: true }),
+    onMove: (task: TaskItem, moveTo: string) => change(task, { moveTo }),
+  };
 
   // Les etiquettes en usage, les plus frequentes d'abord.
   const counts = new Map<string, number>();
@@ -97,9 +105,7 @@ export function TasksWidget() {
   }, [data]);
 
   // Deja triees par l'API : en retard, puis du jour, puis par echeance.
-  const tasks = (data?.tasks ?? []).filter(
-    (task) => !finished.has(task.id) && (!active || task.tags.includes(active)),
-  );
+  const tasks = (data?.tasks ?? []).filter((task) => !active || task.tags.includes(active));
   const pressing = tasks.filter((task) => task.overdue || task.dueToday);
   const upcoming = tasks.filter((task) => task.due && !pressing.includes(task));
   // Les plus anciennes d'abord : ce sont celles qu'on a le plus surement oubliees.
@@ -222,6 +228,14 @@ function TagFilter({
   );
 }
 
+function ListOptions({ lists }: { lists: TaskList[] }) {
+  return lists.map((list) => (
+    <option key={list.id} value={list.id}>
+      {list.title}
+    </option>
+  ));
+}
+
 function TaskRows({
   tasks,
   lists,
@@ -275,22 +289,20 @@ function TaskRows({
               </button>
             ))}
             {due.text && <span className={`shrink-0 font-mono text-[11px] ${due.tone}`}>{due.text}</span>}
-            <span className="relative z-10 w-4 shrink-0 text-center font-mono text-[11px] text-muted opacity-0 focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
-              →
-              <select
-                value={task.listId}
-                title={`Dans « ${task.list} » : déplacer vers…`}
-                aria-label={`Déplacer « ${task.label} » vers une autre liste`}
-                onChange={(event) => onMove(task, event.target.value)}
-                className="absolute inset-0 cursor-pointer opacity-0"
-              >
-                {lists.map((list) => (
-                  <option key={list.id} value={list.id}>
-                    {list.title}
-                  </option>
-                ))}
-              </select>
-            </span>
+            {lists.length > 1 && (
+              <span className="relative z-10 w-4 shrink-0 text-center font-mono text-[11px] text-muted opacity-0 focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+                →
+                <select
+                  value={task.listId}
+                  title={`Dans « ${task.list} » : déplacer vers…`}
+                  aria-label={`Déplacer « ${task.label} » vers une autre liste`}
+                  onChange={(event) => onMove(task, event.target.value)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                >
+                  <ListOptions lists={lists} />
+                </select>
+              </span>
+            )}
           </li>
         );
       })}
@@ -312,7 +324,7 @@ function QuickAdd({ lists, onCreated }: { lists: TaskList[]; onCreated: () => vo
     if (!value || busy) return;
     setBusy(true);
     setProblem(null);
-    const { ok, body } = await send('/api/tasks', 'POST', { title: value, listId });
+    const { ok, body } = await send(TASKS_URL, 'POST', { title: value, listId });
     setBusy(false);
     if (ok) {
       setTitle('');
@@ -346,11 +358,7 @@ function QuickAdd({ lists, onCreated }: { lists: TaskList[]; onCreated: () => vo
             aria-label="Liste de la nouvelle tâche"
             className="max-w-28 shrink-0 cursor-pointer truncate bg-transparent font-mono text-[11px] text-muted hover:text-ink"
           >
-            {lists.map((list) => (
-              <option key={list.id} value={list.id}>
-                {list.title}
-              </option>
-            ))}
+            <ListOptions lists={lists} />
           </select>
         )}
         {title.trim() && (

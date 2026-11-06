@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
-import { handle } from '@/lib/api';
+import { handle, requireJson } from '@/lib/api';
 import { allPages } from '@/lib/google/allPages';
 import { googleFetch } from '@/lib/google/oauth';
 import { newTaskRequest } from '@/lib/google/taskWrites';
 import { parseTags } from '@/lib/tags';
 
 export const dynamic = 'force-dynamic';
+
+export type TaskList = { id: string; title: string };
 
 export type TaskItem = {
   id: string;
@@ -36,7 +38,7 @@ function listAll<T>(url: string, query: Record<string, string> = {}) {
 
 export async function GET() {
   return handle(async () => {
-    const lists = await listAll<{ id: string; title: string }>(
+    const lists = await listAll<TaskList>(
       'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
     );
 
@@ -96,14 +98,10 @@ export async function GET() {
   });
 }
 
-/**
- * Cree une tache dans la liste demandee, ou celle par defaut. JSON exige : une page web ne peut
- * pas en envoyer ici sans une verification CORS a laquelle on ne repond pas.
- */
+/** Cree une tache dans la liste demandee, ou celle par defaut. */
 export async function POST(request: Request) {
-  if (!request.headers.get('content-type')?.startsWith('application/json')) {
-    return NextResponse.json({ error: 'JSON attendu' }, { status: 415 });
-  }
+  const refused = requireJson(request);
+  if (refused) return refused;
   const body = await request.json().catch(() => ({}));
   const title = typeof body.title === 'string' ? body.title.trim().slice(0, 1024) : '';
   if (!title) return NextResponse.json({ error: 'Titre vide' }, { status: 400 });
