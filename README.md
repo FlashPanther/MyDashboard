@@ -65,10 +65,10 @@ l'extension et les deux onglets est allumé.
    compte : supprime ce fichier et relie à nouveau.
 
 Les portées demandées sont en lecture seule (`calendar.readonly`, `gmail.readonly`,
-`analytics.readonly`), sauf une : `tasks`, pour le champ « Nouvelle tâche » du panneau
-Tâches. C'est la seule écriture du dashboard dans ton compte : il crée une tâche dans ta
-liste par défaut quand tu la tapes, rien d'autre. Si tu as relié Google avant l'arrivée de
-ce champ, il le signale et propose de relier à nouveau.
+`analytics.readonly`), sauf une : `tasks`, pour le panneau Tâches. C'est la seule écriture
+du dashboard dans ton compte : créer une tâche dans la liste choisie, la marquer comme
+terminée, la déplacer vers une autre liste, chaque fois sur ton geste. Si tu as relié Google
+avant l'arrivée de ce champ, il le signale et propose de relier à nouveau.
 
 ## Relier WhatsApp et Messenger
 
@@ -254,9 +254,13 @@ plus sûrement oubliées, triées sur le champ `updated` de Google Tasks. La puc
 autres tâches portent leur date : c'est ce manque qui doit se voir. Quand il n'en reste
 aucune : « Tout est planifié. »
 
-Au-dessus des deux onglets, un champ **Nouvelle tâche** : tape le titre, Entrée, et la tâche
-part dans ta liste par défaut de Google Tasks, sans échéance ; le panneau bascule sur « À
+Au-dessus des deux onglets, un champ **Nouvelle tâche** : tape le titre, choisis la liste,
+Entrée, et la tâche part dans Google Tasks, sans échéance ; le panneau bascule sur « À
 planifier » pour la montrer.
+
+Sur chaque ligne, un clic sur la **puce** marque la tâche comme terminée, et le petit menu qui
+apparaît au survol à droite la **déplace** vers une autre liste. Une tâche récurrente déplacée
+peut perdre sa répétition : à vérifier dans Google Tasks.
 
 **Étiquettes** : Google Tasks n'a ni catégories ni étiquettes, alors elles s'écrivent dans le
 titre : `Réparer le vélo #maison #urgent`. Le tableau retire les `#mots` du titre affiché et
