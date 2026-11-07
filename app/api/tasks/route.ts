@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
-import { handle } from '@/lib/api';
+import { handle, requireJson } from '@/lib/api';
 import { allPages } from '@/lib/google/allPages';
 import { googleFetch } from '@/lib/google/oauth';
+import { newTaskRequest } from '@/lib/google/taskWrites';
 import { parseTags } from '@/lib/tags';
 
 export const dynamic = 'force-dynamic';
+
+export type TaskList = { id: string; title: string };
 
 export type TaskItem = {
   id: string;
@@ -16,6 +19,7 @@ export type TaskItem = {
   due: string | null;
   notes: string | null;
   list: string;
+  listId: string;
   overdue: boolean;
   dueToday: boolean;
   /** Page de la tâche dans Google Tasks. */
@@ -34,7 +38,7 @@ function listAll<T>(url: string, query: Record<string, string> = {}) {
 
 export async function GET() {
   return handle(async () => {
-    const lists = await listAll<{ id: string; title: string }>(
+    const lists = await listAll<TaskList>(
       'https://tasks.googleapis.com/tasks/v1/users/@me/lists',
     );
 
@@ -70,6 +74,7 @@ export async function GET() {
               due: task.due ?? null,
               notes: task.notes ?? null,
               list: list.title,
+              listId: list.id,
               overdue: Boolean(due && due < startOfDay),
               dueToday: Boolean(due && due >= startOfDay && due <= endOfDay),
               url: task.webViewLink ?? 'https://tasks.google.com/',
@@ -85,31 +90,25 @@ export async function GET() {
       .flat()
       .sort((a, b) => rank(a) - rank(b) || (a.due ?? '9999').localeCompare(b.due ?? '9999'));
 
-    return { tasks, fetchedAt: new Date().toISOString() };
+    return {
+      tasks,
+      lists: lists.map(({ id, title }) => ({ id, title })),
+      fetchedAt: new Date().toISOString(),
+    };
   });
 }
 
-/**
- * Cree une tache dans la liste par defaut. JSON exige : une page web ne peut
- * pas en envoyer ici sans une verification CORS a laquelle on ne repond pas.
- */
+/** Cree une tache dans la liste demandee, ou celle par defaut. */
 export async function POST(request: Request) {
-  if (!request.headers.get('content-type')?.startsWith('application/json')) {
-    return NextResponse.json({ error: 'JSON attendu' }, { status: 415 });
-  }
+  const refused = requireJson(request);
+  if (refused) return refused;
   const body = await request.json().catch(() => ({}));
   const title = typeof body.title === 'string' ? body.title.trim().slice(0, 1024) : '';
   if (!title) return NextResponse.json({ error: 'Titre vide' }, { status: 400 });
 
   return handle(async () => {
-    const task = await googleFetch<{ id: string }>(
-      'https://tasks.googleapis.com/tasks/v1/lists/@default/tasks',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title }),
-      },
-    );
+    const { url, init } = newTaskRequest(title, body.listId);
+    const task = await googleFetch<{ id: string }>(url, init);
     return { id: task.id };
   });
 }

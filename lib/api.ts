@@ -10,6 +10,12 @@ export type ApiError = {
   activationUrl?: string | null;
 };
 
+/** JSON exige : une page web ne peut pas en envoyer sans une verification CORS a laquelle on ne repond pas. */
+export function requireJson(request: Request) {
+  if (request.headers.get('content-type')?.startsWith('application/json')) return null;
+  return NextResponse.json({ error: 'JSON attendu' }, { status: 415 });
+}
+
 /** Enveloppe une route : toute erreur devient une reponse JSON lisible par le widget. */
 export async function handle<T>(fn: () => Promise<T>) {
   try {
