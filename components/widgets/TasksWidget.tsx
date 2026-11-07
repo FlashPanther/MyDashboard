@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { config } from '@/dashboard.config';
 import { Panel, Empty, CHIP } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
@@ -10,6 +10,7 @@ import { mutate } from 'swr';
 import { tagColor } from '@/lib/tags';
 import { taskAlert } from '@/lib/taskAlert';
 import { shortDate } from '@/lib/time';
+import { branches, isPressing, type ListBranch } from '@/lib/taskMap';
 import type { TaskItem, TaskList } from '@/app/api/tasks/route';
 
 const TASKS_URL = '/api/tasks';
@@ -50,7 +51,7 @@ function dueOf(task: TaskItem): { text: string; tone: string; dot: string; title
   };
 }
 
-const TABS = ['today', 'plan'] as const;
+const TABS = ['today', 'plan', 'map'] as const;
 
 export function TasksWidget() {
   const { data, error, notConnected, refresh } = useEndpoint<TasksPayload>(
@@ -61,6 +62,8 @@ export function TasksWidget() {
   const [tag, chooseTag] = useStored('tasks-tag');
   const [changeError, setChangeError] = useState<string | null>(null);
   const [writing, setWriting] = useState(false);
+  const [chosenList, setChosenList] = useState<string | null>(null);
+  const addInput = useRef<HTMLInputElement>(null);
   const lists = data?.lists ?? [];
 
   // Une ecriture a la fois : SWR ne revalide pas apres deux mutations croisees, et un
@@ -118,12 +121,18 @@ export function TasksWidget() {
 
   // Deja triees par l'API : en retard, puis du jour, puis par echeance.
   const tasks = (data?.tasks ?? []).filter((task) => !active || task.tags.includes(active));
-  const pressing = tasks.filter((task) => task.overdue || task.dueToday);
+  const pressing = tasks.filter(isPressing);
   const upcoming = tasks.filter((task) => task.due && !pressing.includes(task));
   // Les plus anciennes d'abord : ce sont celles qu'on a le plus surement oubliees.
   const undated = tasks
     .filter((task) => !task.due)
     .sort((a, b) => (a.updated ?? '').localeCompare(b.updated ?? ''));
+  const map = branches(lists, tasks, { keepEmpty: !active });
+
+  function addTo(listId: string) {
+    setChosenList(listId);
+    addInput.current?.focus();
+  }
 
   return (
     <Panel
@@ -140,18 +149,24 @@ export function TasksWidget() {
         items: [
           { key: 'today', label: 'Aujourd’hui', count: data && pressing.length },
           { key: 'plan', label: 'À planifier', count: data && undated.length },
+          { key: 'map', label: 'Carte', count: data && map.reduce((sum, branch) => sum + branch.tasks.length, 0) },
         ],
       }}
       error={error}
       notConnected={notConnected}
     >
       <div className="flex h-[19rem] flex-col lg:h-full">
-        {/* Une tache creee n'a pas d'echeance : on montre l'onglet ou elle arrive. */}
+        {/* Une tache creee n'a pas d'echeance : on montre l'onglet ou elle arrive, sauf sur la carte, ou elle est deja. */}
         <QuickAdd
           lists={lists}
+          listId={chosenList ?? lists[0]?.id}
+          onChooseList={setChosenList}
+          inputRef={addInput}
+          busy={writing}
+          onBusy={setWriting}
           onCreated={() => {
             refresh();
-            setTab('plan');
+            if (tab !== 'map') setTab('plan');
           }}
         />
         {changeError && <p className="mb-1 shrink-0 text-[12px] text-rose">{changeError}</p>}
@@ -181,6 +196,7 @@ export function TasksWidget() {
             {tab === 'plan' && undated.length === 0 && !active && (
               <p className="py-1 font-mono text-[11px] text-jade">Tout est planifié.</p>
             )}
+            {tab === 'map' && <ListMap map={map} onAdd={addTo} {...row} />}
           </div>
         )}
       </div>
@@ -246,6 +262,65 @@ function ListOptions({ lists }: { lists: TaskList[] }) {
       {list.title}
     </option>
   ));
+}
+
+type RowProps = Omit<Parameters<typeof TaskRows>[0], 'tasks'>;
+
+/** Une branche par liste Google : son nom, ses tâches, et ce qui est remis à plus tard, replié. */
+function ListMap({ map, onAdd, ...row }: { map: ListBranch[]; onAdd: (listId: string) => void } & RowProps) {
+  if (map.length === 0) return <Empty>Aucune liste.</Empty>;
+  return (
+    <div className="space-y-4">
+      {map.map((branch) => (
+        <Branch key={branch.id} branch={branch} onAdd={() => onAdd(branch.id)} {...row} />
+      ))}
+    </div>
+  );
+}
+
+function Branch({ branch, onAdd, ...row }: { branch: ListBranch; onAdd: () => void } & RowProps) {
+  const [open, setOpen] = useState(false);
+  const add = `Ajouter une tâche dans « ${branch.title} »`;
+  const empty = branch.tasks.length === 0 && branch.later.length === 0;
+  return (
+    <section aria-label={branch.title} className="min-w-0">
+      <header className="mb-1.5 flex items-baseline gap-2 border-b border-rule pb-1">
+        <h3 className="eyebrow min-w-0 flex-1 truncate">{branch.title}</h3>
+        {branch.pressing > 0 && <span className="shrink-0 font-mono text-[11px] text-rose">{branch.pressing}</span>}
+        <span className="tnum shrink-0 font-mono text-[11px] text-muted">{branch.tasks.length}</span>
+        <button
+          type="button"
+          title={add}
+          aria-label={add}
+          disabled={row.writing}
+          onClick={onAdd}
+          className="shrink-0 font-mono text-[13px] leading-none text-muted hover:text-amber disabled:opacity-50"
+        >
+          +
+        </button>
+      </header>
+      {empty && <p className="font-mono text-[11px] text-jade">Rien à faire.</p>}
+      {branch.tasks.length > 0 && <TaskRows tasks={branch.tasks} {...row} />}
+      {branch.later.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+            className="mt-1 font-mono text-[11px] text-muted hover:text-ink"
+          >
+            {open ? '− ' : '+ '}
+            {branch.later.length} plus tard
+          </button>
+          {open && (
+            <div className="mt-1 opacity-70">
+              <TaskRows tasks={branch.later} {...row} />
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
 }
 
 function TaskRows({
@@ -327,21 +402,34 @@ function TaskRows({
 }
 
 /** Une ligne, Entree : la tache part dans la liste choisie de Google Tasks. */
-function QuickAdd({ lists, onCreated }: { lists: TaskList[]; onCreated: () => void }) {
+function QuickAdd({
+  lists,
+  listId,
+  onChooseList,
+  inputRef,
+  busy,
+  onBusy,
+  onCreated,
+}: {
+  lists: TaskList[];
+  listId: string | undefined;
+  onChooseList: (listId: string) => void;
+  inputRef: RefObject<HTMLInputElement | null>;
+  busy: boolean;
+  onBusy: (busy: boolean) => void;
+  onCreated: () => void;
+}) {
   const [title, setTitle] = useState('');
-  const [chosen, setChosen] = useState<string | null>(null);
-  const listId = chosen ?? lists[0]?.id;
-  const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ text: string; relink?: boolean } | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     const value = title.trim();
     if (!value || busy) return;
-    setBusy(true);
+    onBusy(true);
     setProblem(null);
     const { ok, body } = await send(TASKS_URL, 'POST', { title: value, listId });
-    setBusy(false);
+    onBusy(false);
     if (ok) {
       setTitle('');
       onCreated();
@@ -359,6 +447,7 @@ function QuickAdd({ lists, onCreated }: { lists: TaskList[]; onCreated: () => vo
           +
         </span>
         <input
+          ref={inputRef}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Nouvelle tâche (#étiquette), puis Entrée"
@@ -370,7 +459,7 @@ function QuickAdd({ lists, onCreated }: { lists: TaskList[]; onCreated: () => vo
         {lists.length > 1 && (
           <select
             value={listId}
-            onChange={(event) => setChosen(event.target.value)}
+            onChange={(event) => onChooseList(event.target.value)}
             aria-label="Liste de la nouvelle tâche"
             className="max-w-28 shrink-0 cursor-pointer truncate bg-transparent font-mono text-[11px] text-muted hover:text-ink"
           >
