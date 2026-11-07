@@ -162,6 +162,8 @@ export function TasksWidget() {
           listId={chosenList ?? lists[0]?.id}
           onChooseList={setChosenList}
           inputRef={addInput}
+          busy={writing}
+          onBusy={setWriting}
           onCreated={() => {
             refresh();
             if (tab !== 'map') setTab('plan');
@@ -290,8 +292,9 @@ function Branch({ branch, onAdd, ...row }: { branch: ListBranch; onAdd: () => vo
           type="button"
           title={add}
           aria-label={add}
+          disabled={row.writing}
           onClick={onAdd}
-          className="shrink-0 font-mono text-[13px] leading-none text-muted hover:text-amber"
+          className="shrink-0 font-mono text-[13px] leading-none text-muted hover:text-amber disabled:opacity-50"
         >
           +
         </button>
@@ -404,26 +407,29 @@ function QuickAdd({
   listId,
   onChooseList,
   inputRef,
+  busy,
+  onBusy,
   onCreated,
 }: {
   lists: TaskList[];
   listId: string | undefined;
   onChooseList: (listId: string) => void;
   inputRef: RefObject<HTMLInputElement | null>;
+  busy: boolean;
+  onBusy: (busy: boolean) => void;
   onCreated: () => void;
 }) {
   const [title, setTitle] = useState('');
-  const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ text: string; relink?: boolean } | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     const value = title.trim();
     if (!value || busy) return;
-    setBusy(true);
+    onBusy(true);
     setProblem(null);
     const { ok, body } = await send(TASKS_URL, 'POST', { title: value, listId });
-    setBusy(false);
+    onBusy(false);
     if (ok) {
       setTitle('');
       onCreated();
