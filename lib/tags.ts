@@ -52,3 +52,8 @@ export function tagColor(tag: string): (typeof COLORS)[number] {
   for (const char of tag) hash = (hash * 31 + char.codePointAt(0)!) >>> 0;
   return COLORS[hash % COLORS.length];
 }
+
+/** « #plustard » : remis à plus tard, à replier tant qu'une échéance ne le rappelle pas. */
+export function isLater(task: { tags: string[] }) {
+  return task.tags.includes('plustard');
+}

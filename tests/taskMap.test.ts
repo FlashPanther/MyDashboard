@@ -58,7 +58,14 @@ test('à égalité, la liste la plus chargée passe devant, puis l’ordre de Go
   assert.deepEqual(result.map((branch) => branch.title), ['C', 'B', 'A']);
 });
 
-test('une tâche #plustard en retard ne compte pas comme pressante', () => {
+test('une tâche #plustard en retard ou du jour reste visible et compte', () => {
   const [branch] = branches(lists, [task('t1', 'a', { tags: ['plustard'], overdue: true })]);
-  assert.equal(branch.pressing, 0);
+  assert.deepEqual(branch.tasks.map((t) => t.id), ['t1']);
+  assert.equal(branch.later.length, 0);
+  assert.equal(branch.pressing, 1);
+});
+
+test('sans keepEmpty, les listes sans tâche disparaissent', () => {
+  const result = branches(lists, [task('t1', 'b', { tags: ['plustard'] })], { keepEmpty: false });
+  assert.deepEqual(result.map((branch) => branch.title), ['B']);
 });
