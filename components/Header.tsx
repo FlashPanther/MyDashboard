@@ -60,7 +60,7 @@ export function Header({
         />
         <Link
           href="/carte"
-          className="border border-rule px-2.5 py-1 font-display text-[11px] font-bold uppercase tracking-[0.18em] text-ink transition-colors hover:border-ink"
+          className="action"
         >
           Carte
         </Link>

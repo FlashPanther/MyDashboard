@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Header } from '@/components/Header';
+import { Preparing } from '@/components/Preparing';
 import { usePresence } from '@/lib/usePresence';
 import { DayColumn } from '@/components/DayColumn';
 import { CommuteWidget } from '@/components/widgets/CommuteWidget';
@@ -41,11 +42,7 @@ export default function Dashboard() {
   }, []);
 
   if (!now) {
-    return (
-      <div className="flex min-h-screen items-center justify-center font-mono text-sm text-muted">
-        Préparation du tableau…
-      </div>
-    );
+    return <Preparing>Préparation du tableau…</Preparing>;
   }
 
   return (

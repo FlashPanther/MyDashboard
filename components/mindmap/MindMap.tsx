@@ -1,20 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Preparing } from '@/components/Preparing';
 import { layout, linkPath, type Box, type Size } from '@/lib/mindmap/layout';
 import {
-  childrenOn,
+  branchesOn,
   countDescendants,
   newNode,
   parse,
   serialize,
   SIDES,
   toggleCollapsed,
-  visibleChildren,
   visibleNodes,
   type MapNode,
   type Side,
+  type VisibleNode,
 } from '@/lib/mindmap/tree';
 import { fit, zoomAt, type View } from '@/lib/mindmap/view';
 import { readStored, writeStored } from '@/lib/storage';
@@ -22,8 +23,6 @@ import { readStored, writeStored } from '@/lib/storage';
 const STORAGE_KEY = 'carte.document';
 const BRANCH_COLOURS = ['#e4572e', '#2e86ab', '#3b9a5b', '#a23b72', '#d99a1c', '#5b5fc7', '#1f9e9a', '#c2527a'];
 const UNMEASURED: Size = { width: 120, height: 36 };
-const ACTION =
-  'border border-rule px-2.5 py-1 font-display text-[11px] font-bold uppercase tracking-[0.18em] text-ink transition-colors hover:border-ink';
 
 function blankMap(): MapNode {
   return newNode('Idée centrale');
@@ -32,93 +31,32 @@ function blankMap(): MapNode {
 function storedMap(): MapNode {
   try {
     const stored = readStored(STORAGE_KEY);
-    if (stored) return parse(stored);
+    return stored ? parse(stored) : blankMap();
   } catch {
-    // Carte illisible : on repart d'une carte neuve.
+    return blankMap();
   }
-  return blankMap();
-}
-
-function sameSizes(a: ReadonlyMap<string, Size>, b: ReadonlyMap<string, Size>): boolean {
-  if (a.size !== b.size) return false;
-  for (const [id, size] of a) {
-    const other = b.get(id);
-    if (!other || other.width !== size.width || other.height !== size.height) return false;
-  }
-  return true;
 }
 
 export function MindMap() {
   const [root, setRoot] = useState<MapNode | null>(null);
-  const [sizes, setSizes] = useState<ReadonlyMap<string, Size>>(new Map());
-  const [view, setView] = useState<View>({ x: 0, y: 0, scale: 1 });
+  const [opened, setOpened] = useState(0);
   const [notice, setNotice] = useState('');
-  const [fontsReady, setFontsReady] = useState(false);
-  const viewport = useRef<HTMLElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const elements = useRef(new Map<string, HTMLElement>());
-  const awaitingFit = useRef(true);
 
-  useEffect(() => {
-    setRoot(storedMap());
-    document.fonts.ready.then(() => setFontsReady(true));
-  }, []);
+  useEffect(() => setRoot(storedMap()), []);
 
   useEffect(() => {
     if (root) writeStored(STORAGE_KEY, serialize(root));
   }, [root]);
 
-  const visible = useMemo(() => (root ? visibleNodes(root) : []), [root]);
-  const boxes = useMemo(
-    () => (root ? layout(root, (node) => sizes.get(node.id) ?? UNMEASURED) : new Map<string, Box>()),
-    [root, sizes],
-  );
-  const ready = root !== null;
-  const colours = useMemo(() => new Map(visible.map(({ node, colour }) => [node.id, branchColour(colour)])), [visible]);
-  const measured = visible.length > 0 && visible.every(({ node }) => sizes.has(node.id));
+  const toggle = useCallback((id: string) => setRoot((current) => current && toggleCollapsed(current, id)), []);
 
-  useLayoutEffect(() => {
-    const next = new Map<string, Size>();
-    for (const { node } of visible) {
-      const element = elements.current.get(node.id);
-      if (element) next.set(node.id, { width: element.offsetWidth, height: element.offsetHeight });
-    }
-    if (!sameSizes(next, sizes)) setSizes(next);
-  }, [visible, sizes, fontsReady]);
-
-  useLayoutEffect(() => {
-    if (!awaitingFit.current || !measured || !viewport.current) return;
-    awaitingFit.current = false;
-    setView(fit(boxes.values(), viewport.current.clientWidth, viewport.current.clientHeight));
-  }, [boxes, measured]);
-
-  useEffect(() => {
-    const element = viewport.current;
-    if (!element) return;
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      if (event.ctrlKey || event.metaKey) {
-        const bounds = element.getBoundingClientRect();
-        const factor = Math.exp(-event.deltaY / 300);
-        setView((current) => zoomAt(current, factor, event.clientX - bounds.left, event.clientY - bounds.top));
-        return;
-      }
-      const sideways = event.shiftKey && event.deltaX === 0;
-      setView((current) => ({
-        ...current,
-        x: current.x - (sideways ? event.deltaY : event.deltaX),
-        y: current.y - (sideways ? 0 : event.deltaY),
-      }));
-    };
-    // React pose ses écouteurs de molette en passif : preventDefault y serait ignoré.
-    element.addEventListener('wheel', onWheel, { passive: false });
-    return () => element.removeEventListener('wheel', onWheel);
-  }, [ready]);
+  if (!root) return <Preparing>Préparation de la carte…</Preparing>;
 
   function open(next: MapNode) {
-    awaitingFit.current = true;
     setNotice('');
     setRoot(next);
+    setOpened((count) => count + 1);
   }
 
   async function importFile(file: File | undefined) {
@@ -130,22 +68,13 @@ export function MindMap() {
     }
   }
 
-  function exportFile() {
-    if (!root) return;
-    const name = root.text.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'carte';
+  function exportFile(map: MapNode) {
+    const name = map.text.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'carte';
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([serialize(root)], { type: 'application/json' }));
+    link.href = URL.createObjectURL(new Blob([serialize(map)], { type: 'application/json' }));
     link.download = `${name}.json`;
     link.click();
     URL.revokeObjectURL(link.href);
-  }
-
-  if (!root) {
-    return (
-      <div className="flex min-h-screen items-center justify-center font-mono text-sm text-muted">
-        Préparation de la carte…
-      </div>
-    );
   }
 
   return (
@@ -155,13 +84,13 @@ export function MindMap() {
           ← Tableau
         </Link>
         <h1 className="font-display text-xl font-extrabold uppercase tracking-[0.16em] text-ink">Carte</h1>
-        <button type="button" className={ACTION} onClick={() => open(blankMap())}>
+        <button type="button" className="action" onClick={() => open(blankMap())}>
           Nouvelle carte
         </button>
-        <button type="button" className={ACTION} onClick={() => fileInput.current?.click()}>
+        <button type="button" className="action" onClick={() => fileInput.current?.click()}>
           Importer
         </button>
-        <button type="button" className={ACTION} onClick={exportFile}>
+        <button type="button" className="action" onClick={() => exportFile(root)}>
           Exporter
         </button>
         <input
@@ -180,69 +109,148 @@ export function MindMap() {
           </p>
         )}
       </header>
-
-      <main ref={viewport} className="relative min-h-0 flex-1 touch-none overflow-hidden">
-        <div
-          className="absolute left-0 top-0 origin-top-left"
-          style={{
-            transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
-            visibility: measured ? 'visible' : 'hidden',
-          }}
-        >
-          <svg aria-hidden="true" className="pointer-events-none absolute left-0 top-0 h-px w-px overflow-visible">
-            {visible.flatMap(({ node }) =>
-              visibleChildren(node).map((child) => (
-                <path
-                  key={child.id}
-                  d={linkPath(boxes.get(node.id)!, boxes.get(child.id)!)}
-                  fill="none"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  stroke={colours.get(child.id)}
-                />
-              )),
-            )}
-          </svg>
-
-          {visible.map(({ node, depth, colour, side }) => {
-            const box = boxes.get(node.id)!;
-            return (
-              <div
-                key={node.id}
-                ref={(element) => {
-                  if (element) elements.current.set(node.id, element);
-                  else elements.current.delete(node.id);
-                }}
-                className={nodeClass(depth, side)}
-                style={{ left: box.x, top: box.y, '--branch': branchColour(colour) } as CSSProperties}
-              >
-                {node.text}
-              </div>
-            );
-          })}
-
-          {visible.flatMap(({ node, depth, colour, side }) => {
-            if (node.children.length === 0) return [];
-            const sides = depth > 0 || node.collapsed ? [side] : SIDES.filter((each) => childrenOn(root, node, each).length > 0);
-            return sides.map((each) => (
-              <FoldToggle
-                key={`${node.id}-${each}`}
-                node={node}
-                box={boxes.get(node.id)!}
-                side={each}
-                colour={depth > 0 ? branchColour(colour) : undefined}
-                onToggle={() => setRoot(toggleCollapsed(root, node.id))}
-              />
-            ));
-          })}
-        </div>
-      </main>
+      <MapCanvas key={opened} root={root} onToggle={toggle} />
     </div>
   );
 }
 
+function MapCanvas({ root, onToggle }: { root: MapNode; onToggle: (id: string) => void }) {
+  const [sizes, setSizes] = useState<ReadonlyMap<string, Size>>(new Map());
+  const [view, setView] = useState<View | null>(null);
+  const viewport = useRef<HTMLElement>(null);
+  const observer = useRef<ResizeObserver | null>(null);
+
+  const visible = useMemo(() => visibleNodes(root), [root]);
+  const boxes = useMemo(() => layout(root, (node) => sizes.get(node.id) ?? UNMEASURED), [root, sizes]);
+  const measured = visible.every(({ node }) => sizes.has(node.id));
+
+  const observe = useCallback((element: HTMLElement | null) => {
+    if (!element) return;
+    observer.current ??= new ResizeObserver((entries) => {
+      setSizes((current) => {
+        const next = new Map(current);
+        for (const { target } of entries) {
+          const node = target as HTMLElement;
+          next.set(node.dataset.id!, { width: node.offsetWidth, height: node.offsetHeight });
+        }
+        return next;
+      });
+    });
+    observer.current.observe(element);
+    return () => observer.current?.unobserve(element);
+  }, []);
+
+  useEffect(() => () => observer.current?.disconnect(), []);
+
+  useLayoutEffect(() => {
+    if (view || !measured || !viewport.current) return;
+    setView(fit(boxes.values(), viewport.current.clientWidth, viewport.current.clientHeight));
+  }, [view, measured, boxes]);
+
+  useEffect(() => {
+    const element = viewport.current!;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const bounds = element.getBoundingClientRect();
+      const sideways = event.shiftKey && event.deltaX === 0;
+      setView((current) => {
+        if (!current) return current;
+        if (event.ctrlKey || event.metaKey) {
+          return zoomAt(current, Math.exp(-event.deltaY / 300), event.clientX - bounds.left, event.clientY - bounds.top);
+        }
+        return {
+          ...current,
+          x: current.x - (sideways ? event.deltaY : event.deltaX),
+          y: current.y - (sideways ? 0 : event.deltaY),
+        };
+      });
+    };
+    // React pose ses écouteurs de molette en passif : preventDefault y serait ignoré.
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, []);
+
+  return (
+    <main ref={viewport} className="relative min-h-0 flex-1 touch-none overflow-hidden">
+      <div
+        className="absolute left-0 top-0 origin-top-left"
+        style={
+          view
+            ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }
+            : { visibility: 'hidden' }
+        }
+      >
+        <MapLayer root={root} visible={visible} boxes={boxes} observe={observe} onToggle={onToggle} />
+      </div>
+    </main>
+  );
+}
+
+const MapLayer = memo(function MapLayer({
+  root,
+  visible,
+  boxes,
+  observe,
+  onToggle,
+}: {
+  root: MapNode;
+  visible: VisibleNode[];
+  boxes: Map<string, Box>;
+  observe: (element: HTMLElement | null) => (() => void) | undefined;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <>
+      <svg aria-hidden="true" className="pointer-events-none absolute left-0 top-0 h-px w-px overflow-visible">
+        {visible.map(({ node, parentId, colour }) =>
+          parentId === null ? null : (
+            <path
+              key={node.id}
+              d={linkPath(boxes.get(parentId)!, boxes.get(node.id)!)}
+              fill="none"
+              strokeWidth={2}
+              strokeLinecap="round"
+              stroke={branchColour(colour)}
+            />
+          ),
+        )}
+      </svg>
+
+      {visible.map(({ node, depth, colour, side }) => {
+        const box = boxes.get(node.id)!;
+        return (
+          <div
+            key={node.id}
+            ref={observe}
+            data-id={node.id}
+            className={nodeClass(depth, side)}
+            style={{ left: box.x, top: box.y, '--branch': branchColour(colour) } as CSSProperties}
+          >
+            {node.text}
+          </div>
+        );
+      })}
+
+      {visible.flatMap(({ node, depth, colour, side }) => {
+        if (node.children.length === 0) return [];
+        const sides = depth > 0 || node.collapsed ? [side] : SIDES.filter((each) => branchesOn(root, each).length > 0);
+        return sides.map((each) => (
+          <FoldToggle
+            key={`${node.id}-${each}`}
+            node={node}
+            box={boxes.get(node.id)!}
+            side={each}
+            colour={depth > 0 ? branchColour(colour) : undefined}
+            onToggle={onToggle}
+          />
+        ));
+      })}
+    </>
+  );
+});
+
 function branchColour(index: number): string {
-  return BRANCH_COLOURS[Math.max(0, index) % BRANCH_COLOURS.length];
+  return BRANCH_COLOURS[index % BRANCH_COLOURS.length];
 }
 
 function nodeClass(depth: number, side: Side): string {
@@ -266,7 +274,7 @@ function FoldToggle({
   box: Box;
   side: Side;
   colour: string | undefined;
-  onToggle: () => void;
+  onToggle: (id: string) => void;
 }) {
   const gap = node.collapsed ? 6 : 3;
   const shape = node.collapsed
@@ -285,7 +293,7 @@ function FoldToggle({
           '--branch': colour,
         } as CSSProperties
       }
-      onClick={onToggle}
+      onClick={() => onToggle(node.id)}
     >
       {node.collapsed ? countDescendants(node) : null}
     </button>

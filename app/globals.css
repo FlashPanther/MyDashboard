@@ -113,6 +113,22 @@
     color: var(--color-muted);
   }
 
+  .action {
+    border: 1px solid var(--color-rule);
+    padding: 0.25rem 0.625rem;
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-ink);
+    transition: border-color 150ms;
+  }
+
+  .action:hover {
+    border-color: var(--color-ink);
+  }
+
   .panel {
     border: 1px solid var(--color-rule);
     background: var(--color-panel);

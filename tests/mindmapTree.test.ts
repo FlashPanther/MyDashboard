@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  childrenOn,
+  branchesOn,
   countDescendants,
   newNode,
   parse,
@@ -37,9 +37,15 @@ test('replier ne touche pas à la carte d’origine, et déplier la retrouve', (
   assert.deepEqual(toggleCollapsed(folded, 'a'), root);
 });
 
-test('une feuille ne se replie pas', () => {
+test('replier une feuille ou un nœud inconnu rend la même carte, pas une copie', () => {
   const { root } = tree();
-  assert.deepEqual(toggleCollapsed(root, 'a1'), root);
+  assert.equal(toggleCollapsed(root, 'a1'), root);
+  assert.equal(toggleCollapsed(root, 'inconnu'), root);
+});
+
+test('replier ne recopie que le chemin modifié', () => {
+  const { root, b } = tree();
+  assert.equal(toggleCollapsed(root, 'a').children[1], b);
 });
 
 test('chaque nœud visible porte sa profondeur, la couleur et le côté de sa branche', () => {
@@ -48,7 +54,7 @@ test('chaque nœud visible porte sa profondeur, la couleur et le côté de sa br
   assert.deepEqual(
     visibleNodes(root).map(({ node, depth, colour, side }) => [node.text, depth, colour, side]),
     [
-      ['root', 0, -1, 'right'],
+      ['root', 0, 0, 'right'],
       ['a', 1, 0, 'right'],
       ['a1', 2, 0, 'right'],
       ['b', 1, 1, 'left'],
@@ -60,9 +66,22 @@ test('chaque nœud visible porte sa profondeur, la couleur et le côté de sa br
 test('la racine répartit ses branches entre la droite et la gauche', () => {
   const { root, a, b } = tree();
   b.side = 'left';
-  assert.deepEqual(childrenOn(root, root, 'right'), [a]);
-  assert.deepEqual(childrenOn(root, root, 'left'), [b]);
-  assert.deepEqual(childrenOn(root, a, 'left'), a.children);
+  assert.deepEqual(branchesOn(root, 'right'), [a]);
+  assert.deepEqual(branchesOn(root, 'left'), [b]);
+});
+
+test('une racine repliée n’a de branche d’aucun côté', () => {
+  const { root } = tree();
+  root.collapsed = true;
+  assert.deepEqual(branchesOn(root, 'right'), []);
+});
+
+test('chaque nœud visible connaît son parent', () => {
+  const { root } = tree();
+  assert.deepEqual(
+    visibleNodes(root).map((entry) => entry.parentId),
+    [null, 'root', 'a', 'root', 'b'],
+  );
 });
 
 test('le compte des descendants couvre tous les niveaux', () => {

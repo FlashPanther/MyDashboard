@@ -1,8 +1,8 @@
-import { childrenOn, visibleChildren, type MapNode } from './tree.ts';
+import { branchesOn, visibleChildren, type MapNode } from './tree.ts';
 
 export type Size = { width: number; height: number };
 export type Box = Size & { x: number; y: number };
-export type Gaps = { x: number; y: number };
+type Gaps = { x: number; y: number };
 
 type Measure = { size: Size; childrenHeight: number; height: number };
 
@@ -35,8 +35,8 @@ export function layout(root: MapNode, sizeOf: (node: MapNode) => Size, gaps: Gap
   };
 
   const size = sizeOf(root);
-  const right = childrenOn(root, root, 'right');
-  const left = childrenOn(root, root, 'left');
+  const right = branchesOn(root, 'right');
+  const left = branchesOn(root, 'left');
   const rightHeight = stackHeight(right);
   const leftHeight = stackHeight(left);
   const height = Math.max(size.height, rightHeight, leftHeight);
