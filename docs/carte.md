@@ -46,6 +46,7 @@ Puis le lien avec Google Tasks :
   contient, sauf si sa branche garde une tâche à faire.
 - [x] **7. Des cartes gardées par le serveur** : plusieurs cartes, chacune dans un fichier de `.data/cartes/` sur le
   volume, lues et écrites par `/api/cartes`. Une carte supprimée part dans `.data/cartes/corbeille/`.
+  Le verrou d'écriture est en mémoire : une seule instance du tableau à la fois, comme pour les jetons Google.
 - [ ] **7 bis. L'éditeur branché sur le serveur** : liste des cartes, une adresse par carte, enregistrement au fil de
   l'eau, reprise de la carte gardée dans le navigateur.
 - [ ] **8. Une connexion Google qui tient**, et un signal clair quand elle est à refaire.

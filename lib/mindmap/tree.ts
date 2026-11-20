@@ -360,20 +360,21 @@ function colourBranches(root: MapNode): void {
   }
 }
 
+export const FORMAT_VERSION = 1;
+
 export function serialize(root: MapNode): string {
-  return JSON.stringify({ version: 1, root }, null, 2);
+  return JSON.stringify({ version: FORMAT_VERSION, root }, null, 2);
 }
 
 export function parse(json: string): MapNode {
-  const data: unknown = JSON.parse(json);
+  return parseDocument(JSON.parse(json));
+}
+
+export function parseDocument(data: unknown): MapNode {
   if (typeof data !== 'object' || data === null || !('root' in data)) {
     throw new Error('Fichier de carte invalide');
   }
-  return parseRoot(data.root);
-}
-
-export function parseRoot(value: unknown): MapNode {
-  const root = parseNode(value, 0, new Set());
+  const root = parseNode(data.root, 0, new Set());
   colourBranches(root);
   return root;
 }
