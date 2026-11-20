@@ -359,7 +359,7 @@ function MapCanvas({
 
   useEffect(() => {
     if (gesturing) follow();
-  }, [view]);
+  }, [view, boxes]);
 
   function viewportPoint(event: { clientX: number; clientY: number }): Point {
     const bounds = viewport.current!.getBoundingClientRect();
