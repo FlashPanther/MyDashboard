@@ -1,3 +1,4 @@
+import { TaskBox } from '@/components/mindmap/TaskBox';
 import type { Drag } from '@/components/mindmap/types';
 import { branchColour, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
 import { carried, linkPath, type Box } from '@/lib/mindmap/layout';
@@ -33,12 +34,13 @@ export function Ghost({
       {branch.map(({ node, depth, colour }) => (
         <div
           key={node.id}
-          className={`${nodeClass(depth, side, drag.ids.includes(node.id), false)} shadow-lg`}
+          className={`${nodeClass(depth, side, drag.ids.includes(node.id), false, node.task)} shadow-lg`}
           style={nodeStyle(moved.get(node.id)!, colour)}
         >
           {node.text}
         </div>
       ))}
+      {branch.map(({ node }) => (node.task ? <TaskBox key={node.id} node={node} box={moved.get(node.id)!} /> : null))}
     </div>
   );
 }

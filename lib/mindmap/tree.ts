@@ -1,5 +1,7 @@
 export type Side = 'left' | 'right';
 
+export type Task = 'todo' | 'done';
+
 export type MapNode = {
   id: string;
   text: string;
@@ -7,6 +9,7 @@ export type MapNode = {
   children: MapNode[];
   colour?: number;
   side?: 'left';
+  task?: Task;
 };
 
 type Direction = 'left' | 'right' | 'up' | 'down';
@@ -250,6 +253,28 @@ export function rename(root: MapNode, id: string, text: string): MapNode {
   });
 }
 
+export function toggleTask(root: MapNode, ids: string[]): MapNode {
+  const targets = ids.filter((id) => id !== root.id && find(root, id));
+  if (targets.length === 0) return root;
+  const allTasks = targets.every((id) => find(root, id)!.task);
+  return change(root, (draft) => {
+    for (const id of targets) {
+      const node = find(draft, id)!;
+      if (allTasks) delete node.task;
+      else node.task ??= 'todo';
+    }
+  });
+}
+
+export function toggleDone(root: MapNode, ids: string[]): MapNode {
+  const targets = ids.filter((id) => find(root, id)?.task);
+  if (targets.length === 0) return root;
+  const next: Task = targets.every((id) => find(root, id)!.task === 'done') ? 'todo' : 'done';
+  return change(root, (draft) => {
+    for (const id of targets) find(draft, id)!.task = next;
+  });
+}
+
 export function neighbour(root: MapNode, id: string, direction: Direction): string | null {
   const visible = visibleNodes(root);
   const current = visible.find((entry) => entry.node.id === id);
@@ -293,7 +318,7 @@ export function parse(json: string): MapNode {
 
 function parseNode(value: unknown, depth: number, seen: Set<string>): MapNode {
   if (typeof value !== 'object' || value === null) throw new Error('Nœud invalide');
-  const { id, text, collapsed, children, colour, side } = value as Record<string, unknown>;
+  const { id, text, collapsed, children, colour, side, task } = value as Record<string, unknown>;
   if (typeof text !== 'string' || !Array.isArray(children)) throw new Error('Nœud invalide');
   if (depth > MAX_DEPTH || seen.size >= MAX_NODES) throw new Error('Carte trop grande');
   const uniqueId = typeof id === 'string' && id !== '' && !seen.has(id) ? id : crypto.randomUUID();
@@ -309,5 +334,6 @@ function parseNode(value: unknown, depth: number, seen: Set<string>): MapNode {
     children: kept,
     ...(branch && typeof colour === 'number' && Number.isInteger(colour) && colour >= 0 ? { colour } : {}),
     ...(branch && side === 'left' ? { side } : {}),
+    ...(depth > 0 && (task === 'todo' || task === 'done') ? { task } : {}),
   };
 }

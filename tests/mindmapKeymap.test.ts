@@ -103,3 +103,17 @@ test('à plusieurs, les touches de création sont retenues pour ne pas déplacer
   assert.equal(swallowed(press('a'), 'multiple'), false);
   assert.equal(swallowed(press('Tab'), 'selected'), false);
 });
+
+test('Alt+T marque une tâche et Alt+C la coche, sur un nœud ou un groupe, quelle que soit la lettre produite', () => {
+  assert.equal(commandFor(press('†', { altKey: true, code: 'KeyT' }), 'selected'), 'task');
+  assert.equal(commandFor(press('c', { altKey: true, code: 'KeyC' }), 'selected'), 'tick');
+  assert.equal(commandFor(press('t', { altKey: true, code: 'KeyT' }), 'multiple'), 'task');
+});
+
+test('Alt+T ne fait rien sans sélection, pendant la saisie, ni avec Maj ou Ctrl', () => {
+  assert.equal(commandFor(press('t', { altKey: true, code: 'KeyT' }), 'idle'), null);
+  assert.equal(commandFor(press('t', { altKey: true, code: 'KeyT' }), 'editing'), null);
+  assert.equal(commandFor(press('T', { altKey: true, shiftKey: true, code: 'KeyT' }), 'selected'), null);
+  assert.equal(commandFor(press('t', { altKey: true, ctrlKey: true, code: 'KeyT' }), 'selected'), 'type');
+  assert.equal(commandFor(press('t', { code: 'KeyT' }), 'selected'), 'type');
+});

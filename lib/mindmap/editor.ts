@@ -14,6 +14,8 @@ import {
   move,
   removeAll,
   toggleCollapsed,
+  toggleDone,
+  toggleTask,
   visibleNodes,
   withinLimits,
   type MapNode,
@@ -32,6 +34,7 @@ export type EditorAction = { draft?: string; newId?: string } & (
   | { type: 'edit'; id: string }
   | { type: 'blur'; id: string }
   | { type: 'toggle'; id: string }
+  | { type: 'tick'; id: string }
   | { type: 'replace'; root: MapNode }
   | { type: 'move'; ids: string[]; parentId: string; beforeId: string | null; side: Side }
   | { type: 'mark'; ids: string[] }
@@ -63,6 +66,7 @@ export function modeOf(state: EditorState): Mode {
 export function reduce(state: EditorState, action: EditorAction): EditorState {
   const next = step(state, action);
   if (action.type === 'mark' || action.type === 'move' || next.group.length === 0) return next;
+  if (action.type === 'command' && (action.command === 'task' || action.command === 'tick')) return next;
   return { ...next, group: [] };
 }
 
@@ -81,6 +85,10 @@ function step(state: EditorState, action: EditorAction): EditorState {
     case 'toggle': {
       const settled = finishEditing(state, action.draft);
       return commit(settled, toggleCollapsed(settled.root, action.id), action.id);
+    }
+    case 'tick': {
+      const settled = finishEditing(state, action.draft);
+      return commit(settled, toggleDone(settled.root, [action.id]), action.id);
     }
     case 'replace':
       return commit(finishEditing(state, action.draft), action.root, action.root.id);
@@ -177,6 +185,12 @@ function runCommand(
       if (!selected) return settled;
       const removal = settled.group.length ? removeAll(root, new Set(settled.group)) : remove(root, selected);
       return commit(settled, removal.root, removal.next ?? selected);
+    }
+    case 'task':
+    case 'tick': {
+      if (!selected) return settled;
+      const ids = settled.group.length ? settled.group : [selected];
+      return commit(settled, (command === 'task' ? toggleTask : toggleDone)(root, ids), selected);
     }
     case 'left':
     case 'right':

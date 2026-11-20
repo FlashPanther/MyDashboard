@@ -1,5 +1,6 @@
 import { memo, useLayoutEffect, type CSSProperties, type RefObject } from 'react';
 import { branchColour, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
+import { TaskBox } from '@/components/mindmap/TaskBox';
 import type { Send } from '@/components/mindmap/types';
 import type { Editing } from '@/lib/mindmap/editor';
 import { linkPath, type Box } from '@/lib/mindmap/layout';
@@ -52,7 +53,7 @@ export const MapLayer = memo(function MapLayer({
         const box = boxes.get(node.id)!;
         const shared = {
           'data-id': node.id,
-          className: nodeClass(depth, side, node.id === selected || marked.has(node.id), node.id === editing?.id) + (lifted.has(node.id) ? FADED : ''),
+          className: nodeClass(depth, side, node.id === selected || marked.has(node.id), node.id === editing?.id, node.task) + (lifted.has(node.id) ? FADED : ''),
           style: nodeStyle(box, colour),
         };
         return node.id === editing?.id ? (
@@ -72,6 +73,12 @@ export const MapLayer = memo(function MapLayer({
           </div>
         );
       })}
+
+      {visible.map(({ node }) =>
+        node.task ? (
+          <TaskBox key={node.id} node={node} box={boxes.get(node.id)!} faded={lifted.has(node.id)} send={send} />
+        ) : null,
+      )}
 
       {visible.flatMap(({ node, depth, colour, side }) => {
         if (node.children.length === 0) return [];
