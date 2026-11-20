@@ -201,7 +201,11 @@ export function move(root: MapNode, moved: string[], parentId: string, beforeId:
     parent.children.splice(index < 0 ? parent.children.length : index, 0, ...nodes);
     parent.collapsed = false;
   });
-  return sameMap(next, root) ? root : next;
+  return sameMap(bySide(next), bySide(root)) ? root : next;
+}
+
+function bySide(root: MapNode): MapNode {
+  return { ...root, children: SIDES.flatMap((side) => root.children.filter((branch) => sideOf(branch) === side)) };
 }
 
 export function rename(root: MapNode, id: string, text: string): MapNode {

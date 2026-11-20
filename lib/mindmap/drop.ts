@@ -10,6 +10,12 @@ export function dropAt(root: MapNode, boxes: Map<string, Box>, draggedIds: strin
   const own = branchIds(root, draggedIds);
   const centre = ghost.y + ghost.height / 2;
 
+  const extent = (node: MapNode): [number, number] => {
+    const box = boxes.get(node.id)!;
+    const spans = visibleChildren(node).map(extent);
+    return [Math.min(box.y, ...spans.map(([top]) => top)), Math.max(box.y + box.height, ...spans.map(([, bottom]) => bottom))];
+  };
+
   let best: { parent: MapNode; side: Side; siblings: MapNode[] } | null = null;
   let nearest = REACH;
   for (const { node, depth, side: nodeSide } of visibleNodes(root)) {
@@ -19,9 +25,9 @@ export function dropAt(root: MapNode, boxes: Map<string, Box>, draggedIds: strin
       const gap = side === 'right' ? ghost.x - (box.x + box.width) : box.x - (ghost.x + ghost.width);
       if (gap < 0) continue;
       const siblings = depth === 0 ? branchesOn(root, side) : visibleChildren(node);
-      const span = [box, ...siblings.map((child) => boxes.get(child.id)!)];
-      const top = Math.min(...span.map((each) => each.y));
-      const bottom = Math.max(...span.map((each) => each.y + each.height));
+      const spans = siblings.map(extent);
+      const top = Math.min(box.y, ...spans.map(([above]) => above));
+      const bottom = Math.max(box.y + box.height, ...spans.map(([, below]) => below));
       const distance = Math.hypot(gap, VERTICAL_WEIGHT * Math.max(top - centre, centre - bottom, 0));
       if (distance < nearest) {
         best = { parent: node, side, siblings };

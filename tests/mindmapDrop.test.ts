@@ -183,3 +183,24 @@ test('la copie glissée suit le décalage, et se retourne autour du nœud saisi'
   assert.deepEqual(mirrored.get('a'), a);
   assert.equal(mirrored.get('a1')!.x, a.x - (a1.x - a.x - a.width) - a1.width);
 });
+
+test('la hauteur occupée par un parent compte aussi ses petits-enfants', () => {
+  const root = newNode('p', 'p');
+  const a = newNode('a', 'a');
+  a.children.push(...Array.from({ length: 15 }, (_, index) => newNode('', `f${index}`)));
+  root.children.push(a);
+  const dragged = newNode('x', 'x');
+  root.children.push(dragged);
+  const boxes = layout(root, size);
+  const first = boxes.get('a')!;
+  const drop = dropAt(root, boxes, ['x'], { x: first.x, y: boxes.get('f0')!.y, width: 100, height: 30 });
+  assert.deepEqual(drop, { parentId: 'p', beforeId: 'a', side: 'right' });
+});
+
+test('garder son rang visible ne change rien, même si des branches de l’autre côté s’intercalent', () => {
+  const { root } = scene((nodes) => {
+    nodes.b.side = 'left';
+  });
+  assert.equal(move(root, ['a'], 'root', 'c', 'right'), root);
+  assert.equal(outline(move(root, ['c'], 'root', 'a', 'right')), 'root(c a(a1) b←)');
+});

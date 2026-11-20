@@ -40,6 +40,7 @@ const STORAGE_KEY = 'carte.document';
 const BRANCH_COLOURS = ['#e4572e', '#2e86ab', '#3b9a5b', '#a23b72', '#d99a1c', '#5b5fc7', '#1f9e9a', '#c2527a'];
 const UNMEASURED: Size = { width: 120, height: 36 };
 const DRAG_THRESHOLD = 5;
+const NOTHING: ReadonlySet<string> = new Set();
 const FADED = ' opacity-30';
 const LINK = { fill: 'none', strokeWidth: 2, strokeLinecap: 'round' } as const;
 
@@ -47,8 +48,8 @@ type Send = (action: EditorAction) => void;
 type Observe = (element: HTMLElement | null) => (() => void) | undefined;
 type CanvasHandle = { zoom: (command: ZoomCommand) => void };
 type Carried = { ids: string[]; anchorId: string };
-type Press = Carried & { x: number; y: number; startX: number; startY: number };
-type Drag = Carried & { dx: number; dy: number; drop: Drop | null };
+type Press = Carried & { pointerId: number; x: number; y: number; startX: number; startY: number; lastX: number; lastY: number };
+type Drag = Carried & { lifted: ReadonlySet<string>; dx: number; dy: number; drop: Drop | null };
 
 function blankMap(): MapNode {
   return newNode('Idée centrale');
@@ -298,8 +299,7 @@ function MapCanvas({
   const [drag, setDrag] = useState<Drag | null>(null);
   const press = useRef<Press | null>(null);
   const dragging = drag !== null;
-  const carriedIds = drag?.ids.join();
-  const lifted = useMemo(() => branchIds(root, carriedIds ? carriedIds.split(',') : []), [root, carriedIds]);
+  const lifted = drag?.lifted ?? NOTHING;
 
   const cancelDrag = useCallback(() => {
     press.current = null;
@@ -309,8 +309,9 @@ function MapCanvas({
   useEffect(() => {
     if (!dragging) return;
     const onKey = (event: KeyboardEvent) => {
-      event.preventDefault();
       event.stopPropagation();
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      event.preventDefault();
       if (event.key === 'Escape') cancelDrag();
     };
     window.addEventListener('keydown', onKey, true);
@@ -320,6 +321,23 @@ function MapCanvas({
   function nodeIdAt(target: EventTarget): string | null {
     return (target as Element).closest<HTMLElement>('[data-id]')?.dataset.id ?? null;
   }
+
+  function carry(): void {
+    const pressed = press.current;
+    if (!pressed || !view) return;
+    const { ids, anchorId } = pressed;
+    const origin = boxes.get(anchorId);
+    if (!origin) return cancelDrag();
+    const point = worldPoint({ clientX: pressed.lastX, clientY: pressed.lastY }, view);
+    const dx = point.x - pressed.startX;
+    const dy = point.y - pressed.startY;
+    const drop = dropAt(root, boxes, ids, { ...origin, x: origin.x + dx, y: origin.y + dy });
+    setDrag((current) => ({ ids, anchorId, lifted: current?.lifted ?? branchIds(root, ids), dx, dy, drop }));
+  }
+
+  useEffect(() => {
+    if (dragging) carry();
+  }, [view]);
 
   function worldPoint(event: { clientX: number; clientY: number }, at: View): { x: number; y: number } {
     const bounds = viewport.current!.getBoundingClientRect();
@@ -336,29 +354,38 @@ function MapCanvas({
         send({ type: 'select', id });
         if (!view || !id || id === root.id || id === editing?.id || event.button !== 0) return;
         const start = worldPoint(event, view);
-        press.current = { ids: [id], anchorId: id, x: event.clientX, y: event.clientY, startX: start.x, startY: start.y };
+        press.current = {
+          ids: [id],
+          anchorId: id,
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          startX: start.x,
+          startY: start.y,
+          lastX: event.clientX,
+          lastY: event.clientY,
+        };
       }}
       onPointerMove={(event) => {
         const pressed = press.current;
-        if (!pressed || !view) return;
+        if (pressed?.pointerId !== event.pointerId) return;
         if (event.buttons === 0) return cancelDrag();
         if (!drag) {
           if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < DRAG_THRESHOLD) return;
           event.currentTarget.setPointerCapture(event.pointerId);
         }
-        const point = worldPoint(event, view);
-        const dx = point.x - pressed.startX;
-        const dy = point.y - pressed.startY;
-        const { ids, anchorId } = pressed;
-        const origin = boxes.get(anchorId)!;
-        const drop = dropAt(root, boxes, ids, { ...origin, x: origin.x + dx, y: origin.y + dy });
-        setDrag({ ids, anchorId, dx, dy, drop });
+        pressed.lastX = event.clientX;
+        pressed.lastY = event.clientY;
+        carry();
       }}
-      onPointerUp={() => {
+      onPointerUp={(event) => {
+        if (press.current?.pointerId !== event.pointerId) return;
         if (drag?.drop) send({ type: 'move', ids: drag.ids, ...drag.drop });
         cancelDrag();
       }}
-      onPointerCancel={cancelDrag}
+      onPointerCancel={(event) => {
+        if (press.current?.pointerId === event.pointerId) cancelDrag();
+      }}
       onDoubleClick={(event) => {
         const id = nodeIdAt(event.target);
         if (id) send({ type: 'edit', id });

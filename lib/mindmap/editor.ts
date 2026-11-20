@@ -75,7 +75,7 @@ export function reduce(state: EditorState, action: EditorAction): EditorState {
     case 'move': {
       const settled = finishEditing(state, action.draft);
       const root = move(settled.root, action.ids, action.parentId, action.beforeId, action.side);
-      return commit(settled, root, settled.selected);
+      return withinLimits(root) ? commit(settled, root, settled.selected) : settled;
     }
   }
 }
