@@ -369,7 +369,11 @@ export function parse(json: string): MapNode {
   if (typeof data !== 'object' || data === null || !('root' in data)) {
     throw new Error('Fichier de carte invalide');
   }
-  const root = parseNode(data.root, 0, new Set());
+  return parseRoot(data.root);
+}
+
+export function parseRoot(value: unknown): MapNode {
+  const root = parseNode(value, 0, new Set());
   colourBranches(root);
   return root;
 }

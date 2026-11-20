@@ -23,8 +23,9 @@ Pour ouvrir le tableau depuis n'importe quel appareil. L'image se construit avec
 1. **Coolify** : nouvelle ressource → *Application* → dépôt `FlashPanther/MyDashboard`,
    branche `main`, *Build Pack* : **Dockerfile**. Port exposé : **3737**. Domaine : le tien
    (en `https://`).
-2. **Volume persistant** : *Storages* → volume monté sur **`/app/.data`** (jetons Google).
-   Sans lui, chaque redéploiement oublie ton compte Google.
+2. **Volume persistant** : *Storages* → volume monté sur **`/app/.data`** (jetons Google et
+   cartes mentales, dans `.data/cartes/`). Sans lui, chaque redéploiement oublie ton compte
+   Google et tes cartes : pense à le sauvegarder.
 3. **Variables d'environnement** : celles de `.env.example`, avec
    - `DASHBOARD_PASSWORD` : un mot de passe long ;
    - `EXTENSION_TOKEN` : un jeton aléatoire (`openssl rand -base64 32`) ;
