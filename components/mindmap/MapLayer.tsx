@@ -94,6 +94,7 @@ export const MapLayer = memo(function MapLayer({
         return within ? (
           <ProgressBadge
             key={node.id}
+            id={node.id}
             progress={within}
             box={boxes.get(node.id)!}
             anchor={depth === 0 ? 'centre' : side}
@@ -161,11 +162,13 @@ function EditedNode({
 }
 
 function ProgressBadge({
+  id,
   progress: { done, total },
   box,
   anchor,
   faded,
 }: {
+  id: string;
   progress: Progress;
   box: Box;
   anchor: Side | 'centre';
@@ -176,10 +179,14 @@ function ProgressBadge({
     centre: { left: box.x + box.width / 2, transform: 'translate(-50%, -50%)' },
     right: { left: box.x + box.width, transform: 'translate(-100%, -50%)' },
   }[anchor];
+  const label = `Tâches faites dans cette branche : ${done} sur ${total}`;
   return (
     <span
-      title={`Tâches faites dans cette branche : ${done} sur ${total}`}
-      className={`pointer-events-none absolute bg-panel ${PILL} text-[10px] leading-[14px] ${
+      role="img"
+      aria-label={label}
+      title={label}
+      data-id={id}
+      className={`absolute cursor-pointer select-none bg-panel ${PILL} text-[10px] leading-[14px] ${
         done === total ? 'text-sky' : 'text-muted'
       }${faded ? FADED : ''}`}
       style={{ ...place, top: box.y }}
