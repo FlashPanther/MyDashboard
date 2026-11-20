@@ -247,6 +247,21 @@ export function neighbour(root: MapNode, id: string, direction: Direction): stri
   return peers[peers.indexOf(current) + (direction === 'up' ? -1 : 1)]?.node.id ?? null;
 }
 
+export function foldBranch(root: MapNode, id: string, collapsed: boolean): MapNode {
+  const fold = (node: MapNode): MapNode => {
+    const children = node.children.map(fold);
+    const folded = node.children.length > 0 && collapsed;
+    const same = node.collapsed === folded && children.every((child, index) => child === node.children[index]);
+    return same ? node : { ...node, collapsed: folded, children };
+  };
+  const within = (node: MapNode): MapNode => {
+    if (node.id === id) return fold(node);
+    const children = node.children.map(within);
+    return children.every((child, index) => child === node.children[index]) ? node : { ...node, children };
+  };
+  return within(root);
+}
+
 function colourBranches(root: MapNode): void {
   const used = new Set<number>();
   const uncoloured = root.children.filter((branch) => {

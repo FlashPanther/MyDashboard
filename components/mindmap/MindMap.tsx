@@ -24,6 +24,7 @@ import {
   branchesOn,
   branchIds,
   countDescendants,
+  find,
   newNode,
   parse,
   serialize,
@@ -57,6 +58,7 @@ type Press = {
   last: Point;
 };
 type Frame = { from: Point; to: Point; ids: string[] };
+type Menu = { id: string; x: number; y: number };
 type Drag = Carried & { lifted: ReadonlySet<string>; dx: number; dy: number; drop: Drop | null };
 
 function blankMap(): MapNode {
@@ -309,6 +311,7 @@ function MapCanvas({
 
   const [drag, setDrag] = useState<Drag | null>(null);
   const [frame, setFrame] = useState<Frame | null>(null);
+  const [menu, setMenu] = useState<Menu | null>(null);
   const press = useRef<Press | null>(null);
   const gesturing = drag !== null || frame !== null;
   const lifted = drag?.lifted ?? NOTHING;
@@ -407,6 +410,13 @@ function MapCanvas({
         else if (!drag && pressed.id !== null && group.length > 0) send({ type: 'select', id: pressed.id });
         cancelGesture();
       }}
+      onContextMenu={(event) => {
+        const id = nodeIdAt(event.target);
+        if (!id || id === editing?.id || !find(root, id)?.children.length) return;
+        event.preventDefault();
+        send({ type: 'select', id });
+        setMenu({ id, x: event.clientX, y: event.clientY });
+      }}
       onPointerCancel={(event) => {
         if (press.current?.pointerId === event.pointerId) cancelGesture();
       }}
@@ -448,7 +458,71 @@ function MapCanvas({
           />
         )}
       </div>
+      {menu && find(root, menu.id)?.children.length ? (
+        <BranchMenu
+          menu={menu}
+          onClose={() => setMenu(null)}
+          onFold={(collapsed) => send({ type: 'foldBranch', id: menu.id, collapsed })}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function BranchMenu({ menu, onClose, onFold }: { menu: Menu; onClose: () => void; onFold: (collapsed: boolean) => void }) {
+  const element = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState({ left: menu.x, top: menu.y });
+
+  useLayoutEffect(() => {
+    const { offsetWidth, offsetHeight } = element.current!;
+    setPlace({
+      left: Math.max(8, Math.min(menu.x, window.innerWidth - offsetWidth - 8)),
+      top: Math.max(8, Math.min(menu.y, window.innerHeight - offsetHeight - 8)),
+    });
+    element.current!.querySelector('button')!.focus();
+  }, [menu]);
+
+  useEffect(() => {
+    const onOutside = (event: Event) => {
+      if (!element.current?.contains(event.target as Node)) onClose();
+    };
+    window.addEventListener('pointerdown', onOutside, true);
+    window.addEventListener('wheel', onOutside, true);
+    return () => {
+      window.removeEventListener('pointerdown', onOutside, true);
+      window.removeEventListener('wheel', onOutside, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={element}
+      className="panel fixed z-10 flex flex-col p-1 shadow-lg"
+      style={place}
+      onKeyDown={(event) => {
+        const items = [...element.current!.querySelectorAll('button')];
+        const step = { ArrowDown: 1, Tab: 1, ArrowUp: -1 }[event.key];
+        if (event.key === 'Enter' || event.key === ' ') return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.key === 'Escape') onClose();
+        if (step) items[(items.indexOf(document.activeElement as HTMLButtonElement) + step + items.length) % items.length].focus();
+      }}
+    >
+      {([true, false] as const).map((collapsed) => (
+        <button
+          key={String(collapsed)}
+          type="button"
+          className="whitespace-nowrap px-3 py-1.5 text-left text-sm hover:bg-panel-soft focus:bg-panel-soft"
+          onClick={() => {
+            onFold(collapsed);
+            onClose();
+          }}
+        >
+          {collapsed ? 'Replier toute la branche' : 'Déplier toute la branche'}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -690,6 +764,7 @@ const SHORTCUTS: [string, string][] = [
   ['Échap', 'Finir la saisie, désélectionner'],
   ['Suppr', 'Supprimer la branche'],
   ['Glisser un nœud', 'Le déplacer avec sa branche : le lien en pointillés montre son futur parent'],
+  ['Clic droit sur un nœud', 'Replier ou déplier toute sa branche'],
   ['Glisser sur le fond', 'Tracer un cadre pour sélectionner plusieurs nœuds, puis les supprimer ou les glisser ensemble'],
   ['Ctrl Z, Ctrl Maj Z', 'Annuler, rétablir'],
   ['= - 0 1', 'Zoom avant, arrière, 100 %, tout voir'],
