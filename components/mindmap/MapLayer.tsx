@@ -1,11 +1,11 @@
-import { memo, useLayoutEffect, useMemo, type CSSProperties, type RefObject } from 'react';
+import { memo, useLayoutEffect, type CSSProperties, type RefObject } from 'react';
 import { branchColour, FADED, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
 import { keepFocus } from '@/components/mindmap/keepFocus';
 import { TaskBox } from '@/components/mindmap/TaskBox';
 import type { Send } from '@/components/mindmap/types';
 import type { Editing } from '@/lib/mindmap/editor';
 import { linkPath, type Box } from '@/lib/mindmap/layout';
-import { branchesOn, countDescendants, SIDES, taskProgress, type MapNode, type Progress, type Side, type VisibleNode } from '@/lib/mindmap/tree';
+import { branchesOn, countDescendants, SIDES, type MapNode, type Progress, type Side, type VisibleNode } from '@/lib/mindmap/tree';
 
 type Observe = (element: HTMLElement | null) => (() => void) | undefined;
 
@@ -13,6 +13,7 @@ const PILL = 'rounded-full border border-rule px-1.5 font-mono';
 
 export const MapLayer = memo(function MapLayer({
   root,
+  progress,
   visible,
   boxes,
   selected,
@@ -24,6 +25,7 @@ export const MapLayer = memo(function MapLayer({
   send,
 }: {
   root: MapNode;
+  progress: ReadonlyMap<string, Progress>;
   visible: VisibleNode[];
   boxes: Map<string, Box>;
   selected: string | null;
@@ -34,7 +36,6 @@ export const MapLayer = memo(function MapLayer({
   observe: Observe;
   send: Send;
 }) {
-  const progress = useMemo(() => taskProgress(root), [root]);
   return (
     <>
       <svg aria-hidden="true" className="pointer-events-none absolute left-0 top-0 h-px w-px overflow-visible">

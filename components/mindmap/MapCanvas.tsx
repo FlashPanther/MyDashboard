@@ -17,7 +17,7 @@ import type { Editing } from '@/lib/mindmap/editor';
 import type { ZoomCommand } from '@/lib/mindmap/keymap';
 import { dropAt, grabbed, type Carried } from '@/lib/mindmap/drop';
 import { boxesIn, layout, type Point, type Size } from '@/lib/mindmap/layout';
-import { branchIds, find, visibleNodes, type MapNode } from '@/lib/mindmap/tree';
+import { branchIds, find, visibleNodes, type MapNode, type Progress } from '@/lib/mindmap/tree';
 import { fit, reveal, toWorld, zoomAt, type View } from '@/lib/mindmap/view';
 
 const UNMEASURED: Size = { width: 120, height: 36 };
@@ -40,6 +40,7 @@ type Menu = { id: string; x: number; y: number };
 export function MapCanvas({
   ref,
   root,
+  progress,
   selected,
   group,
   editing,
@@ -48,6 +49,7 @@ export function MapCanvas({
 }: {
   ref: Ref<CanvasHandle>;
   root: MapNode;
+  progress: ReadonlyMap<string, Progress>;
   selected: string | null;
   group: string[];
   editing: Editing | null;
@@ -278,6 +280,7 @@ export function MapCanvas({
       >
         <MapLayer
           root={root}
+          progress={progress}
           visible={visible}
           boxes={boxes}
           selected={selected}

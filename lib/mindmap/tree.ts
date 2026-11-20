@@ -97,6 +97,31 @@ export function taskProgress(root: MapNode): Map<string, Progress> {
   return byBranch;
 }
 
+export function withoutFinished(root: MapNode): MapNode {
+  const prune = (node: MapNode): { node: MapNode; pending: boolean } => {
+    let pending = false;
+    const kept: MapNode[] = [];
+    for (const child of node.children) {
+      const below = prune(child);
+      if (below.pending || !child.task?.done) kept.push(below.node);
+      pending ||= below.pending || child.task?.done === false;
+    }
+    const same = kept.length === node.children.length && kept.every((child, index) => child === node.children[index]);
+    return { node: same ? node : { ...node, children: kept }, pending };
+  };
+  return prune(root).node;
+}
+
+export function shownAncestor(root: MapNode, shown: MapNode, id: string): string {
+  let current = id;
+  while (!find(shown, current)) {
+    const parent = parentOf(root, current);
+    if (!parent) return root.id;
+    current = parent.id;
+  }
+  return current;
+}
+
 export function visibleNodes(root: MapNode): VisibleNode[] {
   const result: VisibleNode[] = [];
   const visit = (node: MapNode, parentId: string | null, depth: number, colour: number, side: Side): void => {

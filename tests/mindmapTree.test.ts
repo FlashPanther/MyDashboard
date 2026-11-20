@@ -13,6 +13,7 @@ import {
   toggleTask,
   visibleNodes,
   withinLimits,
+  withoutFinished,
   type MapNode,
 } from '../lib/mindmap/tree.ts';
 
@@ -252,4 +253,18 @@ test('l’avancement d’une branche compte les tâches de ses descendants, pas 
   assert.deepEqual(progress.get('a'), { done: 1, total: 1 });
   assert.deepEqual(progress.get('b'), { done: 0, total: 1 });
   assert.equal(progress.has('a1'), false);
+});
+
+test('masquer les tâches faites retire une tâche faite avec ce qu’elle contient, pas une idée ni une tâche à faire', () => {
+  const { root } = tree();
+  const done = toggleDone(toggleTask(root, ['a', 'b1']), ['a']);
+  assert.deepEqual(texts(withoutFinished(done)), ['root', 'b', 'b1']);
+  assert.equal(withoutFinished(root), root);
+});
+
+test('une tâche faite reste visible tant que sa branche contient une tâche à faire', () => {
+  const { root } = tree();
+  const pending = toggleDone(toggleTask(root, ['a', 'a1']), ['a']);
+  assert.deepEqual(texts(withoutFinished(pending)), ['root', 'a', 'a1', 'b', 'b1']);
+  assert.deepEqual(texts(withoutFinished(toggleDone(pending, ['a1']))), ['root', 'b', 'b1']);
 });
