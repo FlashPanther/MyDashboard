@@ -77,7 +77,8 @@ export function MapCanvas({
         return next;
       });
     });
-    observer.current.observe(element);
+    // Par défaut, seule la boîte de contenu est surveillée : un changement de marge intérieure passerait inaperçu.
+    observer.current.observe(element, { box: 'border-box' });
     return () => observer.current?.unobserve(element);
   }, []);
 
