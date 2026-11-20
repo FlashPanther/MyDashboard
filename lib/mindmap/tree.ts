@@ -9,7 +9,7 @@ export type MapNode = {
   side?: 'left';
 };
 
-export type Direction = 'left' | 'right' | 'up' | 'down';
+type Direction = 'left' | 'right' | 'up' | 'down';
 
 export type VisibleNode = { node: MapNode; parentId: string | null; depth: number; colour: number; side: Side };
 
@@ -104,29 +104,31 @@ function stripBranchMarks(node: MapNode): void {
   node.children.forEach(stripBranchMarks);
 }
 
-export function addChild(root: MapNode, parentId: string, node: MapNode): MapNode {
+export function addChild(root: MapNode, parentId: string, id: string): MapNode {
   if (!find(root, parentId)) return root;
   return change(root, (draft) => {
     const parent = find(draft, parentId)!;
-    parent.children.push(node);
+    parent.children.push(newNode('', id));
     parent.collapsed = false;
   });
 }
 
-export function addSibling(root: MapNode, id: string, node: MapNode, where: 'above' | 'below'): MapNode {
-  if (!locate(root, id)) return root;
+export function addSibling(root: MapNode, siblingId: string, id: string, where: 'above' | 'below'): MapNode {
+  if (!locate(root, siblingId)) return root;
   return change(root, (draft) => {
-    const { parent, index } = locate(draft, id)!;
+    const { parent, index } = locate(draft, siblingId)!;
+    const node = newNode('', id);
     const sibling = parent.children[index];
     if (sibling.side) node.side = sibling.side;
     parent.children.splice(where === 'above' ? index : index + 1, 0, node);
   });
 }
 
-export function addParent(root: MapNode, id: string, node: MapNode): MapNode {
-  if (!locate(root, id)) return root;
+export function addParent(root: MapNode, childId: string, id: string): MapNode {
+  if (!locate(root, childId)) return root;
   return change(root, (draft) => {
-    const { parent, index } = locate(draft, id)!;
+    const { parent, index } = locate(draft, childId)!;
+    const node = newNode('', id);
     const child = parent.children[index];
     if (child.colour !== undefined) node.colour = child.colour;
     if (child.side) node.side = child.side;
@@ -208,7 +210,7 @@ function parseNode(value: unknown, depth: number, seen: Set<string>): MapNode {
   seen.add(uniqueId);
   const kept = children
     .map((child) => parseNode(child, depth + 1, seen))
-    .filter((child) => child.text !== '' || child.children.length > 0);
+    .filter((child) => !isEmptyLeaf(child));
   const branch = depth === 1;
   return {
     id: uniqueId,

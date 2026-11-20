@@ -1,4 +1,6 @@
-export type Command =
+export type ZoomCommand = 'zoomIn' | 'zoomOut' | 'zoomReset' | 'zoomFit';
+
+export type EditCommand =
   | 'child'
   | 'sibling'
   | 'siblingAbove'
@@ -15,11 +17,13 @@ export type Command =
   | 'stop'
   | 'deselect'
   | 'undo'
-  | 'redo'
-  | 'zoomIn'
-  | 'zoomOut'
-  | 'zoomReset'
-  | 'zoomFit';
+  | 'redo';
+
+export type Command = EditCommand | ZoomCommand;
+
+export function isZoom(command: Command): command is ZoomCommand {
+  return command.startsWith('zoom');
+}
 
 export type Mode = 'idle' | 'selected' | 'editing';
 
@@ -82,7 +86,7 @@ function structuralCommand(press: KeyPress, mod: boolean): Command | null {
     if (mod) return 'siblingAbove';
     return press.altKey ? 'parent' : 'sibling';
   }
-  // Hors QWERTY, Whimsical attend la touche située à l'emplacement du « / » américain.
+  // `key` dépend de la disposition du clavier, `code` non : en AZERTY, la touche du « / » américain donne « ! ».
   if (mod && (press.key === '/' || press.code === 'Slash')) return 'toggle';
   return null;
 }

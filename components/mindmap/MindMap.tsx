@@ -13,10 +13,11 @@ import {
   useState,
   type CSSProperties,
   type Ref,
+  type RefObject,
 } from 'react';
 import { Preparing } from '@/components/Preparing';
-import { initialState, reduce, type EditorAction, type EditorState } from '@/lib/mindmap/editor';
-import { commandFor, type Command } from '@/lib/mindmap/keymap';
+import { initialState, modeOf, reduce, type Editing, type EditorAction } from '@/lib/mindmap/editor';
+import { commandFor, isZoom, type ZoomCommand } from '@/lib/mindmap/keymap';
 import { layout, linkPath, type Box, type Size } from '@/lib/mindmap/layout';
 import {
   branchesOn,
@@ -38,8 +39,8 @@ const BRANCH_COLOURS = ['#e4572e', '#2e86ab', '#3b9a5b', '#a23b72', '#d99a1c', '
 const UNMEASURED: Size = { width: 120, height: 36 };
 
 type Send = (action: EditorAction) => void;
-type CanvasHandle = { zoom: (command: Command) => void };
-type Editing = { id: string; initial: string | null };
+type Observe = (element: HTMLElement | null) => (() => void) | undefined;
+type CanvasHandle = { zoom: (command: ZoomCommand) => void };
 
 function blankMap(): MapNode {
   return newNode('Idée centrale');
@@ -54,49 +55,46 @@ function storedMap(): MapNode {
   }
 }
 
-function reducer(state: EditorState | null, action: EditorAction | { type: 'load'; root: MapNode }) {
-  if (action.type === 'load') return initialState(action.root);
-  return state && reduce(state, action);
+export function MindMap() {
+  const [stored, setStored] = useState<MapNode | null>(null);
+
+  useEffect(() => setStored(storedMap()), []);
+
+  return stored ? <Editor initial={stored} /> : <Preparing>Préparation de la carte…</Preparing>;
 }
 
-export function MindMap() {
-  const [state, dispatch] = useReducer(reducer, null);
+function Editor({ initial }: { initial: MapNode }) {
+  const [state, dispatch] = useReducer(reduce, initial, initialState);
   const [opened, setOpened] = useState(0);
   const [notice, setNotice] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const editingElement = useRef<HTMLElement | null>(null);
   const canvas = useRef<CanvasHandle>(null);
-  const latest = useRef(state);
-  latest.current = state;
 
   const send = useCallback<Send>(
-    (action) => dispatch({ draft: editingElement.current?.innerText ?? '', ...action }),
+    (action) => dispatch({ draft: editingElement.current?.innerText, newId: crypto.randomUUID(), ...action }),
     [],
   );
 
-  useEffect(() => dispatch({ type: 'load', root: storedMap() }), []);
-
-  const root = state?.root;
-  const typing = state ? state.editing !== null : true;
+  const { root } = state;
+  const mode = modeOf(state);
   useEffect(() => {
-    if (!root || typing) return;
+    if (mode === 'editing') return;
     const saved = serialize(root);
     writeStored(STORAGE_KEY, saved);
     if (readStored(STORAGE_KEY) !== saved) {
       setNotice("Enregistrement impossible dans ce navigateur : exporte la carte pour la garder.");
     }
-  }, [root, typing]);
+  }, [root, mode]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const current = latest.current;
-      if (!current || event.isComposing) return;
+      if (event.isComposing) return;
       if ((event.target as Element).closest('button, input, summary, a')) return;
-      const mode = current.editing ? 'editing' : current.selected ? 'selected' : 'idle';
       const command = commandFor(event, mode);
       if (!command) return;
       event.preventDefault();
-      if (command.startsWith('zoom')) canvas.current?.zoom(command);
+      if (isZoom(command)) canvas.current?.zoom(command);
       else send({ type: 'command', command, key: event.key });
     };
     const onLeave = () => send({ type: 'command', command: 'stop' });
@@ -106,9 +104,7 @@ export function MindMap() {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('pagehide', onLeave);
     };
-  }, [send]);
-
-  if (!state) return <Preparing>Préparation de la carte…</Preparing>;
+  }, [mode, send]);
 
   function open(next: MapNode) {
     setNotice('');
@@ -201,7 +197,7 @@ function MapCanvas({
   root: MapNode;
   selected: string | null;
   editing: Editing | null;
-  editingElement: { current: HTMLElement | null };
+  editingElement: RefObject<HTMLElement | null>;
   send: Send;
 }) {
   const [sizes, setSizes] = useState<ReadonlyMap<string, Size>>(new Map());
@@ -237,8 +233,11 @@ function MapCanvas({
       zoom(command) {
         const { clientWidth: width, clientHeight: height } = viewport.current!;
         if (command === 'zoomFit') return setView(fit(boxes.values(), width, height));
-        const factor = { zoomIn: 1.2, zoomOut: 1 / 1.2 }[command as 'zoomIn' | 'zoomOut'];
-        setView((current) => current && zoomAt(current, factor ?? 1 / current.scale, width / 2, height / 2));
+        setView((current) => {
+          if (!current) return current;
+          const factor = command === 'zoomIn' ? 1.2 : command === 'zoomOut' ? 1 / 1.2 : 1 / current.scale;
+          return zoomAt(current, factor, width / 2, height / 2);
+        });
       },
     }),
     [boxes],
@@ -334,8 +333,8 @@ const MapLayer = memo(function MapLayer({
   boxes: Map<string, Box>;
   selected: string | null;
   editing: Editing | null;
-  editingElement: { current: HTMLElement | null };
-  observe: (element: HTMLElement | null) => (() => void) | undefined;
+  editingElement: RefObject<HTMLElement | null>;
+  observe: Observe;
   send: Send;
 }) {
   return (
@@ -364,7 +363,7 @@ const MapLayer = memo(function MapLayer({
         };
         return node.id === editing?.id ? (
           <EditedNode
-            key={`${node.id}:saisie`}
+            key={node.id}
             {...shared}
             id={node.id}
             text={editing.initial ?? node.text}
@@ -410,36 +409,29 @@ function EditedNode({
   id: string;
   text: string;
   caretAtEnd: boolean;
-  editingElement: { current: HTMLElement | null };
-  observe: (element: HTMLElement | null) => (() => void) | undefined;
+  editingElement: RefObject<HTMLElement | null>;
+  observe: Observe;
   send: Send;
   className: string;
   style: CSSProperties;
   'data-id': string;
 }) {
-  const element = useRef<HTMLDivElement>(null);
-
   useLayoutEffect(() => {
-    const node = element.current!;
+    const node = editingElement.current!;
     node.textContent = text;
     node.focus();
     const selection = getSelection()!;
     selection.selectAllChildren(node);
     if (caretAtEnd) selection.collapseToEnd();
-    editingElement.current = node;
-    const stopObserving = observe(node);
-    return () => {
-      editingElement.current = null;
-      stopObserving?.();
-    };
+    return observe(node);
   }, []);
 
   return (
     <div
-      ref={element}
+      ref={editingElement as RefObject<HTMLDivElement | null>}
       {...shared}
       contentEditable="plaintext-only"
-      onBlur={(event) => send({ type: 'blur', id, draft: event.currentTarget.innerText })}
+      onBlur={() => send({ type: 'blur', id })}
     />
   );
 }
@@ -492,7 +484,7 @@ function FoldToggle({
           '--branch': colour,
         } as CSSProperties
       }
-      // Sans cela, l'appui prend le focus : la saisie en cours se ferme et le bouton est redessiné avant son clic.
+      // Sans cela, l'appui prend le focus et la saisie en cours se ferme avant le clic.
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => send({ type: 'toggle', id: node.id })}
     >

@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initialState, reduce, type EditorState } from '../lib/mindmap/editor.ts';
-import type { Command } from '../lib/mindmap/keymap.ts';
-import { newNode, type MapNode } from '../lib/mindmap/tree.ts';
+import { initialState, modeOf, reduce, type EditorState } from '../lib/mindmap/editor.ts';
+import type { EditCommand } from '../lib/mindmap/keymap.ts';
+import { find, newNode, type MapNode } from '../lib/mindmap/tree.ts';
 
-let counter = 0;
-
-function run(state: EditorState, command: Command, draft = '', key = ''): EditorState {
-  return reduce(state, { type: 'command', command, draft, key, newId: `n${++counter}` });
+function run(state: EditorState, command: EditCommand, draft?: string, key = ''): EditorState {
+  return reduce(state, { type: 'command', command, draft, key });
 }
 
 function outline(node: MapNode): string {
@@ -16,17 +14,15 @@ function outline(node: MapNode): string {
 }
 
 function selectedText(state: EditorState): string | null {
-  const find = (node: MapNode): MapNode | null =>
-    node.id === state.selected ? node : node.children.map(find).find(Boolean) ?? null;
-  return state.selected ? (find(state.root)?.text ?? 'introuvable') : null;
+  return state.selected ? (find(state.root, state.selected)?.text ?? 'introuvable') : null;
 }
 
 function start(): EditorState {
   return initialState(newNode('Idée', 'root'));
 }
 
-function typed(state: EditorState, ...steps: [Command, string?][]): EditorState {
-  return steps.reduce((current, [command, draft]) => run(current, command, draft ?? ''), state);
+function typed(state: EditorState, ...steps: [EditCommand, string?][]): EditorState {
+  return steps.reduce((current, [command, draft]) => run(current, command, draft), state);
 }
 
 function sample(): EditorState {
@@ -152,7 +148,7 @@ test('replier s’annule comme le reste', () => {
   state = run(state, 'toggle');
   assert.equal(outline(state.root), 'Idée(A[+](A1 A2) B)');
   assert.equal(outline(run(state, 'undo').root), 'Idée(A(A1 A2) B)');
-  assert.equal(run(typed(sample()), 'toggle').past.length, sample().past.length);
+  assert.equal(run(sample(), 'toggle').past.length, sample().past.length);
 });
 
 test('annuler puis rétablir retrouve la carte et la sélection', () => {
@@ -210,10 +206,31 @@ test('ouvrir une autre carte s’annule aussi', () => {
 });
 
 test('l’historique garde au plus deux cents étapes', () => {
-  let state = typed(start(), ['child'], ['stop', 'A']);
-  for (let step = 0; step < 250; step++) state = run(state, 'toggle');
-  assert.equal(state.past.length, 1);
-  state = typed(state, ['child'], ['stop', 'A1'], ['left']);
+  let state = typed(start(), ['child'], ['child', 'A'], ['stop', 'A1'], ['left']);
   for (let step = 0; step < 250; step++) state = run(state, 'toggle');
   assert.equal(state.past.length, 200);
+});
+
+test('une action sans texte de saisie laisse le texte du nœud tel quel', () => {
+  const selected = typed(start(), ['child'], ['stop', 'A']);
+  const done = run(run(selected, 'edit'), 'stop');
+  assert.equal(outline(done.root), 'Idée(A)');
+  assert.equal(done.past.length, selected.past.length);
+  const replaced = run(run(selected, 'type', undefined, 'x'), 'stop');
+  assert.equal(outline(replaced.root), 'Idée(x)');
+});
+
+test('Maj+Tab retire aussi un nœud vide qui n’était que sélectionné', () => {
+  const emptied = typed(start(), ['child'], ['child', 'A'], ['stop', 'A1'], ['delete'], ['edit'], ['stop', '']);
+  assert.equal(outline(emptied.root), 'Idée');
+  const kept = initialState({ ...newNode('Idée', 'root'), children: [newNode('', 'vide')] });
+  const left = run(reduce(kept, { type: 'select', id: 'vide' }), 'toParent');
+  assert.equal(outline(left.root), 'Idée');
+  assert.equal(left.selected, 'root');
+});
+
+test('le mode suit la saisie et la sélection', () => {
+  assert.equal(modeOf(start()), 'selected');
+  assert.equal(modeOf(run(start(), 'child')), 'editing');
+  assert.equal(modeOf(run(start(), 'deselect')), 'idle');
 });
