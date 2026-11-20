@@ -1,9 +1,13 @@
 import { memo, useLayoutEffect, type CSSProperties, type RefObject } from 'react';
-import { branchColour, FADED, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
-import type { Observe, Send } from '@/components/mindmap/types';
+import { branchColour, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
+import type { Send } from '@/components/mindmap/types';
 import type { Editing } from '@/lib/mindmap/editor';
 import { linkPath, type Box } from '@/lib/mindmap/layout';
 import { branchesOn, countDescendants, SIDES, type MapNode, type Side, type VisibleNode } from '@/lib/mindmap/tree';
+
+const FADED = ' opacity-30';
+
+type Observe = (element: HTMLElement | null) => (() => void) | undefined;
 
 export const MapLayer = memo(function MapLayer({
   root,

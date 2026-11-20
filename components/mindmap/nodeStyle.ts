@@ -3,7 +3,6 @@ import type { Box } from '@/lib/mindmap/layout';
 import type { Side } from '@/lib/mindmap/tree';
 
 const BRANCH_COLOURS = ['#e4572e', '#2e86ab', '#3b9a5b', '#a23b72', '#d99a1c', '#5b5fc7', '#1f9e9a', '#c2527a'];
-export const FADED = ' opacity-30';
 export const LINK = { fill: 'none', strokeWidth: 2, strokeLinecap: 'round' } as const;
 
 export function branchColour(index: number): string {

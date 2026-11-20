@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { MapCanvas } from '@/components/mindmap/MapCanvas';
+import { MapCanvas, type CanvasHandle } from '@/components/mindmap/MapCanvas';
 import { Shortcuts } from '@/components/mindmap/Shortcuts';
-import type { CanvasHandle, Send } from '@/components/mindmap/types';
+import type { Send } from '@/components/mindmap/types';
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed } from '@/lib/mindmap/keymap';

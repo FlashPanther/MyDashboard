@@ -12,8 +12,9 @@ import {
 import { ContextMenu, type MenuItem } from '@/components/mindmap/ContextMenu';
 import { Ghost } from '@/components/mindmap/Ghost';
 import { MapLayer } from '@/components/mindmap/MapLayer';
-import type { CanvasHandle, Drag, Send } from '@/components/mindmap/types';
+import type { Drag, Send } from '@/components/mindmap/types';
 import type { Editing } from '@/lib/mindmap/editor';
+import type { ZoomCommand } from '@/lib/mindmap/keymap';
 import { dropAt, grabbed, type Carried } from '@/lib/mindmap/drop';
 import { boxesIn, layout, type Point, type Size } from '@/lib/mindmap/layout';
 import { branchIds, find, visibleNodes, type MapNode } from '@/lib/mindmap/tree';
@@ -23,6 +24,7 @@ const UNMEASURED: Size = { width: 120, height: 36 };
 const DRAG_THRESHOLD = 5;
 const NOTHING: ReadonlySet<string> = new Set();
 
+export type CanvasHandle = { zoom: (command: ZoomCommand) => void };
 type Press = {
   id: string | null;
   carried: Carried | null;
