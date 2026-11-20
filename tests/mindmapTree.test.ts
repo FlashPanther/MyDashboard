@@ -205,7 +205,7 @@ test('une feuille n’est jamais marquée repliée, et replier sans effet rend l
 test('marquer un nœud en fait une tâche à faire, le marquer de nouveau le rend à l’état d’idée', () => {
   const { root } = tree();
   const marked = toggleTask(root, ['a1']);
-  assert.equal(marked.children[0].children[0].task, 'todo');
+  assert.equal(marked.children[0].children[0].task?.done, false);
   assert.equal(root.children[0].children[0].task, undefined);
   assert.equal(toggleTask(marked, ['a1']).children[0].children[0].task, undefined);
 });
@@ -219,7 +219,7 @@ test('la racine ne devient jamais une tâche', () => {
 test('marquer un groupe mixte complète les tâches sans toucher à celles déjà cochées', () => {
   const { root } = tree();
   const mixed = toggleTask(toggleDone(toggleTask(root, ['a']), ['a']), ['a', 'b']);
-  assert.deepEqual(mixed.children.map((node) => node.task), ['done', 'todo']);
+  assert.deepEqual(mixed.children.map((node) => node.task?.done), [true, false]);
   assert.deepEqual(toggleTask(mixed, ['a', 'b']).children.map((node) => node.task), [undefined, undefined]);
 });
 
@@ -227,8 +227,8 @@ test('cocher ne touche que les tâches, et décoche quand tout est déjà fait',
   const { root } = tree();
   assert.equal(toggleDone(root, ['a']), root);
   const done = toggleDone(toggleTask(root, ['a']), ['a', 'b']);
-  assert.deepEqual(done.children.map((node) => node.task), ['done', undefined]);
-  assert.equal(toggleDone(done, ['a']).children[0].task, 'todo');
+  assert.deepEqual(done.children.map((node) => node.task?.done), [true, undefined]);
+  assert.equal(toggleDone(done, ['a']).children[0].task?.done, false);
 });
 
 test('une tâche survit à l’enregistrement, une valeur inconnue ou sur la racine est ignorée', () => {
@@ -236,8 +236,8 @@ test('une tâche survit à l’enregistrement, une valeur inconnue ou sur la rac
   const saved = toggleDone(toggleTask(root, ['a', 'b1']), ['a']);
   assert.deepEqual(parse(serialize(saved)), saved);
   const odd = parse(
-    JSON.stringify({ root: { text: 'r', task: 'done', children: [{ text: 'x', task: 'plus tard', children: [] }] } }),
+    JSON.stringify({ root: { text: 'r', task: { done: true }, children: [{ text: 'x', task: 'done', children: [] }, { text: 'y', task: { done: 'oui' }, children: [] }] } }),
   );
   assert.equal(odd.task, undefined);
-  assert.equal(odd.children[0].task, undefined);
+  assert.deepEqual(odd.children.map((node) => node.task), [undefined, undefined]);
 });

@@ -1,12 +1,11 @@
 import { memo, useLayoutEffect, type CSSProperties, type RefObject } from 'react';
-import { branchColour, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
+import { branchColour, FADED, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
+import { keepFocus } from '@/components/mindmap/keepFocus';
 import { TaskBox } from '@/components/mindmap/TaskBox';
 import type { Send } from '@/components/mindmap/types';
 import type { Editing } from '@/lib/mindmap/editor';
 import { linkPath, type Box } from '@/lib/mindmap/layout';
 import { branchesOn, countDescendants, SIDES, type MapNode, type Side, type VisibleNode } from '@/lib/mindmap/tree';
-
-const FADED = ' opacity-30';
 
 type Observe = (element: HTMLElement | null) => (() => void) | undefined;
 
@@ -76,7 +75,14 @@ export const MapLayer = memo(function MapLayer({
 
       {visible.map(({ node }) =>
         node.task ? (
-          <TaskBox key={node.id} node={node} box={boxes.get(node.id)!} faded={lifted.has(node.id)} send={send} />
+          <TaskBox
+            key={node.id}
+            node={node}
+            done={node.task.done}
+            box={boxes.get(node.id)!}
+            faded={lifted.has(node.id)}
+            send={send}
+          />
         ) : null,
       )}
 
@@ -171,8 +177,7 @@ function FoldToggle({
           '--branch': colour,
         } as CSSProperties
       }
-      // Sans cela, l'appui prend le focus et la saisie en cours se ferme avant le clic.
-      onMouseDown={(event) => event.preventDefault()}
+      onMouseDown={keepFocus}
       onClick={() => send({ type: 'toggle', id: node.id })}
     >
       {node.collapsed ? countDescendants(node) : null}

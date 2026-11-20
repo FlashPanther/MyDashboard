@@ -167,7 +167,7 @@ export function MapCanvas({
     if (id !== root.id) {
       items.push({
         label: node.task ? 'Redevenir une idée' : 'Transformer en tâche',
-        run: () => send({ type: 'command', command: 'task' }),
+        run: () => send({ type: 'task', ids: [id] }),
       });
     }
     if (node.children.length) {

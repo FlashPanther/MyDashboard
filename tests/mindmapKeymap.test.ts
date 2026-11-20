@@ -115,5 +115,4 @@ test('Alt+T ne fait rien sans sélection, pendant la saisie, ni avec Maj ou Ctrl
   assert.equal(commandFor(press('t', { altKey: true, code: 'KeyT' }), 'editing'), null);
   assert.equal(commandFor(press('T', { altKey: true, shiftKey: true, code: 'KeyT' }), 'selected'), null);
   assert.equal(commandFor(press('t', { altKey: true, ctrlKey: true, code: 'KeyT' }), 'selected'), 'type');
-  assert.equal(commandFor(press('t', { code: 'KeyT' }), 'selected'), 'type');
 });

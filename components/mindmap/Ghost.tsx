@@ -1,4 +1,4 @@
-import { TaskBox } from '@/components/mindmap/TaskBox';
+import { TaskMark } from '@/components/mindmap/TaskBox';
 import type { Drag } from '@/components/mindmap/types';
 import { branchColour, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
 import { carried, linkPath, type Box } from '@/lib/mindmap/layout';
@@ -40,7 +40,7 @@ export function Ghost({
           {node.text}
         </div>
       ))}
-      {branch.map(({ node }) => (node.task ? <TaskBox key={node.id} node={node} box={moved.get(node.id)!} /> : null))}
+      {branch.map(({ node }) => (node.task ? <TaskMark key={node.id} done={node.task.done} box={moved.get(node.id)!} /> : null))}
     </div>
   );
 }

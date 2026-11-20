@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initialState, modeOf, reduce, type EditorState } from '../lib/mindmap/editor.ts';
 import type { EditCommand } from '../lib/mindmap/keymap.ts';
-import { find, newNode, type MapNode } from '../lib/mindmap/tree.ts';
+import { find, newNode, visibleNodes, type MapNode } from '../lib/mindmap/tree.ts';
 
 function run(state: EditorState, command: EditCommand, draft?: string, key = ''): EditorState {
   return reduce(state, { type: 'command', command, draft, key });
@@ -351,12 +351,9 @@ test('replier ou déplier toute une branche sélectionne le nœud et s’annule 
 });
 
 const tasks = (state: EditorState) =>
-  ['A', 'A1', 'A2', 'B'].map((text) => {
-    const found = [state.root, ...state.root.children, ...state.root.children.flatMap((node) => node.children)].find(
-      (node) => node.text === text,
-    );
-    return found?.task ?? '-';
-  });
+  visibleNodes(state.root)
+    .slice(1)
+    .map(({ node }) => (node.task ? (node.task.done ? 'done' : 'todo') : '-'));
 
 test('marquer puis cocher une tâche sont deux étapes d’annulation, la sélection ne bouge pas', () => {
   const marked = run(sample(), 'task');
@@ -377,7 +374,7 @@ test('la case d’un nœud le coche et le sélectionne, sans passer par la séle
   const marked = run(sample(), 'task');
   const id = marked.selected!;
   const elsewhere = run(marked, 'up');
-  const done = reduce(elsewhere, { type: 'tick', id });
+  const done = reduce(elsewhere, { type: 'tick', ids: [id] });
   assert.equal(done.selected, id);
   assert.deepEqual(tasks(done), ['-', '-', '-', 'done']);
 });
@@ -398,7 +395,16 @@ test('déplacer ou renommer une tâche garde son état', () => {
   const id = marked.selected!;
   const a = marked.root.children[0].id;
   const moved = reduce(marked, { type: 'move', ids: [id], parentId: a, beforeId: null, side: 'right' });
-  assert.equal(find(moved.root, id)!.task, 'done');
+  assert.equal(find(moved.root, id)!.task?.done, true);
   const renamed = run(run(moved, 'edit'), 'stop', 'B bis');
-  assert.equal(find(renamed.root, id)!.task, 'done');
+  assert.equal(find(renamed.root, id)!.task?.done, true);
+});
+
+test('le menu transforme en tâche le nœud visé, même s’il n’est pas la sélection, et dissout le groupe', () => {
+  const state = sample();
+  const [a, b] = state.root.children.map((node) => node.id);
+  const marked = reduce(reduce(state, { type: 'mark', ids: [a, b] }), { type: 'task', ids: [a] });
+  assert.deepEqual(tasks(marked), ['todo', '-', '-', '-']);
+  assert.equal(marked.selected, a);
+  assert.equal(modeOf(marked), 'selected');
 });
