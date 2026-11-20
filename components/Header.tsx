@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { config } from '@/dashboard.config';
 import { longDate } from '@/lib/time';
@@ -57,6 +58,12 @@ export function Header({
           detected={detected}
           officeEvent={officeEvent}
         />
+        <Link
+          href="/carte"
+          className="border border-rule px-2.5 py-1 font-display text-[11px] font-bold uppercase tracking-[0.18em] text-ink transition-colors hover:border-ink"
+        >
+          Carte
+        </Link>
         <ThemeToggle />
         {status.data && !status.data.connected && (
           <a
