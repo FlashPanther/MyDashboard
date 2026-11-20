@@ -7,6 +7,7 @@ import {
   newNode,
   parse,
   serialize,
+  taskProgress,
   toggleCollapsed,
   toggleDone,
   toggleTask,
@@ -240,4 +241,21 @@ test('une tâche survit à l’enregistrement, une valeur inconnue ou sur la rac
   );
   assert.equal(odd.task, undefined);
   assert.deepEqual(odd.children.map((node) => node.task), [undefined, undefined]);
+});
+
+test('l’avancement d’une branche compte les tâches de ses descendants, pas la sienne ni les idées', () => {
+  const { root } = tree();
+  const marked = toggleDone(toggleTask(root, ['a', 'a1', 'b1']), ['a1']);
+  const progress = taskProgress(marked);
+  assert.deepEqual(progress.get('root'), { done: 1, total: 3 });
+  assert.deepEqual(progress.get('a'), { done: 1, total: 1 });
+  assert.deepEqual(progress.get('b'), { done: 0, total: 1 });
+  assert.equal(progress.has('a1'), false);
+});
+
+test('une branche sans tâche n’a pas d’avancement, même repliée elle garde le sien', () => {
+  const { root } = tree();
+  assert.equal(taskProgress(root).size, 0);
+  const folded = toggleCollapsed(toggleTask(root, ['a1']), 'a');
+  assert.deepEqual(taskProgress(folded).get('a'), { done: 0, total: 1 });
 });

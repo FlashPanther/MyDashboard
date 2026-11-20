@@ -1,11 +1,11 @@
-import { memo, useLayoutEffect, type CSSProperties, type RefObject } from 'react';
+import { memo, useLayoutEffect, useMemo, type CSSProperties, type RefObject } from 'react';
 import { branchColour, FADED, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
 import { keepFocus } from '@/components/mindmap/keepFocus';
 import { TaskBox } from '@/components/mindmap/TaskBox';
 import type { Send } from '@/components/mindmap/types';
 import type { Editing } from '@/lib/mindmap/editor';
 import { linkPath, type Box } from '@/lib/mindmap/layout';
-import { branchesOn, countDescendants, SIDES, type MapNode, type Side, type VisibleNode } from '@/lib/mindmap/tree';
+import { branchesOn, countDescendants, SIDES, taskProgress, type MapNode, type Side, type VisibleNode } from '@/lib/mindmap/tree';
 
 type Observe = (element: HTMLElement | null) => (() => void) | undefined;
 
@@ -32,6 +32,7 @@ export const MapLayer = memo(function MapLayer({
   observe: Observe;
   send: Send;
 }) {
+  const progress = useMemo(() => taskProgress(root), [root]);
   return (
     <>
       <svg aria-hidden="true" className="pointer-events-none absolute left-0 top-0 h-px w-px overflow-visible">
@@ -85,6 +86,25 @@ export const MapLayer = memo(function MapLayer({
           />
         ) : null,
       )}
+
+      {visible.map(({ node, depth, side }) => {
+        const within = progress.get(node.id);
+        if (!within) return null;
+        const box = boxes.get(node.id)!;
+        const corner = depth === 0 ? 0.5 : side === 'left' ? 0 : 1;
+        return (
+          <span
+            key={node.id}
+            title={`${within.done} tâche${within.done > 1 ? 's' : ''} faite${within.done > 1 ? 's' : ''} sur ${within.total} dans cette branche`}
+            className={`pointer-events-none absolute rounded-full border border-rule bg-panel px-1.5 font-mono text-[10px] leading-[14px] ${
+              within.done === within.total ? 'text-sky' : 'text-muted'
+            }${lifted.has(node.id) ? FADED : ''}`}
+            style={{ left: box.x + box.width * corner, top: box.y, transform: `translate(${-100 * corner}%, -50%)` }}
+          >
+            {within.done}/{within.total}
+          </span>
+        );
+      })}
 
       {visible.flatMap(({ node, depth, colour, side }) => {
         if (node.children.length === 0) return [];
