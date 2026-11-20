@@ -6,11 +6,18 @@ import { FORMAT_VERSION, parseDocument, type MapNode } from './tree.ts';
 const MAPS_DIR = path.join(process.cwd(), '.data', 'cartes');
 const TRASH = 'corbeille';
 const ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
+export const MAX_MAPS = 200;
 
 export type StoredMap = { id: string; revision: number; updatedAt: string; root: MapNode };
 export type MapSummary = { id: string; title: string; revision: number; updatedAt: string };
 export type SaveResult = { saved: boolean; map: StoredMap } | null;
 type Options = { now?: Date; dir?: string };
+
+export class UnreadableMapError extends Error {
+  constructor() {
+    super('Carte illisible sur le serveur');
+  }
+}
 
 const queues = new Map<string, Promise<unknown>>();
 
@@ -26,40 +33,73 @@ function fileOf(dir: string, id: string): string | null {
   return ID.test(id) ? path.join(dir, `${id}.json`) : null;
 }
 
+async function onDisk<T>(work: () => Promise<T>, whenAbsent: T): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return whenAbsent;
+    // Le message d'origine contient des chemins du serveur : il reste dans le journal.
+    console.error('Stockage des cartes :', error);
+    throw new Error('Stockage des cartes indisponible');
+  }
+}
+
+async function mapIds(dir: string): Promise<string[]> {
+  const names = await onDisk(() => fs.readdir(dir), []);
+  return names.filter((name) => name.endsWith('.json')).map((name) => name.slice(0, -'.json'.length)).filter((id) => ID.test(id));
+}
+
 async function persist(dir: string, { id, revision, updatedAt, root }: StoredMap): Promise<void> {
-  await fs.mkdir(dir, { recursive: true });
   const file = path.join(dir, `${id}.json`);
   const draft = `${file}.${randomUUID()}.tmp`;
-  await fs.writeFile(draft, JSON.stringify({ version: FORMAT_VERSION, revision, updatedAt, root }, null, 2), { mode: 0o600 });
-  await fs.rename(draft, file);
+  await onDisk(async () => {
+    await fs.mkdir(dir, { recursive: true });
+    const handle = await fs.open(draft, 'w', 0o600);
+    try {
+      await handle.writeFile(JSON.stringify({ version: FORMAT_VERSION, revision, updatedAt, root }, null, 2));
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(draft, file).catch(async (error) => {
+      await fs.rm(draft, { force: true });
+      throw error;
+    });
+  }, undefined);
 }
 
 export async function readMap(id: string, { dir = MAPS_DIR }: Options = {}): Promise<StoredMap | null> {
   const file = fileOf(dir, id);
-  if (!file) return null;
+  const text = file && (await onDisk(() => fs.readFile(file, 'utf8'), null));
+  if (!text) return null;
   try {
-    const data = JSON.parse(await fs.readFile(file, 'utf8'));
-    if (!Number.isInteger(data.revision) || data.revision < 1 || typeof data.updatedAt !== 'string') return null;
+    const data = JSON.parse(text);
+    if (!Number.isInteger(data.revision) || data.revision < 1 || typeof data.updatedAt !== 'string') throw new Error();
     return { id, revision: data.revision, updatedAt: data.updatedAt, root: parseDocument(data) };
   } catch {
-    return null;
+    throw new UnreadableMapError();
   }
 }
 
 export async function listMaps({ dir = MAPS_DIR }: Options = {}): Promise<MapSummary[]> {
-  const names = await fs.readdir(dir).catch(() => [] as string[]);
-  const ids = names.filter((name) => name.endsWith('.json')).map((name) => name.slice(0, -'.json'.length));
-  const maps = await Promise.all(ids.map((id) => readMap(id, { dir })));
-  return maps
-    .filter((map) => map !== null)
-    .map(({ id, root, revision, updatedAt }) => ({ id, title: root.text, revision, updatedAt }))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const maps: MapSummary[] = [];
+  for (const id of await mapIds(dir)) {
+    const map = await readMap(id, { dir }).catch((error) => {
+      if (error instanceof UnreadableMapError) return null;
+      throw error;
+    });
+    if (map) maps.push({ id, title: map.root.text, revision: map.revision, updatedAt: map.updatedAt });
+  }
+  return maps.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export async function createMap(root: MapNode, { now = new Date(), dir = MAPS_DIR }: Options = {}): Promise<StoredMap> {
-  const map = { id: randomUUID(), revision: 1, updatedAt: now.toISOString(), root };
-  await persist(dir, map);
-  return map;
+export function createMap(root: MapNode, { now = new Date(), dir = MAPS_DIR }: Options = {}): Promise<StoredMap | null> {
+  return inTurn(dir, async () => {
+    if ((await mapIds(dir)).length >= MAX_MAPS) return null;
+    const map = { id: randomUUID(), revision: 1, updatedAt: now.toISOString(), root };
+    await persist(dir, map);
+    return map;
+  });
 }
 
 export function saveMap(
@@ -78,14 +118,15 @@ export function saveMap(
   });
 }
 
-export function trashMap(id: string, { dir = MAPS_DIR }: Options = {}): Promise<boolean> {
+export function trashMap(id: string, { now = new Date(), dir = MAPS_DIR }: Options = {}): Promise<boolean> {
   return inTurn(id, async () => {
     const file = fileOf(dir, id);
     if (!file) return false;
-    await fs.mkdir(path.join(dir, TRASH), { recursive: true });
-    return fs.rename(file, path.join(dir, TRASH, `${id}.json`)).then(
-      () => true,
-      () => false,
-    );
+    const trash = path.join(dir, TRASH);
+    return onDisk(async () => {
+      await fs.mkdir(trash, { recursive: true });
+      await fs.rename(file, path.join(trash, `${id}.${now.getTime()}.json`));
+      return true;
+    }, false);
   });
 }

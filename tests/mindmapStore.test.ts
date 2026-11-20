@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { MAX_BODY, readMapBody } from '../lib/mindmap/request.ts';
-import { createMap, listMaps, readMap, saveMap, trashMap } from '../lib/mindmap/store.ts';
+import { createMap, listMaps, MAX_MAPS, readMap, saveMap, trashMap, UnreadableMapError } from '../lib/mindmap/store.ts';
 import { newNode } from '../lib/mindmap/tree.ts';
 
 const folder = () => fs.mkdtemp(path.join(os.tmpdir(), 'cartes-'));
@@ -18,7 +18,7 @@ function map(title: string) {
 
 test('une carte créée se relit telle quelle, tâches comprises', async () => {
   const dir = await folder();
-  const created = await createMap(map('Voyage'), { now: at(0), dir });
+  const created = (await createMap(map('Voyage'), { now: at(0), dir }))!;
   const read = await readMap(created.id, { dir });
   assert.equal(read?.revision, 1);
   assert.equal(read?.root.text, 'Voyage');
@@ -28,7 +28,7 @@ test('une carte créée se relit telle quelle, tâches comprises', async () => {
 test('la liste donne le titre de chaque carte, la plus récemment modifiée d’abord', async () => {
   const dir = await folder();
   assert.deepEqual(await listMaps({ dir }), []);
-  const first = await createMap(map('Ancienne'), { now: at(0), dir });
+  const first = (await createMap(map('Ancienne'), { now: at(0), dir }))!;
   await createMap(map('Récente'), { now: at(5), dir });
   assert.deepEqual((await listMaps({ dir })).map((entry) => entry.title), ['Récente', 'Ancienne']);
   await saveMap(first.id, map('Ancienne revue'), 1, { now: at(9), dir });
@@ -37,7 +37,7 @@ test('la liste donne le titre de chaque carte, la plus récemment modifiée d’
 
 test('enregistrer avance la révision ; une révision dépassée est refusée et rend la carte actuelle', async () => {
   const dir = await folder();
-  const { id } = await createMap(map('Voyage'), { now: at(0), dir });
+  const { id } = (await createMap(map('Voyage'), { now: at(0), dir }))!;
   const saved = await saveMap(id, map('Voyage au Japon'), 1, { now: at(1), dir });
   assert.equal(saved?.saved, true);
   assert.equal(saved?.map.revision, 2);
@@ -49,7 +49,7 @@ test('enregistrer avance la révision ; une révision dépassée est refusée et
 
 test('deux enregistrements simultanés de la même révision : un seul passe', async () => {
   const dir = await folder();
-  const { id } = await createMap(map('Voyage'), { now: at(0), dir });
+  const { id } = (await createMap(map('Voyage'), { now: at(0), dir }))!;
   const results = await Promise.all([saveMap(id, map('A'), 1, { now: at(1), dir }), saveMap(id, map('B'), 1, { now: at(1), dir })]);
   assert.deepEqual(results.map((result) => result?.saved).sort(), [false, true]);
 });
@@ -64,21 +64,49 @@ test('une carte inconnue ou un identifiant qui sort du dossier ne lit ni n’éc
   assert.deepEqual(await listMaps({ dir }), []);
 });
 
-test('un fichier abîmé est ignoré par la liste au lieu de tout bloquer', async () => {
+test('un fichier abîmé est ignoré par la liste, et signalé comme illisible, non comme absent, quand on l’ouvre', async () => {
   const dir = await folder();
   await createMap(map('Saine'), { now: at(0), dir });
-  await fs.writeFile(path.join(dir, '11111111-1111-4111-8111-111111111111.json'), '{ pas du json');
+  const broken = '11111111-1111-4111-8111-111111111111';
+  await fs.writeFile(path.join(dir, `${broken}.json`), '{ pas du json');
   assert.deepEqual((await listMaps({ dir })).map((entry) => entry.title), ['Saine']);
+  await assert.rejects(readMap(broken, { dir }), UnreadableMapError);
+  await assert.rejects(saveMap(broken, map('x'), 1, { now: at(1), dir }), UnreadableMapError);
+});
+
+test('un stockage inaccessible est une erreur sans chemin de fichier, pas une liste vide', async () => {
+  const dir = path.join(await folder(), 'fichier');
+  await fs.writeFile(dir, 'pas un dossier');
+  const silenced = console.error;
+  console.error = () => {};
+  try {
+    await assert.rejects(listMaps({ dir }), { message: 'Stockage des cartes indisponible' });
+    await assert.rejects(createMap(map('x'), { now: at(0), dir }), { message: 'Stockage des cartes indisponible' });
+  } finally {
+    console.error = silenced;
+  }
+});
+
+test('au-delà du nombre maximal de cartes, la création est refusée', async () => {
+  const dir = await folder();
+  const file = (index: number) => path.join(dir, `00000000-0000-4000-8000-${String(index).padStart(12, '0')}.json`);
+  await Promise.all(Array.from({ length: MAX_MAPS }, (_, index) => fs.writeFile(file(index), '{}')));
+  assert.equal(await createMap(map('De trop'), { now: at(0), dir }), null);
+  await fs.rm(file(0));
+  assert.notEqual(await createMap(map('Passe'), { now: at(0), dir }), null);
 });
 
 test('supprimer met la carte à la corbeille : elle quitte la liste mais son fichier reste', async () => {
   const dir = await folder();
-  const { id } = await createMap(map('Voyage'), { now: at(0), dir });
-  assert.equal(await trashMap(id, { dir }), true);
+  const { id } = (await createMap(map('Voyage'), { now: at(0), dir }))!;
+  assert.equal(await trashMap(id, { now: at(2), dir }), true);
   assert.deepEqual(await listMaps({ dir }), []);
   assert.equal(await readMap(id, { dir }), null);
   assert.equal((await fs.readdir(path.join(dir, 'corbeille'))).length, 1);
   assert.equal(await trashMap(id, { dir }), false);
+  await fs.copyFile(path.join(dir, 'corbeille', (await fs.readdir(path.join(dir, 'corbeille')))[0]), path.join(dir, `${id}.json`));
+  assert.equal(await trashMap(id, { now: at(3), dir }), true);
+  assert.equal((await fs.readdir(path.join(dir, 'corbeille'))).length, 2);
 });
 
 const post = (body: string, headers: Record<string, string> = {}) =>
