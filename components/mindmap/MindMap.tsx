@@ -432,7 +432,7 @@ function MapCanvas({
       }}
       onDoubleClick={(event) => {
         const id = nodeIdAt(event.target);
-        if (id) send({ type: 'edit', id });
+        if (id && !(event.target as Element).closest('button')) send({ type: 'edit', id });
       }}
     >
       <div
@@ -682,6 +682,7 @@ function FoldToggle({
     <button
       type="button"
       title={node.collapsed ? 'Déplier' : 'Replier'}
+      data-id={node.id}
       className={`absolute bg-panel ${shape}${faded ? FADED : ''}`}
       style={
         {

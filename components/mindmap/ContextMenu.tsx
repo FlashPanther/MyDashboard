@@ -44,6 +44,7 @@ export function ContextMenu({
       style={place}
       onKeyDown={(event) => {
         if (event.key === 'Escape') return onClose();
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
         const forward = event.key === 'ArrowDown' || (event.key === 'Tab' && !event.shiftKey);
         const backward = event.key === 'ArrowUp' || (event.key === 'Tab' && event.shiftKey);
         if (!forward && !backward) return;
