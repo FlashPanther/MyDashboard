@@ -49,14 +49,16 @@ function Editor({ initial }: { initial: MapNode }) {
   );
 
   const { root, hideDone } = state;
-  const shown = useMemo(() => shownRoot({ root, hideDone }), [root, hideDone]);
+  const shown = shownRoot(state);
   const progress = useMemo(() => taskProgress(root), [root]);
-  const hidden = countDescendants(root) - countDescendants(shown);
+  const hidden = useMemo(() => countDescendants(root) - countDescendants(shown), [root, shown]);
   const mode = modeOf(state);
   const latest = useRef(state);
   useEffect(() => {
     latest.current = state;
   }, [state]);
+
+  useEffect(() => writeStored(HIDE_DONE_KEY, hideDone ? '1' : '0'), [hideDone]);
 
   useEffect(() => {
     const saved = serialize(root);
@@ -127,10 +129,7 @@ function Editor({ initial }: { initial: MapNode }) {
         {progress.size > 0 && (
           <ToolbarButton
             pressed={hideDone}
-            onPress={() => {
-              writeStored(HIDE_DONE_KEY, hideDone ? '0' : '1');
-              send({ type: 'hideDone', hide: !hideDone });
-            }}
+            onPress={() => send({ type: 'hideDone', hide: !hideDone })}
           >
             {hideDone ? `Tâches faites masquées (${hidden} nœud${hidden > 1 ? 's' : ''})` : 'Masquer les tâches faites'}
           </ToolbarButton>

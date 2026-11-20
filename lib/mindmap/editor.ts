@@ -109,8 +109,7 @@ function step(state: EditorState, action: EditorAction): EditorState {
     case 'blur':
       return action.id === state.editing?.id ? finishEditing(state, action.draft) : state;
     case 'toggle': {
-      const settled = finishEditing(state, action.draft);
-      return commit(settled, toggleCollapsed(settled.root, action.id), action.id);
+      return fold(finishEditing(state, action.draft), action.id, (root) => toggleCollapsed(root, action.id));
     }
     case 'task':
     case 'tick': {
@@ -128,8 +127,7 @@ function step(state: EditorState, action: EditorAction): EditorState {
     case 'hideDone':
       return { ...finishEditing(state, action.draft), hideDone: action.hide };
     case 'foldBranch': {
-      const settled = finishEditing(state, action.draft);
-      return commit(settled, foldBranch(settled.root, action.id, action.collapsed), action.id);
+      return fold(finishEditing(state, action.draft), action.id, (root) => foldBranch(root, action.id, action.collapsed));
     }
     case 'mark': {
       const settled = finishEditing(state, action.draft);
@@ -157,6 +155,18 @@ function markTasks(state: EditorState, kind: 'task' | 'tick', ids: string[], sel
   return commit(state, (kind === 'task' ? toggleTask : toggleDone)(state.root, ids), selected);
 }
 
+function fold(state: EditorState, id: string, alter: (root: MapNode) => MapNode): EditorState {
+  const foldable = find(shownRoot(state), id)?.children.length;
+  return commit(state, foldable ? alter(state.root) : state.root, id);
+}
+
+function removeShown(root: MapNode, hideDone: boolean, ids: string[]): { root: MapNode; next: string | null } {
+  const drop = (tree: MapNode) => (ids.length > 1 ? removeAll(tree, new Set(ids)) : remove(tree, ids[0]));
+  const whole = drop(root);
+  const shown = shownRoot({ root, hideDone });
+  return shown === root ? whole : { root: whole.root, next: drop(shown).next };
+}
+
 function targetOf(state: EditorState): string {
   return state.selected ?? state.root.id;
 }
@@ -179,7 +189,7 @@ function finishEditing(state: EditorState, draft: string | undefined): EditorSta
   let root = rename(state.root, id, text);
   let selected: string | null = id;
   if (isEmptyLeaf(find(root, id)!)) {
-    const removal = remove(root, id);
+    const removal = removeShown(root, state.hideDone, [id]);
     root = removal.root;
     selected = removal.next ?? id;
   }
@@ -214,10 +224,10 @@ function runCommand(
       return commit(settled, node && isEmptyLeaf(node) ? remove(root, left).root : root, parent.id);
     }
     case 'toggle':
-      return selected ? commit(settled, toggleCollapsed(root, selected), selected) : settled;
+      return selected ? fold(settled, selected, (tree) => toggleCollapsed(tree, selected)) : settled;
     case 'delete': {
       if (!selected) return settled;
-      const removal = settled.group.length ? removeAll(root, new Set(settled.group)) : remove(root, selected);
+      const removal = removeShown(root, settled.hideDone, settled.group.length ? settled.group : [selected]);
       return commit(settled, removal.root, removal.next ?? selected);
     }
     case 'task':

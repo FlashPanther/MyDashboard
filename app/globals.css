@@ -130,8 +130,9 @@
   }
 
   .action[aria-pressed='true'] {
-    border-color: var(--color-sky);
-    color: var(--color-sky);
+    border-color: var(--color-ink);
+    background: var(--color-ink);
+    color: var(--color-ground);
   }
 
   .panel {

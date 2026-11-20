@@ -451,3 +451,24 @@ test('cocher un groupe quand les tâches faites sont masquées le fait disparaî
   assert.equal(selectedText(done), 'Idée');
   assert.equal(modeOf(run(done, 'undo')), 'selected');
 });
+
+test('quand les tâches faites sont masquées, supprimer un nœud sélectionne son voisin visible, pas une tâche cachée', () => {
+  const base = typed(sample(), ['sibling'], ['stop', 'C']);
+  const b = base.root.children[1].id;
+  const hidden = reduce(run(run(reduce(base, { type: 'select', id: b }), 'task'), 'tick'), { type: 'hideDone', hide: true });
+  const onA = run(hidden, 'right');
+  assert.equal(selectedText(onA), 'A');
+  const removed = run(onA, 'delete');
+  assert.equal(outline(removed.root), 'Idée(B C)');
+  assert.equal(selectedText(removed), 'C');
+});
+
+test('replier un nœud dont tous les enfants sont masqués ne fait rien', () => {
+  const state = run(run(hiding(), 'up'), 'right');
+  const ids = find(state.root, state.root.children[0].id)!.children.map((node) => node.id);
+  const done = run(run(reduce(state, { type: 'mark', ids }), 'task'), 'tick');
+  assert.equal(selectedText(done), 'A');
+  const folded = run(done, 'toggle');
+  assert.equal(folded.root, done.root);
+  assert.equal(folded.past.length, done.past.length);
+});
