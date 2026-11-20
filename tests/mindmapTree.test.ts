@@ -8,6 +8,7 @@ import {
   serialize,
   toggleCollapsed,
   visibleNodes,
+  withinLimits,
   type MapNode,
 } from '../lib/mindmap/tree.ts';
 
@@ -159,4 +160,12 @@ test('une carte de quelques centaines de nœuds sur dix niveaux est acceptée', 
     chain = { text: 'x', children: [chain, ...Array.from({ length: 40 }, () => ({ text: 'y', children: [] }))] };
   }
   assert.equal(parse(JSON.stringify({ root: chain })).text, 'x');
+});
+
+test('toute carte dans les limites se relit après export', () => {
+  let chain = newNode('fond');
+  for (let level = 0; level < 100; level++) chain = { ...newNode('x'), children: [chain] };
+  assert.equal(withinLimits(chain), true);
+  assert.equal(parse(serialize(chain)).text, 'x');
+  assert.equal(withinLimits({ ...newNode('y'), children: [chain] }), false);
 });

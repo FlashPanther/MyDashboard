@@ -78,14 +78,18 @@ function Editor({ initial }: { initial: MapNode }) {
 
   const { root } = state;
   const mode = modeOf(state);
+  const latest = useRef(state);
   useEffect(() => {
-    if (mode === 'editing') return;
+    latest.current = state;
+  }, [state]);
+
+  useEffect(() => {
     const saved = serialize(root);
     writeStored(STORAGE_KEY, saved);
     if (readStored(STORAGE_KEY) !== saved) {
       setNotice("Enregistrement impossible dans ce navigateur : exporte la carte pour la garder.");
     }
-  }, [root, mode]);
+  }, [root]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -97,7 +101,12 @@ function Editor({ initial }: { initial: MapNode }) {
       if (isZoom(command)) canvas.current?.zoom(command);
       else send({ type: 'command', command, key: event.key });
     };
-    const onLeave = () => send({ type: 'command', command: 'stop' });
+    // À la fermeture, rien ne garantit un rendu React : la saisie en cours est validée et écrite sur-le-champ.
+    const onLeave = () => {
+      const draft = editingElement.current?.innerText;
+      writeStored(STORAGE_KEY, serialize(reduce(latest.current, { type: 'command', command: 'stop', draft }).root));
+      send({ type: 'command', command: 'stop' });
+    };
     window.addEventListener('keydown', onKey);
     window.addEventListener('pagehide', onLeave);
     return () => {

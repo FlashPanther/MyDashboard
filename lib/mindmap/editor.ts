@@ -11,6 +11,7 @@ import {
   rename,
   sameMap,
   toggleCollapsed,
+  withinLimits,
   type MapNode,
 } from './tree.ts';
 
@@ -101,7 +102,9 @@ function startEditing(state: EditorState, initial: string | null, before: Snapsh
 function finishEditing(state: EditorState, draft: string | undefined): EditorState {
   if (!state.editing) return state;
   const { id, before } = state.editing;
-  let root = rename(state.root, id, typedText(state, draft));
+  const text = typedText(state, draft);
+  if (text === '' && !find(before.root, id)) return { ...state, ...before, editing: null };
+  let root = rename(state.root, id, text);
   let selected: string | null = id;
   if (isEmptyLeaf(find(root, id)!)) {
     const removal = remove(root, id);
@@ -124,7 +127,7 @@ function runCommand(
     if (text === '') return state.editing ? state : startEditing(state, null);
     const settled = finishEditing(state, draft);
     const root = INSERTS[command](settled.root, targetOf(settled), newId);
-    if (root === settled.root) return settled;
+    if (root === settled.root || !withinLimits(root)) return settled;
     return startEditing({ ...settled, root, selected: newId }, null, snapshot(settled));
   }
 

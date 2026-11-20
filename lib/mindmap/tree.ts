@@ -53,6 +53,13 @@ export function sameMap(a: MapNode, b: MapNode): boolean {
   return a === b || JSON.stringify(a) === JSON.stringify(b);
 }
 
+export function withinLimits(root: MapNode): boolean {
+  let count = 0;
+  const fits = (node: MapNode, depth: number): boolean =>
+    depth <= MAX_DEPTH && ++count <= MAX_NODES && node.children.every((child) => fits(child, depth + 1));
+  return fits(root, 0);
+}
+
 export function visibleChildren(node: MapNode): MapNode[] {
   return node.collapsed ? [] : node.children;
 }

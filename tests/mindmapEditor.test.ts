@@ -234,3 +234,34 @@ test('le mode suit la saisie et la sélection', () => {
   assert.equal(modeOf(run(start(), 'child')), 'editing');
   assert.equal(modeOf(run(start(), 'deselect')), 'idle');
 });
+
+test('un parent inséré puis abandonné vide est retiré sans trace, et l’enfant retrouve sa place', () => {
+  const selected = typed(start(), ['child'], ['stop', 'A']);
+  const abandoned = typed(selected, ['parent'], ['stop', '']);
+  assert.equal(outline(abandoned.root), 'Idée(A)');
+  assert.equal(abandoned.past.length, selected.past.length);
+  assert.equal(selectedText(abandoned), 'A');
+});
+
+test('un enfant abandonné vide ne laisse pas sa branche dépliée ni d’étape d’annulation', () => {
+  const folded = typed(start(), ['child'], ['child', 'A'], ['stop', 'A1'], ['left'], ['toggle']);
+  const abandoned = typed(folded, ['child'], ['stop', '']);
+  assert.equal(outline(abandoned.root), 'Idée(A[+](A1))');
+  assert.equal(abandoned.root, folded.root);
+  assert.equal(abandoned.past.length, folded.past.length);
+});
+
+test('un nœud existant vidé de son texte disparaît, en une étape qui s’annule', () => {
+  const selected = typed(start(), ['child'], ['stop', 'A']);
+  const emptied = typed(selected, ['edit'], ['stop', '']);
+  assert.equal(outline(emptied.root), 'Idée');
+  assert.equal(outline(run(emptied, 'undo').root), 'Idée(A)');
+});
+
+test('la carte ne dépasse pas la profondeur que sa relecture accepte', () => {
+  let state = start();
+  for (let level = 0; level < 105; level++) state = typed(state, ['child'], ['stop', 'x']);
+  let depth = 0;
+  for (let node = state.root; node.children.length; node = node.children[0]) depth++;
+  assert.equal(depth, 100);
+});
