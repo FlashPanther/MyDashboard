@@ -51,8 +51,8 @@ export function carried(boxes: Map<string, Box>, ids: Iterable<string>, anchorId
   const axis = 2 * anchor.x + anchor.width;
   const result = new Map<string, Box>();
   for (const id of ids) {
-    const box = boxes.get(id);
-    if (box) result.set(id, { ...box, x: (mirrored ? axis - box.x - box.width : box.x) + dx, y: box.y + dy });
+    const box = boxes.get(id)!;
+    result.set(id, { ...box, x: (mirrored ? axis - box.x - box.width : box.x) + dx, y: box.y + dy });
   }
   return result;
 }

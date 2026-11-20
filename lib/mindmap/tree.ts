@@ -169,12 +169,24 @@ export function branchIds(root: MapNode, ids: string[]): Set<string> {
   return new Set(branches.flatMap((branch) => visibleNodes(branch).map(({ node }) => node.id)));
 }
 
-export function move(root: MapNode, ids: string[], parentId: string, beforeId: string | null, side: Side): MapNode {
-  const inside = (id: string): boolean => {
-    const node = find(root, id);
-    return !node || node === root || find(node, parentId) !== null;
+export function topmost(root: MapNode, ids: ReadonlySet<string>): string[] {
+  const result: string[] = [];
+  const visit = (node: MapNode): void => {
+    for (const child of node.children) {
+      if (ids.has(child.id)) result.push(child.id);
+      else visit(child);
+    }
   };
-  if (!find(root, parentId) || ids.some(inside) || (beforeId !== null && ids.includes(beforeId))) return root;
+  visit(root);
+  return result;
+}
+
+export function move(root: MapNode, moved: string[], parentId: string, beforeId: string | null, side: Side): MapNode {
+  const ids = topmost(root, new Set(moved));
+  const stuck = (id: string): boolean => find(find(root, id)!, parentId) !== null;
+  if (ids.length === 0 || !find(root, parentId) || ids.some(stuck) || (beforeId !== null && ids.includes(beforeId))) {
+    return root;
+  }
   const next = change(root, (draft) => {
     const nodes = ids.map((id) => {
       const { parent, index } = locate(draft, id)!;

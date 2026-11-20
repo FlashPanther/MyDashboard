@@ -41,3 +41,7 @@ export function reveal(view: View, box: Box, width: number, height: number, marg
   const dy = shift(view.y + box.y * view.scale, box.height * view.scale, height);
   return dx === 0 && dy === 0 ? view : { ...view, x: view.x + dx, y: view.y + dy };
 }
+
+export function toWorld(view: View, x: number, y: number): { x: number; y: number } {
+  return { x: (x - view.x) / view.scale, y: (y - view.y) / view.scale };
+}

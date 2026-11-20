@@ -157,6 +157,11 @@ test('un groupe déplacé garde son ordre', () => {
   assert.equal(outline(move(root, ['b', 'c'], 'a', 'a1', 'right')), 'root(a(b c a1))');
 });
 
+test('un nœud déplacé avec son parent le suit, sans être déplacé deux fois', () => {
+  const { root } = scene();
+  assert.equal(outline(move(root, ['a1', 'a', 'c'], 'b', null, 'right')), 'root(b(a(a1) c))');
+});
+
 test('les déplacements impossibles ou sans effet rendent la même carte', () => {
   const { root } = scene();
   assert.equal(move(root, ['root'], 'a', null, 'right'), root);
@@ -164,6 +169,7 @@ test('les déplacements impossibles ou sans effet rendent la même carte', () =>
   assert.equal(move(root, ['a'], 'a1', null, 'right'), root);
   assert.equal(move(root, ['a'], 'root', 'a', 'right'), root);
   assert.equal(move(root, ['a'], 'inconnu', null, 'right'), root);
+  assert.equal(move(root, ['inconnu'], 'a', null, 'right'), root);
   assert.equal(move(root, ['b'], 'root', 'c', 'right'), root);
 });
 
