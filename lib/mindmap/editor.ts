@@ -92,7 +92,8 @@ function step(state: EditorState, action: EditorAction): EditorState {
     case 'task':
     case 'tick': {
       const settled = finishEditing(state, action.draft);
-      return markTasks(settled, action.type, action.ids, action.ids[0] ?? settled.selected);
+      const ids = action.ids.filter((id) => find(settled.root, id));
+      return markTasks(settled, action.type, ids, ids[0] ?? settled.selected);
     }
     case 'replace':
       return commit(finishEditing(state, action.draft), action.root, action.root.id);

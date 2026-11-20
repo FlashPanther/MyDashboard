@@ -408,3 +408,12 @@ test('le menu transforme en tâche le nœud visé, même s’il n’est pas la s
   assert.equal(marked.selected, a);
   assert.equal(modeOf(marked), 'selected');
 });
+
+test('cocher la case d’une tâche vidée pendant sa saisie la retire sans laisser de sélection fantôme', () => {
+  const marked = run(sample(), 'task');
+  const id = marked.selected!;
+  const emptied = reduce(run(marked, 'edit'), { type: 'tick', ids: [id], draft: '' });
+  assert.equal(find(emptied.root, id), null);
+  assert.notEqual(selectedText(emptied), 'introuvable');
+  assert.equal(outline(run(emptied, 'child').root), 'Idée(A(A1 A2 ∅))');
+});
