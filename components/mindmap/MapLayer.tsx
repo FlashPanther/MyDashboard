@@ -5,9 +5,11 @@ import { TaskBox } from '@/components/mindmap/TaskBox';
 import type { Send } from '@/components/mindmap/types';
 import type { Editing } from '@/lib/mindmap/editor';
 import { linkPath, type Box } from '@/lib/mindmap/layout';
-import { branchesOn, countDescendants, SIDES, taskProgress, type MapNode, type Side, type VisibleNode } from '@/lib/mindmap/tree';
+import { branchesOn, countDescendants, SIDES, taskProgress, type MapNode, type Progress, type Side, type VisibleNode } from '@/lib/mindmap/tree';
 
 type Observe = (element: HTMLElement | null) => (() => void) | undefined;
+
+const PILL = 'rounded-full border border-rule px-1.5 font-mono';
 
 export const MapLayer = memo(function MapLayer({
   root,
@@ -89,21 +91,15 @@ export const MapLayer = memo(function MapLayer({
 
       {visible.map(({ node, depth, side }) => {
         const within = progress.get(node.id);
-        if (!within) return null;
-        const box = boxes.get(node.id)!;
-        const corner = depth === 0 ? 0.5 : side === 'left' ? 0 : 1;
-        return (
-          <span
+        return within ? (
+          <ProgressBadge
             key={node.id}
-            title={`${within.done} tâche${within.done > 1 ? 's' : ''} faite${within.done > 1 ? 's' : ''} sur ${within.total} dans cette branche`}
-            className={`pointer-events-none absolute rounded-full border border-rule bg-panel px-1.5 font-mono text-[10px] leading-[14px] ${
-              within.done === within.total ? 'text-sky' : 'text-muted'
-            }${lifted.has(node.id) ? FADED : ''}`}
-            style={{ left: box.x + box.width * corner, top: box.y, transform: `translate(${-100 * corner}%, -50%)` }}
-          >
-            {within.done}/{within.total}
-          </span>
-        );
+            progress={within}
+            box={boxes.get(node.id)!}
+            anchor={depth === 0 ? 'centre' : side}
+            faded={lifted.has(node.id)}
+          />
+        ) : null;
       })}
 
       {visible.flatMap(({ node, depth, colour, side }) => {
@@ -164,6 +160,35 @@ function EditedNode({
   );
 }
 
+function ProgressBadge({
+  progress: { done, total },
+  box,
+  anchor,
+  faded,
+}: {
+  progress: Progress;
+  box: Box;
+  anchor: Side | 'centre';
+  faded: boolean;
+}) {
+  const place = {
+    left: { left: box.x, transform: 'translate(0, -50%)' },
+    centre: { left: box.x + box.width / 2, transform: 'translate(-50%, -50%)' },
+    right: { left: box.x + box.width, transform: 'translate(-100%, -50%)' },
+  }[anchor];
+  return (
+    <span
+      title={`Tâches faites dans cette branche : ${done} sur ${total}`}
+      className={`pointer-events-none absolute bg-panel ${PILL} text-[10px] leading-[14px] ${
+        done === total ? 'text-sky' : 'text-muted'
+      }${faded ? FADED : ''}`}
+      style={{ ...place, top: box.y }}
+    >
+      {done}/{total}
+    </span>
+  );
+}
+
 function FoldToggle({
   node,
   box,
@@ -181,7 +206,7 @@ function FoldToggle({
 }) {
   const gap = node.collapsed ? 6 : 3;
   const shape = node.collapsed
-    ? 'h-5 min-w-5 rounded-full border border-rule px-1.5 font-mono text-xs leading-[18px] text-muted hover:border-ink hover:text-ink'
+    ? `${PILL} h-5 min-w-5 text-xs leading-[18px] text-muted hover:border-ink hover:text-ink`
     : 'h-3 w-3 rounded-full border-2 border-[color:var(--branch,var(--color-ink))] hover:bg-[color:var(--branch,var(--color-ink))]';
   return (
     <button
