@@ -46,7 +46,12 @@ export function MindMap() {
   useEffect(() => setRoot(storedMap()), []);
 
   useEffect(() => {
-    if (root) writeStored(STORAGE_KEY, serialize(root));
+    if (!root) return;
+    const saved = serialize(root);
+    writeStored(STORAGE_KEY, saved);
+    if (readStored(STORAGE_KEY) !== saved) {
+      setNotice("Enregistrement impossible dans ce navigateur : exporte la carte pour la garder.");
+    }
   }, [root]);
 
   const toggle = useCallback((id: string) => setRoot((current) => current && toggleCollapsed(current, id)), []);

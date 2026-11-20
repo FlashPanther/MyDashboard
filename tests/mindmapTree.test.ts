@@ -143,3 +143,20 @@ test('un nœud marqué replié mais sans enfant est lu déplié', () => {
   const root = parse(JSON.stringify({ root: { text: 'r', children: [{ text: 'a', collapsed: true, children: [] }] } }));
   assert.equal(root.children[0].collapsed, false);
 });
+
+test('une carte trop profonde ou trop grande est refusée à la lecture', () => {
+  let chain: unknown = { text: 'fond', children: [] };
+  for (let level = 0; level < 200; level++) chain = { text: 'x', children: [chain] };
+  assert.throws(() => parse(JSON.stringify({ root: chain })), /trop grande/);
+
+  const wide = { text: 'r', children: Array.from({ length: 6000 }, () => ({ text: 'x', children: [] })) };
+  assert.throws(() => parse(JSON.stringify({ root: wide })), /trop grande/);
+});
+
+test('une carte de quelques centaines de nœuds sur dix niveaux est acceptée', () => {
+  let chain: unknown = { text: 'fond', children: [] };
+  for (let level = 0; level < 10; level++) {
+    chain = { text: 'x', children: [chain, ...Array.from({ length: 40 }, () => ({ text: 'y', children: [] }))] };
+  }
+  assert.equal(parse(JSON.stringify({ root: chain })).text, 'x');
+});

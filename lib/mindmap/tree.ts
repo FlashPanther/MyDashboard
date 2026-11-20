@@ -13,6 +13,9 @@ export type VisibleNode = { node: MapNode; parentId: string | null; depth: numbe
 
 export const SIDES: readonly Side[] = ['right', 'left'];
 
+const MAX_DEPTH = 100;
+const MAX_NODES = 5000;
+
 export function newNode(text = '', id: string = crypto.randomUUID()): MapNode {
   return { id, text, collapsed: false, children: [] };
 }
@@ -84,6 +87,7 @@ function parseNode(value: unknown, depth: number, seen: Set<string>): MapNode {
   if (typeof value !== 'object' || value === null) throw new Error('Nœud invalide');
   const { id, text, collapsed, children, colour, side } = value as Record<string, unknown>;
   if (typeof text !== 'string' || !Array.isArray(children)) throw new Error('Nœud invalide');
+  if (depth > MAX_DEPTH || seen.size >= MAX_NODES) throw new Error('Carte trop grande');
   const uniqueId = typeof id === 'string' && id !== '' && !seen.has(id) ? id : crypto.randomUUID();
   seen.add(uniqueId);
   const kept = children
