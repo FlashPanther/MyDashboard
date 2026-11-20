@@ -121,6 +121,8 @@ function step(state: EditorState, action: EditorAction): EditorState {
       return commit(finishEditing(state, action.draft), action.root, action.root.id);
     case 'move': {
       const settled = finishEditing(state, action.draft);
+      const shown = shownRoot(settled);
+      if (move(shown, action.ids, action.parentId, action.beforeId, action.side) === shown) return settled;
       const root = move(settled.root, action.ids, action.parentId, action.beforeId, action.side);
       return withinLimits(root) ? commit(settled, root, settled.selected) : settled;
     }

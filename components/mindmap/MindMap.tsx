@@ -126,7 +126,7 @@ function Editor({ initial }: { initial: MapNode }) {
         <ToolbarButton onPress={() => open(blankMap())}>Nouvelle carte</ToolbarButton>
         <ToolbarButton onPress={() => fileInput.current?.click()}>Importer</ToolbarButton>
         <ToolbarButton onPress={() => exportFile(state.root)}>Exporter</ToolbarButton>
-        {progress.size > 0 && (
+        {(hideDone || progress.size > 0) && (
           <ToolbarButton
             pressed={hideDone}
             onPress={() => send({ type: 'hideDone', hide: !hideDone })}

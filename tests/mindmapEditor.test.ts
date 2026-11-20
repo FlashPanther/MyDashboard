@@ -472,3 +472,14 @@ test('replier un nœud dont tous les enfants sont masqués ne fait rien', () => 
   assert.equal(folded.root, done.root);
   assert.equal(folded.past.length, done.past.length);
 });
+
+test('reposer un nœud à sa place visible ne déplace pas les tâches masquées et ne crée pas d’étape d’annulation', () => {
+  const base = typed(sample(), ['sibling'], ['stop', 'C']);
+  const [a, b, c] = base.root.children.map((node) => node.id);
+  const hidden = reduce(run(run(reduce(base, { type: 'select', id: b }), 'task'), 'tick'), { type: 'hideDone', hide: true });
+  const dropped = reduce(hidden, { type: 'move', ids: [a], parentId: 'root', beforeId: c, side: 'right' });
+  assert.equal(dropped.root, hidden.root);
+  assert.equal(dropped.past.length, hidden.past.length);
+  const moved = reduce(hidden, { type: 'move', ids: [c], parentId: 'root', beforeId: a, side: 'right' });
+  assert.equal(outline(moved.root), 'Idée(C A(A1 A2) B)');
+});
