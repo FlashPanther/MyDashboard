@@ -16,6 +16,9 @@ Règle : tout nœud-tâche existe dans Google Tasks ; toutes les tâches Google 
     intacte (c'est ce qui rendra l'annulation simple).
   - `layout.ts` : la place de chaque nœud, à droite et à gauche de la racine.
   - `view.ts` : le zoom et le cadrage.
+  - `keymap.ts` : quelle touche donne quelle commande.
+  - `editor.ts` : l'état de l'éditeur (carte, sélection, saisie en cours, historique) et toutes ses règles :
+    nœud vide qui disparaît, étapes d'annulation, sélection après une suppression.
 - `components/mindmap/` : l'affichage, en composants React.
 - `app/carte/` : la page plein écran, ouverte depuis l'en-tête du tableau.
 
@@ -27,7 +30,7 @@ Reconstruction de l'éditeur (il existait à part, on le rebâtit ici avec les m
 
 - [x] **1. Voir une carte** : page plein écran, import et export d'un fichier, zoom et défilement à la molette,
   replier et déplier une branche. La carte est gardée dans le navigateur.
-- [ ] **2. Éditer au clavier** : créer, renommer, supprimer, se déplacer, annuler, avec les raccourcis des cartes
+- [x] **2. Éditer au clavier** : créer, renommer, supprimer, se déplacer, annuler, avec les raccourcis des cartes
   mentales de Whimsical.
 - [ ] **3. Glisser les nœuds** : réordonner, changer de parent, passer de l'autre côté de la racine.
 - [ ] **4. Sélection au cadre** : supprimer ou déplacer plusieurs nœuds ensemble.

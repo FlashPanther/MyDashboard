@@ -9,6 +9,8 @@ export type MapNode = {
   side?: 'left';
 };
 
+export type Direction = 'left' | 'right' | 'up' | 'down';
+
 export type VisibleNode = { node: MapNode; parentId: string | null; depth: number; colour: number; side: Side };
 
 export const SIDES: readonly Side[] = ['right', 'left'];
@@ -18,6 +20,37 @@ const MAX_NODES = 5000;
 
 export function newNode(text = '', id: string = crypto.randomUUID()): MapNode {
   return { id, text, collapsed: false, children: [] };
+}
+
+export function find(root: MapNode, id: string): MapNode | null {
+  if (root.id === id) return root;
+  for (const child of root.children) {
+    const found = find(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function locate(root: MapNode, id: string): { parent: MapNode; index: number } | null {
+  const index = root.children.findIndex((child) => child.id === id);
+  if (index >= 0) return { parent: root, index };
+  for (const child of root.children) {
+    const found = locate(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+export function parentOf(root: MapNode, id: string): MapNode | null {
+  return locate(root, id)?.parent ?? null;
+}
+
+export function isEmptyLeaf(node: MapNode): boolean {
+  return node.text.trim() === '' && node.children.length === 0;
+}
+
+export function sameMap(a: MapNode, b: MapNode): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
 }
 
 export function visibleChildren(node: MapNode): MapNode[] {
@@ -53,6 +86,89 @@ export function toggleCollapsed(root: MapNode, id: string): MapNode {
   if (root.id === id) return root.children.length ? { ...root, collapsed: !root.collapsed } : root;
   const children = root.children.map((child) => toggleCollapsed(child, id));
   return children.every((child, index) => child === root.children[index]) ? root : { ...root, children };
+}
+
+function change(root: MapNode, mutate: (draft: MapNode) => void): MapNode {
+  const draft = structuredClone(root);
+  mutate(draft);
+  for (const branch of draft.children) {
+    for (const child of branch.children) stripBranchMarks(child);
+  }
+  colourBranches(draft);
+  return draft;
+}
+
+function stripBranchMarks(node: MapNode): void {
+  delete node.colour;
+  delete node.side;
+  node.children.forEach(stripBranchMarks);
+}
+
+export function addChild(root: MapNode, parentId: string, node: MapNode): MapNode {
+  if (!find(root, parentId)) return root;
+  return change(root, (draft) => {
+    const parent = find(draft, parentId)!;
+    parent.children.push(node);
+    parent.collapsed = false;
+  });
+}
+
+export function addSibling(root: MapNode, id: string, node: MapNode, where: 'above' | 'below'): MapNode {
+  if (!locate(root, id)) return root;
+  return change(root, (draft) => {
+    const { parent, index } = locate(draft, id)!;
+    const sibling = parent.children[index];
+    if (sibling.side) node.side = sibling.side;
+    parent.children.splice(where === 'above' ? index : index + 1, 0, node);
+  });
+}
+
+export function addParent(root: MapNode, id: string, node: MapNode): MapNode {
+  if (!locate(root, id)) return root;
+  return change(root, (draft) => {
+    const { parent, index } = locate(draft, id)!;
+    const child = parent.children[index];
+    if (child.colour !== undefined) node.colour = child.colour;
+    if (child.side) node.side = child.side;
+    node.children.push(child);
+    parent.children[index] = node;
+  });
+}
+
+export function remove(root: MapNode, id: string): { root: MapNode; next: string | null } {
+  const place = locate(root, id);
+  if (!place) return { root, next: null };
+  const { parent, index } = place;
+  const next = parent.children[index + 1] ?? parent.children[index - 1] ?? parent;
+  return {
+    next: next.id,
+    root: change(root, (draft) => {
+      const target = locate(draft, id)!;
+      target.parent.children.splice(target.index, 1);
+      if (target.parent.children.length === 0) target.parent.collapsed = false;
+    }),
+  };
+}
+
+export function rename(root: MapNode, id: string, text: string): MapNode {
+  const node = find(root, id);
+  if (!node || node.text === text) return root;
+  return change(root, (draft) => {
+    find(draft, id)!.text = text;
+  });
+}
+
+export function neighbour(root: MapNode, id: string, direction: Direction): string | null {
+  const visible = visibleNodes(root);
+  const current = visible.find((entry) => entry.node.id === id);
+  if (!current) return null;
+  if (direction === 'left' || direction === 'right') {
+    if (current.depth === 0) return branchesOn(root, direction)[0]?.id ?? null;
+    if (direction !== current.side) return current.parentId;
+    return visibleChildren(current.node)[0]?.id ?? null;
+  }
+  const peers = visible.filter((entry) => entry.depth === current.depth && entry.side === current.side);
+  return peers[peers.indexOf(current) + (direction === 'up' ? -1 : 1)]?.node.id ?? null;
 }
 
 function colourBranches(root: MapNode): void {

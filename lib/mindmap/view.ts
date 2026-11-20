@@ -30,3 +30,14 @@ export function zoomAt(view: View, factor: number, x: number, y: number): View {
   const ratio = scale / view.scale;
   return { scale, x: x - (x - view.x) * ratio, y: y - (y - view.y) * ratio };
 }
+
+export function reveal(view: View, box: Box, width: number, height: number, margin = 60): View {
+  const shift = (start: number, length: number, available: number): number => {
+    const kept = Math.min(margin, available / 4);
+    const overflow = Math.min(0, available - kept - (start + length));
+    return Math.max(overflow, kept - start);
+  };
+  const dx = shift(view.x + box.x * view.scale, box.width * view.scale, width);
+  const dy = shift(view.y + box.y * view.scale, box.height * view.scale, height);
+  return dx === 0 && dy === 0 ? view : { ...view, x: view.x + dx, y: view.y + dy };
+}
