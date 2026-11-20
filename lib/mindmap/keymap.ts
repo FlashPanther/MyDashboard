@@ -25,7 +25,7 @@ export function isZoom(command: Command): command is ZoomCommand {
   return command.startsWith('zoom');
 }
 
-export type Mode = 'idle' | 'selected' | 'editing';
+export type Mode = 'idle' | 'selected' | 'multiple' | 'editing';
 
 export type KeyPress = {
   key: string;
@@ -53,6 +53,7 @@ export function commandFor(press: KeyPress, mode: Mode): Command | null {
   const structural = structuralCommand(press, mod);
 
   if (mode === 'editing') return press.key === 'Escape' ? 'stop' : structural;
+  if (mode === 'multiple' && structural) return null;
   if (structural === 'sibling' && mode === 'selected') return 'edit';
   if (structural) return mode === 'idle' && structural !== 'child' ? null : structural;
 
@@ -71,8 +72,9 @@ export function commandFor(press: KeyPress, mode: Mode): Command | null {
   if (mode === 'idle') return null;
 
   if (press.key === 'Delete' || press.key === 'Backspace') return 'delete';
-  if (press.key === 'F2') return 'edit';
   if (press.key === 'Escape') return 'deselect';
+  if (mode === 'multiple') return null;
+  if (press.key === 'F2') return 'edit';
   return printable ? 'type' : null;
 }
 

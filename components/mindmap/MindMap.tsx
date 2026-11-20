@@ -19,15 +19,17 @@ import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, type Editing, type EditorAction } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, type ZoomCommand } from '@/lib/mindmap/keymap';
 import { dropAt, type Drop } from '@/lib/mindmap/drop';
-import { carried, layout, linkPath, type Box, type Size } from '@/lib/mindmap/layout';
+import { boxesIn, carried, layout, linkPath, type Box, type Size } from '@/lib/mindmap/layout';
 import {
   branchesOn,
   branchIds,
   countDescendants,
+  find,
   newNode,
   parse,
   serialize,
   SIDES,
+  topmost,
   visibleNodes,
   type MapNode,
   type Side,
@@ -48,7 +50,9 @@ type Send = (action: EditorAction) => void;
 type Observe = (element: HTMLElement | null) => (() => void) | undefined;
 type CanvasHandle = { zoom: (command: ZoomCommand) => void };
 type Carried = { ids: string[]; anchorId: string };
-type Press = Carried & { pointerId: number; x: number; y: number; startX: number; startY: number; lastX: number; lastY: number };
+type Point = { x: number; y: number };
+type Press = Carried & { id: string | null; pointerId: number; x: number; y: number; startX: number; startY: number; lastX: number; lastY: number };
+type Frame = { from: Point; to: Point };
 type Drag = Carried & { lifted: ReadonlySet<string>; dx: number; dy: number; drop: Drop | null };
 
 function blankMap(): MapNode {
@@ -105,8 +109,9 @@ function Editor({ initial }: { initial: MapNode }) {
       if (event.isComposing) return;
       if ((event.target as Element).closest('button, input, summary, a')) return;
       const command = commandFor(event, mode);
+      const held = mode === 'multiple' && (event.key === 'Tab' || event.key === 'Enter');
+      if (command || held) event.preventDefault();
       if (!command) return;
-      event.preventDefault();
       if (isZoom(command)) canvas.current?.zoom(command);
       else send({ type: 'command', command, key: event.key });
     };
@@ -179,6 +184,7 @@ function Editor({ initial }: { initial: MapNode }) {
         ref={canvas}
         root={state.root}
         selected={state.selected}
+        group={state.group}
         editing={state.editing}
         editingElement={editingElement}
         send={send}
@@ -207,6 +213,7 @@ function MapCanvas({
   ref,
   root,
   selected,
+  group,
   editing,
   editingElement,
   send,
@@ -214,6 +221,7 @@ function MapCanvas({
   ref: Ref<CanvasHandle>;
   root: MapNode;
   selected: string | null;
+  group: string[];
   editing: Editing | null;
   editingElement: RefObject<HTMLElement | null>;
   send: Send;
@@ -297,38 +305,45 @@ function MapCanvas({
   }, []);
 
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [frame, setFrame] = useState<Frame | null>(null);
   const press = useRef<Press | null>(null);
-  const dragging = drag !== null;
+  const gesturing = drag !== null || frame !== null;
   const lifted = drag?.lifted ?? NOTHING;
+  const marked = useMemo(
+    () => new Set(frame ? boxesIn(boxes, frame.from, frame.to) : group),
+    [frame, boxes, group],
+  );
 
-  const cancelDrag = useCallback(() => {
+  const cancelGesture = useCallback(() => {
     press.current = null;
     setDrag(null);
+    setFrame(null);
   }, []);
 
   useEffect(() => {
-    if (!dragging) return;
+    if (!gesturing) return;
     const onKey = (event: KeyboardEvent) => {
       event.stopPropagation();
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       event.preventDefault();
-      if (event.key === 'Escape') cancelDrag();
+      if (event.key === 'Escape') cancelGesture();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [dragging, cancelDrag]);
+  }, [gesturing, cancelGesture]);
 
   function nodeIdAt(target: EventTarget): string | null {
     return (target as Element).closest<HTMLElement>('[data-id]')?.dataset.id ?? null;
   }
 
-  function carry(): void {
+  function follow(): void {
     const pressed = press.current;
     if (!pressed || !view) return;
+    const point = worldPoint({ clientX: pressed.lastX, clientY: pressed.lastY }, view);
+    if (pressed.id === null) return setFrame({ from: { x: pressed.startX, y: pressed.startY }, to: point });
     const { ids, anchorId } = pressed;
     const origin = boxes.get(anchorId);
-    if (!origin) return cancelDrag();
-    const point = worldPoint({ clientX: pressed.lastX, clientY: pressed.lastY }, view);
+    if (!origin) return cancelGesture();
     const dx = point.x - pressed.startX;
     const dy = point.y - pressed.startY;
     const drop = dropAt(root, boxes, ids, { ...origin, x: origin.x + dx, y: origin.y + dy });
@@ -336,7 +351,7 @@ function MapCanvas({
   }
 
   useEffect(() => {
-    if (dragging) carry();
+    if (gesturing) follow();
   }, [view]);
 
   function worldPoint(event: { clientX: number; clientY: number }, at: View): { x: number; y: number } {
@@ -349,14 +364,17 @@ function MapCanvas({
       ref={viewport}
       className="relative min-h-0 flex-1 touch-none overflow-hidden"
       onPointerDown={(event) => {
-        if (!event.isPrimary || drag || (event.target as Element).closest('button')) return;
+        if (!event.isPrimary || gesturing || (event.target as Element).closest('button')) return;
         const id = nodeIdAt(event.target);
-        send({ type: 'select', id });
-        if (!view || !id || id === root.id || id === editing?.id || event.button !== 0) return;
+        const grouped = id !== null && group.includes(id);
+        if (!grouped) send({ type: 'select', id });
+        if (!view || id === editing?.id || event.button !== 0) return;
+        const ids = grouped ? topmost(root, new Set(group)) : id && id !== root.id ? [id] : [];
         const start = worldPoint(event, view);
         press.current = {
-          ids: [id],
-          anchorId: id,
+          id,
+          ids,
+          anchorId: ids.find((branch) => id && find(find(root, branch)!, id)) ?? ids[0] ?? '',
           pointerId: event.pointerId,
           x: event.clientX,
           y: event.clientY,
@@ -369,22 +387,26 @@ function MapCanvas({
       onPointerMove={(event) => {
         const pressed = press.current;
         if (pressed?.pointerId !== event.pointerId) return;
-        if (event.buttons === 0) return cancelDrag();
-        if (!drag) {
+        if (event.buttons === 0) return cancelGesture();
+        if (pressed.id !== null && pressed.ids.length === 0) return;
+        if (!gesturing) {
           if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < DRAG_THRESHOLD) return;
           event.currentTarget.setPointerCapture(event.pointerId);
         }
         pressed.lastX = event.clientX;
         pressed.lastY = event.clientY;
-        carry();
+        follow();
       }}
       onPointerUp={(event) => {
-        if (press.current?.pointerId !== event.pointerId) return;
-        if (drag?.drop) send({ type: 'move', ids: drag.ids, ...drag.drop });
-        cancelDrag();
+        const pressed = press.current;
+        if (pressed?.pointerId !== event.pointerId) return;
+        if (frame) send({ type: 'mark', ids: [...marked] });
+        else if (drag?.drop) send({ type: 'move', ids: drag.ids, ...drag.drop });
+        else if (!drag && pressed.id !== null && group.length > 0) send({ type: 'select', id: pressed.id });
+        cancelGesture();
       }}
       onPointerCancel={(event) => {
-        if (press.current?.pointerId === event.pointerId) cancelDrag();
+        if (press.current?.pointerId === event.pointerId) cancelGesture();
       }}
       onDoubleClick={(event) => {
         const id = nodeIdAt(event.target);
@@ -404,6 +426,7 @@ function MapCanvas({
           visible={visible}
           boxes={boxes}
           selected={selected}
+          marked={marked}
           editing={editing}
           editingElement={editingElement}
           lifted={lifted}
@@ -411,6 +434,17 @@ function MapCanvas({
           send={send}
         />
         {drag && <Ghost visible={visible} boxes={boxes} lifted={lifted} drag={drag} />}
+        {frame && (
+          <div
+            className="pointer-events-none absolute border border-sky bg-sky/10"
+            style={{
+              left: Math.min(frame.from.x, frame.to.x),
+              top: Math.min(frame.from.y, frame.to.y),
+              width: Math.abs(frame.to.x - frame.from.x),
+              height: Math.abs(frame.to.y - frame.from.y),
+            }}
+          />
+        )}
       </div>
     </main>
   );
@@ -421,6 +455,7 @@ const MapLayer = memo(function MapLayer({
   visible,
   boxes,
   selected,
+  marked,
   editing,
   editingElement,
   lifted,
@@ -431,6 +466,7 @@ const MapLayer = memo(function MapLayer({
   visible: VisibleNode[];
   boxes: Map<string, Box>;
   selected: string | null;
+  marked: ReadonlySet<string>;
   editing: Editing | null;
   editingElement: RefObject<HTMLElement | null>;
   lifted: ReadonlySet<string>;
@@ -457,7 +493,7 @@ const MapLayer = memo(function MapLayer({
         const box = boxes.get(node.id)!;
         const shared = {
           'data-id': node.id,
-          className: nodeClass(depth, side, node.id === selected, node.id === editing?.id) + (lifted.has(node.id) ? FADED : ''),
+          className: nodeClass(depth, side, node.id === selected || marked.has(node.id), node.id === editing?.id) + (lifted.has(node.id) ? FADED : ''),
           style: nodeStyle(box, colour),
         };
         return node.id === editing?.id ? (
@@ -527,7 +563,7 @@ function Ghost({
       {branch.map(({ node, depth, colour }) => (
         <div
           key={node.id}
-          className={`${nodeClass(depth, side, node.id === drag.anchorId, false)} shadow-lg`}
+          className={`${nodeClass(depth, side, drag.ids.includes(node.id), false)} shadow-lg`}
           style={nodeStyle(moved.get(node.id)!, colour)}
         >
           {node.text}
@@ -652,6 +688,7 @@ const SHORTCUTS: [string, string][] = [
   ['Échap', 'Finir la saisie, désélectionner'],
   ['Suppr', 'Supprimer la branche'],
   ['Glisser un nœud', 'Le déplacer avec sa branche : le lien en pointillés montre son futur parent'],
+  ['Glisser sur le fond', 'Tracer un cadre pour sélectionner plusieurs nœuds, puis les supprimer ou les glisser ensemble'],
   ['Ctrl Z, Ctrl Maj Z', 'Annuler, rétablir'],
   ['= - 0 1', 'Zoom avant, arrière, 100 %, tout voir'],
   ['Molette, Maj molette', 'Déplacer la vue'],

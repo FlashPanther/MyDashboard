@@ -57,6 +57,16 @@ export function carried(boxes: Map<string, Box>, ids: Iterable<string>, anchorId
   return result;
 }
 
+export function boxesIn(boxes: Map<string, Box>, from: { x: number; y: number }, to: { x: number; y: number }): string[] {
+  const left = Math.min(from.x, to.x);
+  const right = Math.max(from.x, to.x);
+  const top = Math.min(from.y, to.y);
+  const bottom = Math.max(from.y, to.y);
+  return [...boxes]
+    .filter(([, box]) => box.x <= right && box.x + box.width >= left && box.y <= bottom && box.y + box.height >= top)
+    .map(([id]) => id);
+}
+
 export function linkPath(parent: Box, child: Box): string {
   const leftwards = child.x < parent.x;
   const x1 = leftwards ? parent.x : parent.x + parent.width;

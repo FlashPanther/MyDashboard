@@ -84,3 +84,14 @@ test('sans sélection, seuls créer un enfant et se déplacer répondent', () =>
   assert.equal(commandFor(press('Delete'), 'idle'), null);
   assert.equal(commandFor(press('a'), 'idle'), null);
 });
+
+test('à plusieurs, seuls supprimer, désélectionner, se déplacer, annuler et zoomer répondent', () => {
+  assert.equal(commandFor(press('Delete'), 'multiple'), 'delete');
+  assert.equal(commandFor(press('Escape'), 'multiple'), 'deselect');
+  assert.equal(commandFor(press('ArrowDown'), 'multiple'), 'down');
+  assert.equal(commandFor(press('z', { ctrlKey: true }), 'multiple'), 'undo');
+  assert.equal(commandFor(press('='), 'multiple'), 'zoomIn');
+  for (const key of ['Tab', 'Enter', 'a', 'F2']) assert.equal(commandFor(press(key), 'multiple'), null);
+  assert.equal(commandFor(press('@', { ctrlKey: true, altKey: true }), 'multiple'), null);
+  assert.equal(commandFor(press('/', { ctrlKey: true }), 'multiple'), null);
+});
