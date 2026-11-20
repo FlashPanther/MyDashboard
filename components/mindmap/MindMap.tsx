@@ -17,19 +17,17 @@ import {
 } from 'react';
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, type Editing, type EditorAction } from '@/lib/mindmap/editor';
-import { commandFor, isZoom, type ZoomCommand } from '@/lib/mindmap/keymap';
-import { dropAt, type Drop } from '@/lib/mindmap/drop';
-import { boxesIn, carried, layout, linkPath, type Box, type Size } from '@/lib/mindmap/layout';
+import { commandFor, isZoom, swallowed, type ZoomCommand } from '@/lib/mindmap/keymap';
+import { dropAt, grabbed, type Carried, type Drop } from '@/lib/mindmap/drop';
+import { boxesIn, carried, layout, linkPath, type Box, type Point, type Size } from '@/lib/mindmap/layout';
 import {
   branchesOn,
   branchIds,
   countDescendants,
-  find,
   newNode,
   parse,
   serialize,
   SIDES,
-  topmost,
   visibleNodes,
   type MapNode,
   type Side,
@@ -49,10 +47,16 @@ const LINK = { fill: 'none', strokeWidth: 2, strokeLinecap: 'round' } as const;
 type Send = (action: EditorAction) => void;
 type Observe = (element: HTMLElement | null) => (() => void) | undefined;
 type CanvasHandle = { zoom: (command: ZoomCommand) => void };
-type Carried = { ids: string[]; anchorId: string };
-type Point = { x: number; y: number };
-type Press = Carried & { id: string | null; pointerId: number; x: number; y: number; startX: number; startY: number; lastX: number; lastY: number };
-type Frame = { from: Point; to: Point };
+type Press = {
+  id: string | null;
+  carried: Carried | null;
+  pointerId: number;
+  x: number;
+  y: number;
+  start: Point;
+  last: Point;
+};
+type Frame = { from: Point; to: Point; ids: string[] };
 type Drag = Carried & { lifted: ReadonlySet<string>; dx: number; dy: number; drop: Drop | null };
 
 function blankMap(): MapNode {
@@ -109,8 +113,7 @@ function Editor({ initial }: { initial: MapNode }) {
       if (event.isComposing) return;
       if ((event.target as Element).closest('button, input, summary, a')) return;
       const command = commandFor(event, mode);
-      const held = mode === 'multiple' && (event.key === 'Tab' || event.key === 'Enter');
-      if (command || held) event.preventDefault();
+      if (command || swallowed(event, mode)) event.preventDefault();
       if (!command) return;
       if (isZoom(command)) canvas.current?.zoom(command);
       else send({ type: 'command', command, key: event.key });
@@ -309,10 +312,8 @@ function MapCanvas({
   const press = useRef<Press | null>(null);
   const gesturing = drag !== null || frame !== null;
   const lifted = drag?.lifted ?? NOTHING;
-  const marked = useMemo(
-    () => new Set(frame ? boxesIn(boxes, frame.from, frame.to) : group),
-    [frame, boxes, group],
-  );
+  const markedIds = frame?.ids ?? group;
+  const marked = useMemo(() => new Set(markedIds), [markedIds]);
 
   const cancelGesture = useCallback(() => {
     press.current = null;
@@ -339,13 +340,19 @@ function MapCanvas({
   function follow(): void {
     const pressed = press.current;
     if (!pressed || !view) return;
-    const point = worldPoint({ clientX: pressed.lastX, clientY: pressed.lastY }, view);
-    if (pressed.id === null) return setFrame({ from: { x: pressed.startX, y: pressed.startY }, to: point });
-    const { ids, anchorId } = pressed;
+    const point = toWorld(view, pressed.last.x, pressed.last.y);
+    if (!pressed.carried) {
+      const ids = boxesIn(boxes, pressed.start, point);
+      return setFrame((current) => {
+        const same = current && current.ids.length === ids.length && current.ids.every((id, index) => id === ids[index]);
+        return { from: pressed.start, to: point, ids: same ? current.ids : ids };
+      });
+    }
+    const { ids, anchorId } = pressed.carried;
     const origin = boxes.get(anchorId);
     if (!origin) return cancelGesture();
-    const dx = point.x - pressed.startX;
-    const dy = point.y - pressed.startY;
+    const dx = point.x - pressed.start.x;
+    const dy = point.y - pressed.start.y;
     const drop = dropAt(root, boxes, ids, { ...origin, x: origin.x + dx, y: origin.y + dy });
     setDrag((current) => ({ ids, anchorId, lifted: current?.lifted ?? branchIds(root, ids), dx, dy, drop }));
   }
@@ -354,9 +361,9 @@ function MapCanvas({
     if (gesturing) follow();
   }, [view]);
 
-  function worldPoint(event: { clientX: number; clientY: number }, at: View): { x: number; y: number } {
+  function viewportPoint(event: { clientX: number; clientY: number }): Point {
     const bounds = viewport.current!.getBoundingClientRect();
-    return toWorld(at, event.clientX - bounds.left, event.clientY - bounds.top);
+    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
   }
 
   return (
@@ -366,41 +373,36 @@ function MapCanvas({
       onPointerDown={(event) => {
         if (!event.isPrimary || gesturing || (event.target as Element).closest('button')) return;
         const id = nodeIdAt(event.target);
-        const grouped = id !== null && group.includes(id);
-        if (!grouped) send({ type: 'select', id });
+        if (id === null || !group.includes(id)) send({ type: 'select', id });
         if (!view || id === editing?.id || event.button !== 0) return;
-        const ids = grouped ? topmost(root, new Set(group)) : id && id !== root.id ? [id] : [];
-        const start = worldPoint(event, view);
+        const carriedNodes = id === null ? null : grabbed(root, group, id);
+        if (id !== null && !carriedNodes) return;
+        const at = viewportPoint(event);
         press.current = {
           id,
-          ids,
-          anchorId: ids.find((branch) => id && find(find(root, branch)!, id)) ?? ids[0] ?? '',
+          carried: carriedNodes,
           pointerId: event.pointerId,
           x: event.clientX,
           y: event.clientY,
-          startX: start.x,
-          startY: start.y,
-          lastX: event.clientX,
-          lastY: event.clientY,
+          start: toWorld(view, at.x, at.y),
+          last: at,
         };
       }}
       onPointerMove={(event) => {
         const pressed = press.current;
         if (pressed?.pointerId !== event.pointerId) return;
         if (event.buttons === 0) return cancelGesture();
-        if (pressed.id !== null && pressed.ids.length === 0) return;
         if (!gesturing) {
           if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < DRAG_THRESHOLD) return;
           event.currentTarget.setPointerCapture(event.pointerId);
         }
-        pressed.lastX = event.clientX;
-        pressed.lastY = event.clientY;
+        pressed.last = viewportPoint(event);
         follow();
       }}
       onPointerUp={(event) => {
         const pressed = press.current;
         if (pressed?.pointerId !== event.pointerId) return;
-        if (frame) send({ type: 'mark', ids: [...marked] });
+        if (frame) send({ type: 'mark', ids: frame.ids });
         else if (drag?.drop) send({ type: 'move', ids: drag.ids, ...drag.drop });
         else if (!drag && pressed.id !== null && group.length > 0) send({ type: 'select', id: pressed.id });
         cancelGesture();

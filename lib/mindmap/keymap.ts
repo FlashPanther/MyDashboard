@@ -78,6 +78,10 @@ export function commandFor(press: KeyPress, mode: Mode): Command | null {
   return printable ? 'type' : null;
 }
 
+export function swallowed(press: KeyPress, mode: Mode): boolean {
+  return mode === 'multiple' && structuralCommand(press, press.ctrlKey || press.metaKey) !== null;
+}
+
 function structuralCommand(press: KeyPress, mod: boolean): Command | null {
   if (press.key === 'Tab') {
     if (mod || press.altKey) return null;

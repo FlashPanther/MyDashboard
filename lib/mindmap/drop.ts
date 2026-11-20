@@ -1,7 +1,9 @@
 import type { Box } from './layout.ts';
-import { branchesOn, branchIds, SIDES, visibleChildren, visibleNodes, type MapNode, type Side } from './tree.ts';
+import { branchesOn, branchIds, find, SIDES, topmost, visibleChildren, visibleNodes, type MapNode, type Side } from './tree.ts';
 
 export type Drop = { parentId: string; beforeId: string | null; side: Side };
+
+export type Carried = { ids: string[]; anchorId: string };
 
 const REACH = 260;
 const VERTICAL_WEIGHT = 3;
@@ -42,4 +44,11 @@ export function dropAt(root: MapNode, boxes: Map<string, Box>, draggedIds: strin
     return !own.has(child.id) && box.y + box.height / 2 > centre;
   });
   return { parentId: best.parent.id, beforeId: next?.id ?? null, side: best.side };
+}
+
+export function grabbed(root: MapNode, group: string[], id: string): Carried | null {
+  const ids = group.includes(id) ? topmost(root, new Set(group)) : topmost(root, new Set([id]));
+  if (ids.length === 0) return null;
+  const anchorId = ids.find((branch) => find(find(root, branch)!, id) !== null) ?? ids[0];
+  return { ids, anchorId };
 }

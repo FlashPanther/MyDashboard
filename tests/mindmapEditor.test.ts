@@ -330,3 +330,11 @@ test('déplacer un groupe le garde sélectionné et se fait en une étape', () =
   assert.equal(moved.group.length, 2);
   assert.equal(moved.past.length, state.past.length + 1);
 });
+
+test('après la suppression d’un groupe, la sélection va au voisin resté en place', () => {
+  const state = run(grouped('A1', 'A2'), 'delete');
+  assert.equal(outline(state.root), 'Idée(A B)');
+  assert.equal(selectedText(state), 'A');
+  const first = run(grouped('A', 'A2'), 'delete');
+  assert.equal(selectedText(first), 'B');
+});

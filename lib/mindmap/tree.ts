@@ -209,12 +209,21 @@ function bySide(root: MapNode): MapNode {
 }
 
 export function removeAll(root: MapNode, ids: ReadonlySet<string>): { root: MapNode; next: string | null } {
-  let result: { root: MapNode; next: string | null } = { root, next: null };
-  for (const id of topmost(root, ids)) {
-    const removal = remove(result.root, id);
-    result = { root: removal.root, next: removal.next ?? result.next };
-  }
-  return result;
+  const removed = topmost(root, ids);
+  if (removed.length === 0) return { root, next: null };
+  const gone = new Set(removed);
+  const { parent, index } = locate(root, removed.at(-1)!)!;
+  const kept = (node: MapNode): boolean => !gone.has(node.id);
+  const next = parent.children.slice(index).find(kept) ?? parent.children.slice(0, index).reverse().find(kept) ?? parent;
+  return {
+    next: next.id,
+    root: change(root, (draft) => {
+      for (const id of removed) {
+        const target = locate(draft, id)!;
+        target.parent.children.splice(target.index, 1);
+      }
+    }),
+  };
 }
 
 export function rename(root: MapNode, id: string, text: string): MapNode {

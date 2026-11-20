@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dropAt } from '../lib/mindmap/drop.ts';
+import { dropAt, grabbed } from '../lib/mindmap/drop.ts';
 import { carried, layout } from '../lib/mindmap/layout.ts';
 import { move, newNode, type MapNode } from '../lib/mindmap/tree.ts';
 
@@ -203,4 +203,22 @@ test('garder son rang visible ne change rien, même si des branches de l’autre
   });
   assert.equal(move(root, ['a'], 'root', 'c', 'right'), root);
   assert.equal(outline(move(root, ['c'], 'root', 'a', 'right')), 'root(c a(a1) b←)');
+});
+
+test('un nœud saisi seul se glisse lui-même, sauf la racine', () => {
+  const { root } = scene();
+  assert.deepEqual(grabbed(root, [], 'a1'), { ids: ['a1'], anchorId: 'a1' });
+  assert.equal(grabbed(root, [], 'root'), null);
+});
+
+test('saisir un nœud du groupe emporte les nœuds du groupe qu’aucun autre ne contient', () => {
+  const { root } = scene();
+  assert.deepEqual(grabbed(root, ['a', 'a1', 'c'], 'c'), { ids: ['a', 'c'], anchorId: 'c' });
+});
+
+test('l’ancre du glisser est la branche qui contient le nœud saisi', () => {
+  const { root } = scene();
+  assert.deepEqual(grabbed(root, ['a', 'a1', 'c'], 'a1'), { ids: ['a', 'c'], anchorId: 'a' });
+  assert.deepEqual(grabbed(root, ['root', 'b', 'c'], 'root'), { ids: ['b', 'c'], anchorId: 'b' });
+  assert.deepEqual(grabbed(root, ['a', 'c'], 'b'), { ids: ['b'], anchorId: 'b' });
 });
