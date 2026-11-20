@@ -15,6 +15,7 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
+import { ContextMenu, type MenuItem } from '@/components/mindmap/ContextMenu';
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, type Editing, type EditorAction } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed, type ZoomCommand } from '@/lib/mindmap/keymap';
@@ -312,6 +313,7 @@ function MapCanvas({
   const [drag, setDrag] = useState<Drag | null>(null);
   const [frame, setFrame] = useState<Frame | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
   const press = useRef<Press | null>(null);
   const gesturing = drag !== null || frame !== null;
   const lifted = drag?.lifted ?? NOTHING;
@@ -335,6 +337,14 @@ function MapCanvas({
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [gesturing, cancelGesture]);
+
+  function menuItems(id: string): MenuItem[] {
+    if (!find(root, id)?.children.length) return [];
+    return [
+      { label: 'Replier toute la branche', run: () => send({ type: 'foldBranch', id, collapsed: true }) },
+      { label: 'Déplier toute la branche', run: () => send({ type: 'foldBranch', id, collapsed: false }) },
+    ];
+  }
 
   function nodeIdAt(target: EventTarget): string | null {
     return (target as Element).closest<HTMLElement>('[data-id]')?.dataset.id ?? null;
@@ -412,7 +422,7 @@ function MapCanvas({
       }}
       onContextMenu={(event) => {
         const id = nodeIdAt(event.target);
-        if (!id || id === editing?.id || !find(root, id)?.children.length) return;
+        if (!id || id === editing?.id || menuItems(id).length === 0) return;
         event.preventDefault();
         send({ type: 'select', id });
         setMenu({ id, x: event.clientX, y: event.clientY });
@@ -458,71 +468,10 @@ function MapCanvas({
           />
         )}
       </div>
-      {menu && find(root, menu.id)?.children.length ? (
-        <BranchMenu
-          menu={menu}
-          onClose={() => setMenu(null)}
-          onFold={(collapsed) => send({ type: 'foldBranch', id: menu.id, collapsed })}
-        />
-      ) : null}
+      {menu && menuItems(menu.id).length > 0 && (
+        <ContextMenu at={menu} items={menuItems(menu.id)} onClose={closeMenu} />
+      )}
     </main>
-  );
-}
-
-function BranchMenu({ menu, onClose, onFold }: { menu: Menu; onClose: () => void; onFold: (collapsed: boolean) => void }) {
-  const element = useRef<HTMLDivElement>(null);
-  const [place, setPlace] = useState({ left: menu.x, top: menu.y });
-
-  useLayoutEffect(() => {
-    const { offsetWidth, offsetHeight } = element.current!;
-    setPlace({
-      left: Math.max(8, Math.min(menu.x, window.innerWidth - offsetWidth - 8)),
-      top: Math.max(8, Math.min(menu.y, window.innerHeight - offsetHeight - 8)),
-    });
-    element.current!.querySelector('button')!.focus();
-  }, [menu]);
-
-  useEffect(() => {
-    const onOutside = (event: Event) => {
-      if (!element.current?.contains(event.target as Node)) onClose();
-    };
-    window.addEventListener('pointerdown', onOutside, true);
-    window.addEventListener('wheel', onOutside, true);
-    return () => {
-      window.removeEventListener('pointerdown', onOutside, true);
-      window.removeEventListener('wheel', onOutside, true);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      ref={element}
-      className="panel fixed z-10 flex flex-col p-1 shadow-lg"
-      style={place}
-      onKeyDown={(event) => {
-        const items = [...element.current!.querySelectorAll('button')];
-        const step = { ArrowDown: 1, Tab: 1, ArrowUp: -1 }[event.key];
-        if (event.key === 'Enter' || event.key === ' ') return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.key === 'Escape') onClose();
-        if (step) items[(items.indexOf(document.activeElement as HTMLButtonElement) + step + items.length) % items.length].focus();
-      }}
-    >
-      {([true, false] as const).map((collapsed) => (
-        <button
-          key={String(collapsed)}
-          type="button"
-          className="whitespace-nowrap px-3 py-1.5 text-left text-sm hover:bg-panel-soft focus:bg-panel-soft"
-          onClick={() => {
-            onFold(collapsed);
-            onClose();
-          }}
-        >
-          {collapsed ? 'Replier toute la branche' : 'Déplier toute la branche'}
-        </button>
-      ))}
-    </div>
   );
 }
 

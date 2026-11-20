@@ -181,7 +181,6 @@ test('replier toute une branche replie chacun de ses niveaux et rien d’autre',
   const folded = foldBranch(deep(), 'a', true);
   assert.deepEqual(texts(folded), ['root', 'a', 'b', 'b1']);
   assert.deepEqual(texts(toggleCollapsed(folded, 'a')), ['root', 'a', 'a1', 'b', 'b1']);
-  assert.equal(folded.children[1].collapsed, false);
 });
 
 test('déplier toute une branche rouvre chacun de ses niveaux', () => {

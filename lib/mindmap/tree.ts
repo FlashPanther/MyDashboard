@@ -89,10 +89,26 @@ export function visibleNodes(root: MapNode): VisibleNode[] {
   return result;
 }
 
+function withChildren(node: MapNode, children: MapNode[]): MapNode {
+  return children.every((child, index) => child === node.children[index]) ? node : { ...node, children };
+}
+
+function update(root: MapNode, id: string, alter: (node: MapNode) => MapNode): MapNode {
+  if (root.id === id) return alter(root);
+  return withChildren(root, root.children.map((child) => update(child, id, alter)));
+}
+
 export function toggleCollapsed(root: MapNode, id: string): MapNode {
-  if (root.id === id) return root.children.length ? { ...root, collapsed: !root.collapsed } : root;
-  const children = root.children.map((child) => toggleCollapsed(child, id));
-  return children.every((child, index) => child === root.children[index]) ? root : { ...root, children };
+  return update(root, id, (node) => (node.children.length ? { ...node, collapsed: !node.collapsed } : node));
+}
+
+export function foldBranch(root: MapNode, id: string, collapsed: boolean): MapNode {
+  const fold = (node: MapNode): MapNode => {
+    const next = withChildren(node, node.children.map(fold));
+    const folded = collapsed && node.children.length > 0;
+    return next.collapsed === folded ? next : { ...next, collapsed: folded };
+  };
+  return update(root, id, fold);
 }
 
 function change(root: MapNode, mutate: (draft: MapNode) => void): MapNode {
@@ -245,21 +261,6 @@ export function neighbour(root: MapNode, id: string, direction: Direction): stri
   }
   const peers = visible.filter((entry) => entry.depth === current.depth && entry.side === current.side);
   return peers[peers.indexOf(current) + (direction === 'up' ? -1 : 1)]?.node.id ?? null;
-}
-
-export function foldBranch(root: MapNode, id: string, collapsed: boolean): MapNode {
-  const fold = (node: MapNode): MapNode => {
-    const children = node.children.map(fold);
-    const folded = node.children.length > 0 && collapsed;
-    const same = node.collapsed === folded && children.every((child, index) => child === node.children[index]);
-    return same ? node : { ...node, collapsed: folded, children };
-  };
-  const within = (node: MapNode): MapNode => {
-    if (node.id === id) return fold(node);
-    const children = node.children.map(within);
-    return children.every((child, index) => child === node.children[index]) ? node : { ...node, children };
-  };
-  return within(root);
 }
 
 function colourBranches(root: MapNode): void {
