@@ -18,9 +18,11 @@ import {
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, type Editing, type EditorAction } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, type ZoomCommand } from '@/lib/mindmap/keymap';
-import { layout, linkPath, type Box, type Size } from '@/lib/mindmap/layout';
+import { dropAt, type Drop } from '@/lib/mindmap/drop';
+import { carried, layout, linkPath, type Box, type Size } from '@/lib/mindmap/layout';
 import {
   branchesOn,
+  branchIds,
   countDescendants,
   newNode,
   parse,
@@ -37,10 +39,14 @@ import { readStored, writeStored } from '@/lib/storage';
 const STORAGE_KEY = 'carte.document';
 const BRANCH_COLOURS = ['#e4572e', '#2e86ab', '#3b9a5b', '#a23b72', '#d99a1c', '#5b5fc7', '#1f9e9a', '#c2527a'];
 const UNMEASURED: Size = { width: 120, height: 36 };
+const DRAG_THRESHOLD = 5;
+const NOTHING: ReadonlySet<string> = new Set();
 
 type Send = (action: EditorAction) => void;
 type Observe = (element: HTMLElement | null) => (() => void) | undefined;
 type CanvasHandle = { zoom: (command: ZoomCommand) => void };
+type Press = { id: string; x: number; y: number; startX: number; startY: number };
+type Drag = { id: string; dx: number; dy: number; drop: Drop | null };
 
 function blankMap(): MapNode {
   return newNode('Idée centrale');
@@ -287,8 +293,34 @@ function MapCanvas({
     return () => element.removeEventListener('wheel', onWheel);
   }, []);
 
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const press = useRef<Press | null>(null);
+  const draggedId = drag?.id ?? null;
+  const lifted = useMemo(() => (draggedId ? branchIds(root, [draggedId]) : NOTHING), [root, draggedId]);
+
+  const cancelDrag = useCallback(() => {
+    press.current = null;
+    setDrag(null);
+  }, []);
+
+  useEffect(() => {
+    if (!draggedId) return;
+    const onKey = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') cancelDrag();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [draggedId, cancelDrag]);
+
   function nodeIdAt(target: EventTarget): string | null {
     return (target as Element).closest<HTMLElement>('[data-id]')?.dataset.id ?? null;
+  }
+
+  function worldPoint(event: { clientX: number; clientY: number }, at: View): { x: number; y: number } {
+    const bounds = viewport.current!.getBoundingClientRect();
+    return { x: (event.clientX - bounds.left - at.x) / at.scale, y: (event.clientY - bounds.top - at.y) / at.scale };
   }
 
   return (
@@ -296,9 +328,33 @@ function MapCanvas({
       ref={viewport}
       className="relative min-h-0 flex-1 touch-none overflow-hidden"
       onPointerDown={(event) => {
-        if ((event.target as Element).closest('button')) return;
-        send({ type: 'select', id: nodeIdAt(event.target) });
+        if (!event.isPrimary || drag || (event.target as Element).closest('button')) return;
+        const id = nodeIdAt(event.target);
+        send({ type: 'select', id });
+        if (!view || !id || id === root.id || id === editing?.id || event.button !== 0) return;
+        const start = worldPoint(event, view);
+        press.current = { id, x: event.clientX, y: event.clientY, startX: start.x, startY: start.y };
       }}
+      onPointerMove={(event) => {
+        const pressed = press.current;
+        if (!pressed || !view) return;
+        if (event.buttons === 0) return cancelDrag();
+        if (!drag) {
+          if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < DRAG_THRESHOLD) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }
+        const point = worldPoint(event, view);
+        const dx = point.x - pressed.startX;
+        const dy = point.y - pressed.startY;
+        const origin = boxes.get(pressed.id)!;
+        const drop = dropAt(root, boxes, [pressed.id], { ...origin, x: origin.x + dx, y: origin.y + dy });
+        setDrag({ id: pressed.id, dx, dy, drop });
+      }}
+      onPointerUp={() => {
+        if (drag?.drop) send({ type: 'move', ids: [drag.id], ...drag.drop });
+        cancelDrag();
+      }}
+      onPointerCancel={cancelDrag}
       onDoubleClick={(event) => {
         const id = nodeIdAt(event.target);
         if (id) send({ type: 'edit', id });
@@ -319,9 +375,11 @@ function MapCanvas({
           selected={selected}
           editing={editing}
           editingElement={editingElement}
+          lifted={lifted}
           observe={observe}
           send={send}
         />
+        {drag && <Ghost visible={visible} boxes={boxes} lifted={lifted} drag={drag} />}
       </div>
     </main>
   );
@@ -334,6 +392,7 @@ const MapLayer = memo(function MapLayer({
   selected,
   editing,
   editingElement,
+  lifted,
   observe,
   send,
 }: {
@@ -343,6 +402,7 @@ const MapLayer = memo(function MapLayer({
   selected: string | null;
   editing: Editing | null;
   editingElement: RefObject<HTMLElement | null>;
+  lifted: ReadonlySet<string>;
   observe: Observe;
   send: Send;
 }) {
@@ -358,6 +418,7 @@ const MapLayer = memo(function MapLayer({
               strokeWidth={2}
               strokeLinecap="round"
               stroke={branchColour(colour)}
+              opacity={lifted.has(node.id) ? FADED : undefined}
             />
           ),
         )}
@@ -365,9 +426,10 @@ const MapLayer = memo(function MapLayer({
 
       {visible.map(({ node, depth, colour, side }) => {
         const box = boxes.get(node.id)!;
+        const faded = lifted.has(node.id) ? ' opacity-30' : '';
         const shared = {
           'data-id': node.id,
-          className: nodeClass(depth, side, node.id === selected, node.id === editing?.id),
+          className: nodeClass(depth, side, node.id === selected, node.id === editing?.id) + faded,
           style: { left: box.x, top: box.y, '--branch': branchColour(colour) } as CSSProperties,
         };
         return node.id === editing?.id ? (
@@ -398,6 +460,7 @@ const MapLayer = memo(function MapLayer({
             box={boxes.get(node.id)!}
             side={each}
             colour={depth > 0 ? branchColour(colour) : undefined}
+            faded={lifted.has(node.id)}
             send={send}
           />
         ));
@@ -405,6 +468,53 @@ const MapLayer = memo(function MapLayer({
     </>
   );
 });
+
+function Ghost({
+  visible,
+  boxes,
+  lifted,
+  drag,
+}: {
+  visible: VisibleNode[];
+  boxes: Map<string, Box>;
+  lifted: ReadonlySet<string>;
+  drag: Drag;
+}) {
+  const branch = visible.filter(({ node }) => lifted.has(node.id));
+  const origin = branch[0].side;
+  const side = drag.drop?.side ?? origin;
+  const moved = carried(boxes, lifted, drag.id, drag.dx, drag.dy, side !== origin);
+  const stroke = { fill: 'none', strokeWidth: 2, strokeLinecap: 'round' } as const;
+  return (
+    <div className="pointer-events-none absolute left-0 top-0">
+      <svg aria-hidden="true" className="absolute left-0 top-0 h-px w-px overflow-visible">
+        {drag.drop && (
+          <path
+            d={linkPath(boxes.get(drag.drop.parentId)!, moved.get(drag.id)!)}
+            {...stroke}
+            stroke="var(--color-sky)"
+            strokeDasharray="7 6"
+          />
+        )}
+        {branch.slice(1).map(({ node, parentId, colour }) => (
+          <path key={node.id} d={linkPath(moved.get(parentId!)!, moved.get(node.id)!)} {...stroke} stroke={branchColour(colour)} />
+        ))}
+      </svg>
+      {branch.map(({ node, depth, colour }) => {
+        const box = moved.get(node.id)!;
+        return (
+          <div
+            key={node.id}
+            className={`${nodeClass(depth, side, node.id === drag.id, false)} shadow-lg`}
+            style={{ left: box.x, top: box.y, '--branch': branchColour(colour) } as CSSProperties}
+          >
+            {node.text}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function EditedNode({
   id,
@@ -445,6 +555,8 @@ function EditedNode({
   );
 }
 
+const FADED = 0.3;
+
 function branchColour(index: number): string {
   return BRANCH_COLOURS[index % BRANCH_COLOURS.length];
 }
@@ -468,12 +580,14 @@ function FoldToggle({
   box,
   side,
   colour,
+  faded,
   send,
 }: {
   node: MapNode;
   box: Box;
   side: Side;
   colour: string | undefined;
+  faded: boolean;
   send: Send;
 }) {
   const gap = node.collapsed ? 6 : 3;
@@ -484,7 +598,7 @@ function FoldToggle({
     <button
       type="button"
       title={node.collapsed ? 'Déplier' : 'Replier'}
-      className={`absolute bg-panel ${shape}`}
+      className={`absolute bg-panel ${shape}${faded ? ' opacity-30' : ''}`}
       style={
         {
           left: side === 'left' ? box.x : box.x + box.width,
@@ -514,6 +628,7 @@ const SHORTCUTS: [string, string][] = [
   ['Taper, F2, double-clic', 'Modifier le texte'],
   ['Échap', 'Finir la saisie, désélectionner'],
   ['Suppr', 'Supprimer la branche'],
+  ['Glisser un nœud', 'Le déplacer avec sa branche : le lien en pointillés montre son futur parent'],
   ['Ctrl Z, Ctrl Maj Z', 'Annuler, rétablir'],
   ['= - 0 1', 'Zoom avant, arrière, 100 %, tout voir'],
   ['Molette, Maj molette', 'Déplacer la vue'],

@@ -46,6 +46,17 @@ export function layout(root: MapNode, sizeOf: (node: MapNode) => Size, gaps: Gap
   return boxes;
 }
 
+export function carried(boxes: Map<string, Box>, ids: Iterable<string>, anchorId: string, dx: number, dy: number, mirrored: boolean): Map<string, Box> {
+  const anchor = boxes.get(anchorId)!;
+  const axis = 2 * anchor.x + anchor.width;
+  const result = new Map<string, Box>();
+  for (const id of ids) {
+    const box = boxes.get(id);
+    if (box) result.set(id, { ...box, x: (mirrored ? axis - box.x - box.width : box.x) + dx, y: box.y + dy });
+  }
+  return result;
+}
+
 export function linkPath(parent: Box, child: Box): string {
   const leftwards = child.x < parent.x;
   const x1 = leftwards ? parent.x : parent.x + parent.width;

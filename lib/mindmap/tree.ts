@@ -102,7 +102,13 @@ function change(root: MapNode, mutate: (draft: MapNode) => void): MapNode {
     for (const child of branch.children) stripBranchMarks(child);
   }
   colourBranches(draft);
+  unfoldLeaves(draft);
   return draft;
+}
+
+function unfoldLeaves(node: MapNode): void {
+  if (node.children.length === 0) node.collapsed = false;
+  node.children.forEach(unfoldLeaves);
 }
 
 function stripBranchMarks(node: MapNode): void {
@@ -154,9 +160,36 @@ export function remove(root: MapNode, id: string): { root: MapNode; next: string
     root: change(root, (draft) => {
       const target = locate(draft, id)!;
       target.parent.children.splice(target.index, 1);
-      if (target.parent.children.length === 0) target.parent.collapsed = false;
     }),
   };
+}
+
+export function branchIds(root: MapNode, ids: string[]): Set<string> {
+  const branches = ids.map((id) => find(root, id)).filter((node) => node !== null);
+  return new Set(branches.flatMap((branch) => visibleNodes(branch).map(({ node }) => node.id)));
+}
+
+export function move(root: MapNode, ids: string[], parentId: string, beforeId: string | null, side: Side): MapNode {
+  const inside = (id: string): boolean => {
+    const node = find(root, id);
+    return !node || node === root || find(node, parentId) !== null;
+  };
+  if (!find(root, parentId) || ids.some(inside) || (beforeId !== null && ids.includes(beforeId))) return root;
+  const next = change(root, (draft) => {
+    const nodes = ids.map((id) => {
+      const { parent, index } = locate(draft, id)!;
+      return parent.children.splice(index, 1)[0];
+    });
+    const parent = find(draft, parentId)!;
+    for (const node of nodes) {
+      if (parent === draft && side === 'left') node.side = 'left';
+      else delete node.side;
+    }
+    const index = parent.children.findIndex((child) => child.id === beforeId);
+    parent.children.splice(index < 0 ? parent.children.length : index, 0, ...nodes);
+    parent.collapsed = false;
+  });
+  return sameMap(next, root) ? root : next;
 }
 
 export function rename(root: MapNode, id: string, text: string): MapNode {
