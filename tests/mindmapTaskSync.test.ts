@@ -631,3 +631,18 @@ test('une tâche suivie aussi par une autre carte (réimport) est seulement dét
   assert.deepEqual(fake.titles(), ['Billets']);
   assert.deepEqual((await readMap(first.id, { dir }))!.links, {});
 });
+
+test('si une autre carte est illisible, la suppression chez Google attend : on ne sait pas si elle suit la tâche', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await fs.writeFile(path.join(dir, '11111111-1111-4111-8111-111111111111.json'), '{ abîmé');
+  await saveMap(id, map(), 1, { dir, forget: ['une'] });
+  fake.calls.length = 0;
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  assert.deepEqual(fake.calls.filter((call) => call.startsWith('DELETE')), []);
+  assert.equal((await links()).une.doomed, true);
+  await fs.rm(path.join(dir, '11111111-1111-4111-8111-111111111111.json'));
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  assert.deepEqual(fake.titles(), []);
+});

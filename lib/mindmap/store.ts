@@ -98,6 +98,18 @@ export async function readMap(id: string, { dir = MAPS_DIR }: Options = {}): Pro
   }
 }
 
+/** Les tâches suivies (lien non détaché) par les autres cartes ; `null` si l'une d'elles est illisible et qu'on ne peut donc pas le savoir. */
+export async function tasksFollowedElsewhere(mapId: string, { dir = MAPS_DIR }: Options = {}): Promise<Set<string> | null> {
+  const followed = new Set<string>();
+  for (const id of await mapIds(dir)) {
+    if (id === mapId) continue;
+    const map = await readMap(id, { dir }).catch(() => undefined);
+    if (map === undefined) return null;
+    for (const link of Object.values(map?.links ?? {})) if (!link.detached) followed.add(link.taskId);
+  }
+  return followed;
+}
+
 export async function listMaps({ dir = MAPS_DIR }: Options = {}): Promise<MapSummary[]> {
   const maps: MapSummary[] = [];
   for (const id of await mapIds(dir)) {

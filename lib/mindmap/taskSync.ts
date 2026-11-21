@@ -15,7 +15,7 @@ import {
   type NewTask,
   type TaskUpdate,
 } from './links.ts';
-import { annotate, listMaps, readMap, type Options, type StoredMap } from './store.ts';
+import { annotate, readMap, tasksFollowedElsewhere, type Options, type StoredMap } from './store.ts';
 import { find, type RemoteChange } from './tree.ts';
 
 export type Google = <T>(url: string, init?: RequestInit) => Promise<T>;
@@ -134,18 +134,15 @@ function update(mapId: string, updates: TaskUpdate[], google: Google, options: O
 async function purge(map: StoredMap, google: Google, options: Options): Promise<StoredMap> {
   const candidates = Object.entries(map.links).filter(([, link]) => link.doomed && link.detached);
   if (candidates.length === 0) return map;
-  // Une carte réimportée peut suivre la même tâche : elle n'est alors que détachée ici, jamais supprimée sous l'autre.
-  const elsewhere = new Set<string>();
-  for (const { id } of await listMaps(options)) {
-    if (id === map.id) continue;
-    const other = await readMap(id, options).catch(() => null);
-    for (const link of Object.values(other?.links ?? {})) if (!link.detached) elsewhere.add(link.taskId);
-  }
   for (const [nodeId, { taskId, listId }] of candidates) {
     // Revérifié juste avant d'envoyer : le nœud a pu revenir entre-temps.
     const latest = await readMap(map.id, options);
     const current = latest?.links[nodeId];
     if (!latest || !current?.doomed || !current.detached || current.taskId !== taskId || find(latest.root, nodeId)) continue;
+    // Une carte réimportée peut suivre la même tâche : elle n'est alors que détachée ici. Une carte illisible empêche de
+    // le savoir : la suppression attend.
+    const elsewhere = await tasksFollowedElsewhere(map.id, options);
+    if (!elsewhere) continue;
     let gone = elsewhere.has(taskId);
     if (!gone) {
       try {
@@ -233,7 +230,10 @@ async function sync(id: string, listTitle: string, google: Google, options: Sync
   } finally {
     settled = await annotate(id, (latest) => ({ links: settleLinks(latest.root, latest.links) }), options);
   }
-  const latest = settled && (await purge(settled, google, options));
+  // Sous le même verrou que les envois : aucune autre carte ne relie une tâche pendant qu'on la supprime.
+  const purged = settled && sending.then(() => purge(settled!, google, options));
+  if (purged) sending = purged.catch(() => undefined);
+  const latest = purged && (await purged);
   const status = latest ? taskStatus(latest.root, latest.links) : { linked: [], lost: 0 };
   return {
     linked: status.linked,
