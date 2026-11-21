@@ -10,7 +10,9 @@ import { draftKey } from '@/lib/mindmap/sync';
 import { newNode, parse, type MapNode } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
 import { relative } from '@/lib/time';
-import { useEndpoint } from '@/lib/useEndpoint';
+import { fetcher, useEndpoint } from '@/lib/useEndpoint';
+import { takeOverMap } from '@/lib/mindmap/takeOver';
+import type { TaskItem } from '@/app/api/tasks/route';
 
 const BROWSER_MAP_KEY = 'carte.document';
 const BLANK_TITLE = 'Idée centrale';
@@ -51,6 +53,25 @@ export function MapList() {
     setFailure(error ?? 'Création impossible');
     setBusy(false);
     return false;
+  }
+
+  async function takeOver() {
+    setBusy(true);
+    setFailure('');
+    try {
+      const [tasks, followed] = await Promise.all([fetcher('/api/tasks'), fetcher('/api/cartes/suivies')]);
+      const root = takeOverMap(tasks.tasks as TaskItem[], new Set(followed.taskIds as string[]));
+      if (!root) {
+        const open = (tasks.tasks as TaskItem[]).length;
+        setFailure(open === 0 ? 'Aucune tâche Google ouverte à reprendre.' : 'Toutes tes tâches Google ouvertes sont déjà dans une carte.');
+        setBusy(false);
+        return;
+      }
+      await create(root, true);
+    } catch (error) {
+      setFailure((error as Error).message || 'Lecture des tâches Google impossible');
+      setBusy(false);
+    }
   }
 
   async function remove(id: string) {
@@ -97,6 +118,9 @@ export function MapList() {
         </button>
         <button type="button" className="action" disabled={busy} onClick={() => fileInput.current?.click()}>
           Importer
+        </button>
+        <button type="button" className="action" disabled={busy} onClick={takeOver}>
+          Reprendre mes tâches Google
         </button>
         <input
           ref={fileInput}
