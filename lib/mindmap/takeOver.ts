@@ -1,6 +1,8 @@
 import { newNode, parseDocument, type MapNode } from './tree.ts';
 
-export type OpenTask = { id: string; title: string; list: string; listId: string };
+import type { TaskItem } from '../../app/api/tasks/route.ts';
+
+export type OpenTask = Pick<TaskItem, 'id' | 'title' | 'list' | 'listId'>;
 
 /**
  * Une carte qui reprend les tâches Google libres : une branche par liste, un nœud-tâche par tâche. Chaque nœud porte son
@@ -17,5 +19,6 @@ export function takeOverMap(tasks: readonly OpenTask[], followed: ReadonlySet<st
   }
   const root = newNode('Mes tâches Google', newId());
   root.children = [...branches.values()];
+  // Passe par la lecture d'un fichier : couleurs des branches et limites de taille, comme une carte importée.
   return parseDocument({ root });
 }

@@ -63,7 +63,8 @@ export function MapList() {
       const root = takeOverMap(tasks.tasks as TaskItem[], new Set(followed.taskIds as string[]));
       if (!root) {
         setFailure('Toutes tes tâches Google ouvertes sont déjà dans une carte.');
-        return setBusy(false);
+        setBusy(false);
+        return;
       }
       await create(root, true);
     } catch (error) {
