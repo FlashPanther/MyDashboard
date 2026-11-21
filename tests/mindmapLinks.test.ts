@@ -178,3 +178,10 @@ test('une carte qui montre ce que Google avait envoyé laisse Google décider : 
   const pending = { passeports: { ...sent('Passeports', false), incoming: { done: true } } };
   assert.deepEqual(plan(pending, { g: { title: 'Passeports', done: false } }), [{ nodeId: 'passeports', ...quiet, pull: { done: false } }]);
 });
+
+test('sur un nœud détaché, un changement de Google annulé chez Google avant le retour du nœud n’est plus en attente', () => {
+  const base = { ...link('g'), title: 'Billets', done: false, detached: true as const };
+  assert.deepEqual(absorb({ billets: { ...base, incoming: { title: 'Autre' } } }, new Map([['g', { title: 'Billets', done: false }]]), new Set()), {
+    billets: base,
+  });
+});

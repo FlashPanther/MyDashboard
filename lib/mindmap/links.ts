@@ -156,7 +156,10 @@ export function absorb(links: Links, remote: ReadonlyMap<string, Fields>, gone: 
       if (!alive.detached) return [nodeId, alive];
       const pending: Fields = { ...alive.incoming };
       for (const field of FIELDS) {
-        if (fields[field] !== undefined && fields[field] !== alive[field]) Object.assign(pending, { [field]: fields[field] });
+        if (fields[field] === undefined) continue;
+        // Google revenu à la base pendant le détachement : il n'y a plus rien à reprendre.
+        if (fields[field] === alive[field]) delete pending[field];
+        else Object.assign(pending, { [field]: fields[field] });
       }
       return [nodeId, { ...alive, ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}) }];
     }),
