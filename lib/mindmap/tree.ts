@@ -97,6 +97,36 @@ export function taskProgress(root: MapNode): Map<string, Progress> {
   return byBranch;
 }
 
+const unfinished = new WeakMap<MapNode, MapNode>();
+
+export function withoutFinished(root: MapNode): MapNode {
+  const known = unfinished.get(root);
+  if (known) return known;
+  const prune = (node: MapNode): { node: MapNode; pending: boolean } => {
+    let pending = false;
+    const kept: MapNode[] = [];
+    for (const child of node.children) {
+      const below = prune(child);
+      if (below.pending || !child.task?.done) kept.push(below.node);
+      pending ||= below.pending || child.task?.done === false;
+    }
+    return { node: withChildren(node, kept), pending };
+  };
+  const shown = prune(root).node;
+  unfinished.set(root, shown);
+  return shown;
+}
+
+export function shownAncestor(root: MapNode, shown: MapNode, id: string): string {
+  let current = id;
+  while (!find(shown, current)) {
+    const parent = parentOf(root, current);
+    if (!parent) return root.id;
+    current = parent.id;
+  }
+  return current;
+}
+
 export function visibleNodes(root: MapNode): VisibleNode[] {
   const result: VisibleNode[] = [];
   const visit = (node: MapNode, parentId: string | null, depth: number, colour: number, side: Side): void => {
@@ -111,7 +141,8 @@ export function visibleNodes(root: MapNode): VisibleNode[] {
 }
 
 function withChildren(node: MapNode, children: MapNode[]): MapNode {
-  return children.every((child, index) => child === node.children[index]) ? node : { ...node, children };
+  const same = children.length === node.children.length && children.every((child, index) => child === node.children[index]);
+  return same ? node : { ...node, children };
 }
 
 function update(root: MapNode, id: string, alter: (node: MapNode) => MapNode): MapNode {

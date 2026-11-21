@@ -1,17 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { MapCanvas, type CanvasHandle } from '@/components/mindmap/MapCanvas';
 import { Shortcuts } from '@/components/mindmap/Shortcuts';
 import type { Send } from '@/components/mindmap/types';
 import { Preparing } from '@/components/Preparing';
-import { initialState, modeOf, reduce } from '@/lib/mindmap/editor';
+import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed } from '@/lib/mindmap/keymap';
-import { newNode, parse, serialize, type MapNode } from '@/lib/mindmap/tree';
+import { countDescendants, newNode, parse, serialize, taskProgress, type MapNode } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
 
 const STORAGE_KEY = 'carte.document';
+const HIDE_DONE_KEY = 'carte.masquerFaites';
 
 function blankMap(): MapNode {
   return newNode('Idée centrale');
@@ -35,7 +36,7 @@ export function MindMap() {
 }
 
 function Editor({ initial }: { initial: MapNode }) {
-  const [state, dispatch] = useReducer(reduce, initial, initialState);
+  const [state, dispatch] = useReducer(reduce, initial, (map) => initialState(map, readStored(HIDE_DONE_KEY) === '1'));
   const [opened, setOpened] = useState(0);
   const [notice, setNotice] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
@@ -47,12 +48,17 @@ function Editor({ initial }: { initial: MapNode }) {
     [],
   );
 
-  const { root } = state;
+  const { root, hideDone } = state;
+  const shown = shownRoot(state);
+  const progress = useMemo(() => taskProgress(root), [root]);
+  const hidden = useMemo(() => countDescendants(root) - countDescendants(shown), [root, shown]);
   const mode = modeOf(state);
   const latest = useRef(state);
   useEffect(() => {
     latest.current = state;
   }, [state]);
+
+  useEffect(() => writeStored(HIDE_DONE_KEY, hideDone ? '1' : '0'), [hideDone]);
 
   useEffect(() => {
     const saved = serialize(root);
@@ -120,6 +126,14 @@ function Editor({ initial }: { initial: MapNode }) {
         <ToolbarButton onPress={() => open(blankMap())}>Nouvelle carte</ToolbarButton>
         <ToolbarButton onPress={() => fileInput.current?.click()}>Importer</ToolbarButton>
         <ToolbarButton onPress={() => exportFile(state.root)}>Exporter</ToolbarButton>
+        {(hideDone || progress.size > 0) && (
+          <ToolbarButton
+            pressed={hideDone}
+            onPress={() => send({ type: 'hideDone', hide: !hideDone })}
+          >
+            {hideDone ? `Tâches faites masquées (${hidden} nœud${hidden > 1 ? 's' : ''})` : 'Masquer les tâches faites'}
+          </ToolbarButton>
+        )}
         <input
           ref={fileInput}
           type="file"
@@ -139,7 +153,8 @@ function Editor({ initial }: { initial: MapNode }) {
       <MapCanvas
         key={opened}
         ref={canvas}
-        root={state.root}
+        root={shown}
+        progress={progress}
         selected={state.selected}
         group={state.group}
         editing={state.editing}
@@ -151,11 +166,12 @@ function Editor({ initial }: { initial: MapNode }) {
   );
 }
 
-function ToolbarButton({ onPress, children }: { onPress: () => void; children: string }) {
+function ToolbarButton({ onPress, pressed, children }: { onPress: () => void; pressed?: boolean; children: string }) {
   return (
     <button
       type="button"
       className="action"
+      aria-pressed={pressed}
       onClick={(event) => {
         event.currentTarget.blur();
         onPress();

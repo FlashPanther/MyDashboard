@@ -129,6 +129,12 @@
     border-color: var(--color-ink);
   }
 
+  .action[aria-pressed='true'] {
+    border-color: var(--color-ink);
+    background: var(--color-ink);
+    color: var(--color-ground);
+  }
+
   .panel {
     border: 1px solid var(--color-rule);
     background: var(--color-panel);

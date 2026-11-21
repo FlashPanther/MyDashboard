@@ -417,3 +417,69 @@ test('cocher la case d’une tâche vidée pendant sa saisie la retire sans lais
   assert.notEqual(selectedText(emptied), 'introuvable');
   assert.equal(outline(run(emptied, 'child').root), 'Idée(A(A1 A2 ∅))');
 });
+
+function hiding(): EditorState {
+  return reduce(sample(), { type: 'hideDone', hide: true });
+}
+
+test('quand les tâches faites sont masquées, cocher la tâche sélectionnée reporte la sélection sur son parent', () => {
+  const up = run(run(hiding(), 'up'), 'right');
+  assert.equal(selectedText(up), 'A1');
+  const done = run(run(up, 'task'), 'tick');
+  assert.equal(selectedText(done), 'A');
+  assert.equal(selectedText(run(done, 'right')), 'A2');
+  assert.equal(selectedText(run(done, 'undo')), 'A1');
+});
+
+test('les flèches sautent les tâches masquées, et les réafficher ne change ni la carte ni l’historique', () => {
+  const state = run(run(run(hiding(), 'up'), 'task'), 'tick');
+  assert.equal(selectedText(state), 'Idée');
+  assert.equal(selectedText(run(state, 'right')), 'B');
+  const shown = reduce(state, { type: 'hideDone', hide: false });
+  assert.equal(shown.root, state.root);
+  assert.equal(shown.past.length, state.past.length);
+  assert.equal(selectedText(run(shown, 'right')), 'A');
+});
+
+test('cocher un groupe quand les tâches faites sont masquées le fait disparaître et dissout le groupe', () => {
+  const state = hiding();
+  const ids = state.root.children.map((node) => node.id);
+  const marked = run(reduce(state, { type: 'mark', ids }), 'task');
+  assert.equal(modeOf(marked), 'multiple');
+  const done = run(marked, 'tick');
+  assert.equal(modeOf(done), 'selected');
+  assert.equal(selectedText(done), 'Idée');
+  assert.equal(modeOf(run(done, 'undo')), 'selected');
+});
+
+test('quand les tâches faites sont masquées, supprimer un nœud sélectionne son voisin visible, pas une tâche cachée', () => {
+  const base = typed(sample(), ['sibling'], ['stop', 'C']);
+  const b = base.root.children[1].id;
+  const hidden = reduce(run(run(reduce(base, { type: 'select', id: b }), 'task'), 'tick'), { type: 'hideDone', hide: true });
+  const onA = run(hidden, 'right');
+  assert.equal(selectedText(onA), 'A');
+  const removed = run(onA, 'delete');
+  assert.equal(outline(removed.root), 'Idée(B C)');
+  assert.equal(selectedText(removed), 'C');
+});
+
+test('replier un nœud dont tous les enfants sont masqués ne fait rien', () => {
+  const state = run(run(hiding(), 'up'), 'right');
+  const ids = find(state.root, state.root.children[0].id)!.children.map((node) => node.id);
+  const done = run(run(reduce(state, { type: 'mark', ids }), 'task'), 'tick');
+  assert.equal(selectedText(done), 'A');
+  const folded = run(done, 'toggle');
+  assert.equal(folded.root, done.root);
+  assert.equal(folded.past.length, done.past.length);
+});
+
+test('reposer un nœud à sa place visible ne déplace pas les tâches masquées et ne crée pas d’étape d’annulation', () => {
+  const base = typed(sample(), ['sibling'], ['stop', 'C']);
+  const [a, b, c] = base.root.children.map((node) => node.id);
+  const hidden = reduce(run(run(reduce(base, { type: 'select', id: b }), 'task'), 'tick'), { type: 'hideDone', hide: true });
+  const dropped = reduce(hidden, { type: 'move', ids: [a], parentId: 'root', beforeId: c, side: 'right' });
+  assert.equal(dropped.root, hidden.root);
+  assert.equal(dropped.past.length, hidden.past.length);
+  const moved = reduce(hidden, { type: 'move', ids: [c], parentId: 'root', beforeId: a, side: 'right' });
+  assert.equal(outline(moved.root), 'Idée(C A(A1 A2) B)');
+});
