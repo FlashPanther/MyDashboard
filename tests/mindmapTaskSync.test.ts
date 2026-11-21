@@ -596,3 +596,38 @@ test('une tâche à supprimer déjà absente chez Google est oubliée ; un refus
   await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
   assert.deepEqual(await links(), {});
 });
+
+test('un nœud remis et enregistré pendant les suppressions n’est pas supprimé chez Google', async () => {
+  const { dir, id, links } = await sending(map('une', 'deux'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await saveMap(id, map(), 1, { dir, forget: ['une', 'deux'] });
+  let first = true;
+  const restoring = (async (url: string, init?: RequestInit) => {
+    if (first && init?.method === 'DELETE') {
+      first = false;
+      await saveMap(id, map('deux'), 2, { dir });
+    }
+    return fake.google(url, init);
+  }) as Google;
+  await syncTasks(id, 'Cartes', restoring, { dir, now: minute(0) });
+  assert.deepEqual(fake.titles(), ['deux']);
+  assert.deepEqual(Object.keys(await links()), ['deux']);
+});
+
+test('une tâche suivie aussi par une autre carte (réimport) est seulement détachée, jamais supprimée chez Google', async () => {
+  const dir = await folder();
+  const root = newNode('Voyage', 'root');
+  root.children.push({ ...newNode('Billets', '3f2b8c1e-5a4d-4e6f-9a7b-1c2d3e4f5a6b'), task: { done: false } });
+  const first = (await createMap(root, { dir, sendTasks: true }))!;
+  const second = (await createMap(structuredClone(root), { dir, sendTasks: true }))!;
+  const fake = fakeGoogle();
+  await syncTasks(first.id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await syncTasks(second.id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await saveMap(first.id, newNode('Voyage', 'root'), 1, { dir, forget: ['3f2b8c1e-5a4d-4e6f-9a7b-1c2d3e4f5a6b'] });
+  fake.calls.length = 0;
+  await syncTasks(first.id, 'Cartes', fake.google, { dir, now: minute(0) });
+  assert.deepEqual(fake.calls.filter((call) => call.startsWith('DELETE')), []);
+  assert.deepEqual(fake.titles(), ['Billets']);
+  assert.deepEqual((await readMap(first.id, { dir }))!.links, {});
+});

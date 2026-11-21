@@ -84,9 +84,22 @@ export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: 
     [keepDraft, transmit],
   );
 
+  // Un nœud remis dans la carte (annulation) n'est plus à supprimer chez Google, même s'il est retiré plus tard par Suppr.
+  useEffect(() => {
+    if (forgotten.current.size === 0) return;
+    const present = new Set<string>();
+    const visit = (node: MapNode) => {
+      present.add(node.id);
+      node.children.forEach(visit);
+    };
+    visit(root);
+    for (const nodeId of forgotten.current) if (present.has(nodeId)) forgotten.current.delete(nodeId);
+  }, [root]);
+
   function settle(takeTheirs: boolean) {
     if (!sync.theirs) return;
     dispatch({ type: 'settled' });
+    if (takeTheirs) forgotten.current.clear();
     if (takeTheirs) adopt(sync.theirs.root);
   }
 

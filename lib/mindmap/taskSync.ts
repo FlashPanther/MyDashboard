@@ -15,8 +15,8 @@ import {
   type NewTask,
   type TaskUpdate,
 } from './links.ts';
-import { annotate, readMap, type Options, type StoredMap } from './store.ts';
-import type { RemoteChange } from './tree.ts';
+import { annotate, listMaps, readMap, type Options, type StoredMap } from './store.ts';
+import { find, type RemoteChange } from './tree.ts';
 
 export type Google = <T>(url: string, init?: RequestInit) => Promise<T>;
 /** Ce que Google a changé et que l'éditeur doit reprendre dans la carte. */
@@ -132,25 +132,44 @@ function update(mapId: string, updates: TaskUpdate[], google: Google, options: O
  * Un refus de Google ne fait pas échouer la passe : la suppression est retentée à la suivante.
  */
 async function purge(map: StoredMap, google: Google, options: Options): Promise<StoredMap> {
-  const doomed = Object.entries(map.links).filter(([, link]) => link.doomed && link.detached);
-  if (doomed.length === 0) return map;
-  const gone = new Set<string>();
-  for (const [nodeId, { taskId, listId }] of doomed) {
-    try {
-      const { url, init } = taskDeleteRequest(listId, taskId);
-      await google(url, init);
-      gone.add(nodeId);
-    } catch (error) {
-      if (error instanceof GoogleHttpError && error.status === 404) gone.add(nodeId);
-      else console.error(`Carte ${map.id} : suppression d'une tâche Google en échec :`, (error as Error).message);
-    }
+  const candidates = Object.entries(map.links).filter(([, link]) => link.doomed && link.detached);
+  if (candidates.length === 0) return map;
+  // Une carte réimportée peut suivre la même tâche : elle n'est alors que détachée ici, jamais supprimée sous l'autre.
+  const elsewhere = new Set<string>();
+  for (const { id } of await listMaps(options)) {
+    if (id === map.id) continue;
+    const other = await readMap(id, options).catch(() => null);
+    for (const link of Object.values(other?.links ?? {})) if (!link.detached) elsewhere.add(link.taskId);
   }
-  const forgotten = await annotate(
-    map.id,
-    ({ links }) => ({ links: Object.fromEntries(Object.entries(links).filter(([nodeId, link]) => !(gone.has(nodeId) && link.doomed && link.detached))) }),
-    options,
-  );
-  return forgotten ?? map;
+  for (const [nodeId, { taskId, listId }] of candidates) {
+    // Revérifié juste avant d'envoyer : le nœud a pu revenir entre-temps.
+    const latest = await readMap(map.id, options);
+    const current = latest?.links[nodeId];
+    if (!latest || !current?.doomed || !current.detached || current.taskId !== taskId || find(latest.root, nodeId)) continue;
+    let gone = elsewhere.has(taskId);
+    if (!gone) {
+      try {
+        const { url, init } = taskDeleteRequest(listId, taskId);
+        await google(url, init);
+        gone = true;
+      } catch (error) {
+        gone = error instanceof GoogleHttpError && error.status === 404;
+        if (!gone) console.error(`Carte ${map.id} : suppression d'une tâche Google en échec :`, (error as Error).message);
+      }
+    }
+    if (!gone) continue;
+    await annotate(
+      map.id,
+      ({ links }) => {
+        const link = links[nodeId];
+        if (!link?.doomed || !link.detached || link.taskId !== taskId) return {};
+        const { [nodeId]: _gone, ...rest } = links;
+        return { links: rest };
+      },
+      options,
+    );
+  }
+  return (await readMap(map.id, options)) ?? map;
 }
 
 function since(cursor: string | undefined): string | undefined {
