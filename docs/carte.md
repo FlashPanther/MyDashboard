@@ -39,8 +39,9 @@ Reconstruction de l'éditeur (il existait à part, on le rebâtit ici avec les m
 
 Puis le lien avec Google Tasks :
 
-- [ ] **6. Des tâches dans la carte, sans Google** : nœud-tâche, case à cocher, tâche faite barrée, avancement par
-  branche, interrupteur pour masquer les tâches faites.
+- [x] **6. Des tâches dans la carte, sans Google** : un nœud devient une tâche (`Alt` + `T` ou clic droit), se coche
+  (`Alt` + `C` ou clic sur la case) et reste visible, barré. L'état vit dans la carte et son fichier.
+- [ ] **6 bis. Suivre les tâches** : avancement par branche, interrupteur pour masquer les tâches faites.
 - [ ] **7. La carte enregistrée par le serveur**, sur son volume : même carte sur tous les appareils.
 - [ ] **8. Une connexion Google qui tient**, et un signal clair quand elle est à refaire.
 - [ ] **9. Créer** : marquer un nœud comme tâche la crée dans Google Tasks, avec le chemin de la branche dans son

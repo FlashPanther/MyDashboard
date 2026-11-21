@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initialState, modeOf, reduce, type EditorState } from '../lib/mindmap/editor.ts';
 import type { EditCommand } from '../lib/mindmap/keymap.ts';
-import { find, newNode, type MapNode } from '../lib/mindmap/tree.ts';
+import { find, newNode, visibleNodes, type MapNode } from '../lib/mindmap/tree.ts';
 
 function run(state: EditorState, command: EditCommand, draft?: string, key = ''): EditorState {
   return reduce(state, { type: 'command', command, draft, key });
@@ -348,4 +348,72 @@ test('replier ou déplier toute une branche sélectionne le nœud et s’annule 
   assert.equal(outline(run(folded, 'undo').root), 'Idée(A(A1 A2) B)');
   const unchanged = reduce(state, { type: 'foldBranch', id: a, collapsed: false });
   assert.equal(unchanged.past.length, state.past.length);
+});
+
+const tasks = (state: EditorState) =>
+  visibleNodes(state.root)
+    .slice(1)
+    .map(({ node }) => (node.task ? (node.task.done ? 'done' : 'todo') : '-'));
+
+test('marquer puis cocher une tâche sont deux étapes d’annulation, la sélection ne bouge pas', () => {
+  const marked = run(sample(), 'task');
+  assert.equal(selectedText(marked), 'B');
+  assert.deepEqual(tasks(marked), ['-', '-', '-', 'todo']);
+  const done = run(marked, 'tick');
+  assert.deepEqual(tasks(done), ['-', '-', '-', 'done']);
+  assert.deepEqual(tasks(run(done, 'undo')), ['-', '-', '-', 'todo']);
+  assert.deepEqual(tasks(run(run(done, 'undo'), 'undo')), ['-', '-', '-', '-']);
+});
+
+test('cocher une idée ne fait rien et ne crée pas d’étape d’annulation', () => {
+  const state = sample();
+  assert.equal(run(state, 'tick').past.length, state.past.length);
+});
+
+test('la case d’un nœud le coche et le sélectionne, sans passer par la sélection courante', () => {
+  const marked = run(sample(), 'task');
+  const id = marked.selected!;
+  const elsewhere = run(marked, 'up');
+  const done = reduce(elsewhere, { type: 'tick', ids: [id] });
+  assert.equal(done.selected, id);
+  assert.deepEqual(tasks(done), ['-', '-', '-', 'done']);
+});
+
+test('sur un groupe, marquer et cocher s’appliquent à tous et le groupe reste sélectionné', () => {
+  const state = sample();
+  const ids = state.root.children.map((node) => node.id);
+  const marked = run(reduce(state, { type: 'mark', ids }), 'task');
+  assert.deepEqual(tasks(marked), ['todo', '-', '-', 'todo']);
+  assert.equal(modeOf(marked), 'multiple');
+  const done = run(marked, 'tick');
+  assert.deepEqual(tasks(done), ['done', '-', '-', 'done']);
+  assert.equal(modeOf(done), 'multiple');
+});
+
+test('déplacer ou renommer une tâche garde son état', () => {
+  const marked = run(run(sample(), 'task'), 'tick');
+  const id = marked.selected!;
+  const a = marked.root.children[0].id;
+  const moved = reduce(marked, { type: 'move', ids: [id], parentId: a, beforeId: null, side: 'right' });
+  assert.equal(find(moved.root, id)!.task?.done, true);
+  const renamed = run(run(moved, 'edit'), 'stop', 'B bis');
+  assert.equal(find(renamed.root, id)!.task?.done, true);
+});
+
+test('le menu transforme en tâche le nœud visé, même s’il n’est pas la sélection, et dissout le groupe', () => {
+  const state = sample();
+  const [a, b] = state.root.children.map((node) => node.id);
+  const marked = reduce(reduce(state, { type: 'mark', ids: [a, b] }), { type: 'task', ids: [a] });
+  assert.deepEqual(tasks(marked), ['todo', '-', '-', '-']);
+  assert.equal(marked.selected, a);
+  assert.equal(modeOf(marked), 'selected');
+});
+
+test('cocher la case d’une tâche vidée pendant sa saisie la retire sans laisser de sélection fantôme', () => {
+  const marked = run(sample(), 'task');
+  const id = marked.selected!;
+  const emptied = reduce(run(marked, 'edit'), { type: 'tick', ids: [id], draft: '' });
+  assert.equal(find(emptied.root, id), null);
+  assert.notEqual(selectedText(emptied), 'introuvable');
+  assert.equal(outline(run(emptied, 'child').root), 'Idée(A(A1 A2 ∅))');
 });

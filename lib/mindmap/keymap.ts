@@ -8,6 +8,8 @@ export type EditCommand =
   | 'toParent'
   | 'toggle'
   | 'delete'
+  | 'task'
+  | 'tick'
   | 'left'
   | 'right'
   | 'up'
@@ -48,6 +50,9 @@ const SINGLE_KEYS: Record<string, Command> = {
   '1': 'zoomFit',
 };
 
+// `code` et non `key` : sur Mac, Alt+T donne « † ».
+const ALT_KEYS: Record<string, Command> = { KeyT: 'task', KeyC: 'tick' };
+
 export function commandFor(press: KeyPress, mode: Mode): Command | null {
   const mod = press.ctrlKey || press.metaKey;
   const structural = structuralCommand(press, mod);
@@ -67,7 +72,7 @@ export function commandFor(press: KeyPress, mode: Mode): Command | null {
     if (key === 'y') return 'redo';
     return null;
   }
-  if (press.altKey) return null;
+  if (press.altKey) return mode === 'idle' || press.shiftKey ? null : (ALT_KEYS[press.code] ?? null);
   if (press.key in SINGLE_KEYS) return SINGLE_KEYS[press.key];
   if (mode === 'idle') return null;
 

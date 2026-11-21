@@ -75,7 +75,8 @@ export function MapCanvas({
         return next;
       });
     });
-    observer.current.observe(element);
+    // Par défaut, seule la boîte de contenu est surveillée : un changement de marge intérieure passerait inaperçu.
+    observer.current.observe(element, { box: 'border-box' });
     return () => observer.current?.unobserve(element);
   }, []);
 
@@ -161,11 +162,22 @@ export function MapCanvas({
   }, [gesturing, cancelGesture]);
 
   function menuItems(id: string): MenuItem[] {
-    if (!find(root, id)?.children.length) return [];
-    return [
-      { label: 'Replier toute la branche', run: () => send({ type: 'foldBranch', id, collapsed: true }) },
-      { label: 'Déplier toute la branche', run: () => send({ type: 'foldBranch', id, collapsed: false }) },
-    ];
+    const node = find(root, id);
+    if (!node) return [];
+    const items: MenuItem[] = [];
+    if (id !== root.id) {
+      items.push({
+        label: node.task ? 'Redevenir une idée' : 'Transformer en tâche',
+        run: () => send({ type: 'task', ids: [id] }),
+      });
+    }
+    if (node.children.length) {
+      items.push(
+        { label: 'Replier toute la branche', run: () => send({ type: 'foldBranch', id, collapsed: true }) },
+        { label: 'Déplier toute la branche', run: () => send({ type: 'foldBranch', id, collapsed: false }) },
+      );
+    }
+    return items;
   }
 
   function nodeIdAt(target: EventTarget): string | null {
