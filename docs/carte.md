@@ -87,7 +87,10 @@ Puis le lien avec Google Tasks :
   devra le faire lui-même derrière chaque enregistrement.
 - **Comment le serveur parle à l'éditeur** : l'état coché vit dans la carte, que seul l'éditeur écrit. Ce que Google a
   changé est rendu par l'envoi des tâches (`pulls`) et gardé dans le lien (`incoming`) tant que l'éditeur ne l'a pas
-  repris ; l'éditeur l'applique comme une modification ordinaire, annulable.
+  repris ; l'éditeur l'applique comme une modification ordinaire. L'annuler aussitôt ne sert à rien : tant que le
+  passage suivant ne l'a pas entériné, Google la redonne. Une fois entérinée, l'annuler la renvoie vers Google.
+  Une carte fermée ne lit pas Google : elle reprend ses changements à l'ouverture. À l'étape 10 ter, le serveur pourra
+  lire Google seul et garder ce qui arrive dans le lien, en attendant l'ouverture.
 - **Carte supprimée** : ses liens partent avec elle dans la corbeille, les tâches restent chez Google (étape 11).
 - **Carte importée deux fois** : l'envoi y est éteint tant qu'on ne l'active pas. Les nœuds à identifiant unique
   retrouvent leur tâche grâce à sa référence ; ceux d'une carte faite à la main (identifiants courts) seraient

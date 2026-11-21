@@ -22,6 +22,7 @@ import {
   withinLimits,
   withoutFinished,
   type MapNode,
+  type RemoteChange,
   type Side,
 } from './tree.ts';
 
@@ -49,7 +50,7 @@ export type EditorAction = { draft?: string; newId?: string } & (
   | { type: 'mark'; ids: string[] }
   | { type: 'foldBranch'; id: string; collapsed: boolean }
   | { type: 'hideDone'; hide: boolean }
-  | { type: 'remote'; changes: { id: string; title?: string; done?: boolean }[] }
+  | { type: 'remote'; changes: RemoteChange[] }
 );
 
 type InsertCommand = 'child' | 'sibling' | 'siblingAbove' | 'parent';

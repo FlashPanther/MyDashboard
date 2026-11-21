@@ -13,7 +13,7 @@ import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed } from '@/lib/mindmap/keymap';
 import { draftKey, isClean, opening, parseDraft, readCopy, type Opened, type SyncStatus } from '@/lib/mindmap/sync';
-import { countDescendants, serialize, taskProgress, type MapNode } from '@/lib/mindmap/tree';
+import { countDescendants, serialize, taskProgress, type MapNode, type RemoteChange } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
 import { fetcher, HttpError } from '@/lib/useEndpoint';
 
@@ -131,7 +131,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     [send],
   );
   const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
-  const pull = useCallback((changes: { id: string; title?: string; done?: boolean }[]) => send({ type: 'remote', changes }), [send]);
+  const pull = useCallback((changes: RemoteChange[]) => send({ type: 'remote', changes }), [send]);
   const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root, pull);
   const leave = useCallback(() => {
     const draft = editingElement.current?.innerText;

@@ -333,18 +333,23 @@ export function toggleDone(root: MapNode, ids: string[]): MapNode {
   });
 }
 
+/** Un changement venu d'ailleurs (Google) sur un nœud-tâche. */
+export type RemoteChange = { id: string; title?: string; done?: boolean };
+
 /** Reprend dans la carte ce qui a changé ailleurs : un titre, un état de tâche. Un nœud disparu ou qui n'est plus une tâche est ignoré. */
-export function applyRemote(root: MapNode, changes: { id: string; title?: string; done?: boolean }[]): MapNode {
-  const wanted = changes.filter(({ id, title, done }) => {
-    const node = find(root, id);
-    return node?.task && ((title !== undefined && title !== node.text) || (done !== undefined && done !== node.task.done));
-  });
-  if (wanted.length === 0) return root;
+export function applyRemote(root: MapNode, changes: RemoteChange[]): MapNode {
+  const byId = new Map(changes.map((each) => [each.id, each]));
+  const differs = (node: MapNode) => {
+    const { title, done } = byId.get(node.id)!;
+    return Boolean(node.task) && ((title !== undefined && title !== node.text) || (done !== undefined && done !== node.task!.done));
+  };
+  const wanted = new Set(among(root, new Set(byId.keys())).filter(differs).map((node) => node.id));
+  if (wanted.size === 0) return root;
   return change(root, (draft) => {
-    for (const { id, title, done } of wanted) {
-      const node = find(draft, id)!;
+    for (const node of among(draft, wanted)) {
+      const { title, done } = byId.get(node.id)!;
       if (title !== undefined) node.text = title;
-      if (done !== undefined) node.task = { ...node.task, done };
+      if (done !== undefined) node.task = { done };
     }
   });
 }

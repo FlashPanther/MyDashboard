@@ -5,8 +5,10 @@ import {
   lostTasks,
   markerIn,
   reconcile,
+  recoverLost,
   settleLinks,
   settleReconciled,
+  taskTitle,
   tasksToCreate,
   type Fields,
   type Link,
@@ -14,16 +16,22 @@ import {
   type TaskUpdate,
 } from './links.ts';
 import { annotate, readMap, type Options, type StoredMap } from './store.ts';
+import type { RemoteChange } from './tree.ts';
 
 export type Google = <T>(url: string, init?: RequestInit) => Promise<T>;
 /** Ce que Google a changé et que l'éditeur doit reprendre dans la carte. */
-export type Pull = { id: string } & Fields;
+export type Pull = RemoteChange;
 export type SyncResult = { enabled: boolean; waiting: number; lost: number; pulls: Pull[] };
-type GoogleTask = { id: string; title?: string; notes?: string; status?: string; updated?: string };
+type GoogleTask = { id: string; title?: string; notes?: string; status?: string; updated?: string; deleted?: boolean };
 
 const MAX_PER_PASS = 50;
 const READ_EVERY_MS = 20_000;
+/** Marge prise sur la dernière date vue : une modification enregistrée chez Google pendant la lecture n'est pas manquée. */
+const CURSOR_MARGIN_MS = 5_000;
 const readAt = new Map<string, number>();
+/** Par carte, la plus récente modification vue chez Google : la lecture suivante ne demande que ce qui a changé depuis. */
+const cursors = new Map<string, string>();
+type Exchanged = { waiting: number; pulls: Pull[] };
 const running = new Map<string, Promise<SyncResult | null>>();
 const again = new Set<string>();
 let sending: Promise<unknown> = Promise.resolve();
@@ -39,9 +47,9 @@ async function listNamed(title: string, google: Google): Promise<string> {
   return (await google<{ id: string }>(url, init)).id;
 }
 
-function tasksIn(listId: string, google: Google): Promise<GoogleTask[]> {
+function tasksIn(listId: string, google: Google, updatedMin?: string): Promise<GoogleTask[]> {
   return allPages<GoogleTask>((pageToken) => {
-    const { url, init } = tasksInListRequest(listId, pageToken);
+    const { url, init } = tasksInListRequest(listId, pageToken, updatedMin);
     return google(url, init);
   });
 }
@@ -89,20 +97,39 @@ async function update(mapId: string, updates: TaskUpdate[], google: Google, opti
   if (failure) throw failure;
 }
 
+function since(cursor: string | undefined): string | undefined {
+  return cursor && new Date(Date.parse(cursor) - CURSOR_MARGIN_MS).toISOString();
+}
+
+/** Ce que Google dit d'une tâche, lu comme la carte l'écrit ; un titre vide n'est pas repris. */
+function fieldsOf(task: GoogleTask): Fields {
+  const title = taskTitle(task.title ?? '');
+  return { ...(title ? { title } : {}), done: task.status === 'completed' };
+}
+
 /** Crée ce qui manque, lit Google de temps en temps, puis pousse ce que la carte a changé et rend ce que Google a changé. */
-async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, google: Google, options: Options) {
+async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, google: Google, options: Options): Promise<Exchanged> {
   const now = options.now?.getTime() ?? Date.now();
   const followed = Object.values(map.links).some((link) => !link.detached);
   const remote = new Map<string, Fields>();
   if (batch.length > 0 || (followed && now - (readAt.get(map.id) ?? 0) >= READ_EVERY_MS)) {
-    const { listId, existing } = await destination(Object.values(map.links)[0]?.listId, listTitle, google);
+    // Créer demande toute la liste, pour reconnaître les tâches déjà créées ; sinon, seul ce qui a changé suffit.
+    const known = Object.values(map.links)[0]?.listId;
+    const delta = batch.length === 0 && known ? since(cursors.get(map.id)) : undefined;
+    const { listId, existing } = delta
+      ? { listId: known!, existing: await tasksIn(known!, google, delta) }
+      : await destination(known, listTitle, google);
     readAt.set(map.id, now);
-    for (const task of existing) remote.set(task.id, { title: task.title ?? '', done: task.status === 'completed' });
-    await send(map, batch, listId, existing, google, options);
+    const latest = existing.reduce((max, task) => (task.updated && task.updated > max ? task.updated : max), cursors.get(map.id) ?? '');
+    if (latest) cursors.set(map.id, latest);
+    const alive = existing.filter((task) => !task.deleted);
+    for (const task of alive) remote.set(task.id, fieldsOf(task));
+    await send(map, batch, listId, alive, google, options);
   }
   const current = (await readMap(map.id, options)) ?? map;
   const plan = reconcile(current.root, settleLinks(current.root, current.links), remote);
-  await annotate(map.id, ({ links }) => ({ links: settleReconciled(links, plan, remote) }), options);
+  const seen = new Set(remote.keys());
+  await annotate(map.id, ({ links }) => ({ links: recoverLost(settleReconciled(links, plan), seen) }), options);
   const pushes: TaskUpdate[] = plan
     .filter(({ push }) => Object.keys(push).length > 0)
     .map(({ nodeId, taskId, listId, push }) => ({ nodeId, taskId, listId, ...push }));
@@ -118,7 +145,7 @@ async function sync(id: string, listTitle: string, google: Google, options: Opti
   if (!map) return null;
   const create = tasksToCreate(id, map.root, map.links);
   const batch = map.sendTasks ? create.slice(0, MAX_PER_PASS) : [];
-  let exchanged: Awaited<ReturnType<typeof exchange>> = { waiting: 0, pulls: [] };
+  let exchanged: Exchanged = { waiting: 0, pulls: [] };
   try {
     if (map.sendTasks) {
       // Un envoi à la fois pour tout le serveur : deux cartes portant les mêmes nœuds (réimport) ne créent pas la même tâche en parallèle.

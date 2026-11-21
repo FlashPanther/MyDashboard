@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { writeJson } from '@/components/mindmap/writeJson';
-import type { MapNode } from '@/lib/mindmap/tree';
+import type { MapNode, RemoteChange } from '@/lib/mindmap/tree';
 
 const QUIET_MS = 1500;
 const RETRY_MS = 30_000;
@@ -9,15 +9,13 @@ const POLL_MS = 60_000;
 
 export type TaskSync = { state: 'ok' | 'unlinked' | 'failed'; enabled: boolean; waiting: number; lost: number };
 
-type Pull = { id: string; title?: string; done?: boolean };
-
-export function useTaskSync(id: string, saved: boolean, root: MapNode, pull: (changes: Pull[]) => void) {
+export function useTaskSync(id: string, saved: boolean, root: MapNode, pull: (changes: RemoteChange[]) => void) {
   const [sync, setSync] = useState<TaskSync>({ state: 'ok', enabled: false, waiting: 0, lost: 0 });
   const [round, setRound] = useState(0);
   const failures = useRef(0);
 
   const apply = useCallback(({ status, body }: { status: number; body: unknown }) => {
-    const answer = (body ?? {}) as { enabled?: boolean; waiting?: number; lost?: number; pulls?: Pull[]; notConnected?: boolean };
+    const answer = (body ?? {}) as { enabled?: boolean; waiting?: number; lost?: number; pulls?: RemoteChange[]; notConnected?: boolean };
     if (status === 200) {
       failures.current = 0;
       const next = { state: 'ok' as const, enabled: answer.enabled === true, waiting: answer.waiting ?? 0, lost: answer.lost ?? 0 };

@@ -32,8 +32,13 @@ function titleOf(node: MapNode): string {
   return node.text.replace(/\s+/g, ' ').trim();
 }
 
+/** Un titre tel que la carte l'envoie à Google : espaces réduits, coupé à la limite. Sert aussi à lire les titres de Google. */
+export function taskTitle(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, TASK_TITLE_MAX);
+}
+
 function taskTitleOf(node: MapNode): string {
-  return titleOf(node).slice(0, TASK_TITLE_MAX);
+  return taskTitle(node.text);
 }
 
 /** Ce qui identifie le nœud dans le détail de sa tâche Google : un identifiant fait main n'est unique que dans sa carte. */
@@ -59,7 +64,7 @@ export function parseLinks(value: unknown): Links {
   const links: Links = {};
   if (typeof value !== 'object' || value === null) return links;
   for (const [nodeId, raw] of Object.entries(value)) {
-    const { taskId, listId, detached, lost, title, done, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
+    const { taskId, listId, detached, lost, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
     const pending = parseFields(incoming);
     if (typeof taskId !== 'string' || !taskId || typeof listId !== 'string' || !listId) continue;
     links[nodeId] = {
@@ -67,8 +72,7 @@ export function parseLinks(value: unknown): Links {
       listId,
       ...(detached === true ? { detached } : {}),
       ...(lost === true ? { lost } : {}),
-      ...(typeof title === 'string' ? { title } : {}),
-      ...(typeof done === 'boolean' ? { done } : {}),
+      ...parseFields(raw),
       ...(typeof updated === 'string' ? { updated } : {}),
       ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}),
     };
@@ -108,8 +112,10 @@ export function reconcile(root: MapNode, links: Links, remote: ReadonlyMap<strin
       const entry: Reconciled = { nodeId: node.id, taskId: link.taskId, listId: link.listId, push: {}, pull: {}, agreed: {} };
       for (const field of FIELDS) {
         const [carte, base, google] = [mine[field], link[field], theirs[field] ?? link[field]];
-        const target = carte === google ? (carte === base ? null : entry.agreed) : carte === base ? entry.pull : entry.push;
-        if (target) Object.assign(target, { [field]: target === entry.pull ? google : carte });
+        if (carte === google) {
+          if (carte !== base) Object.assign(entry.agreed, { [field]: carte });
+        } else if (carte === base) Object.assign(entry.pull, { [field]: google });
+        else Object.assign(entry.push, { [field]: carte });
       }
       result.push(entry);
     }
@@ -120,17 +126,21 @@ export function reconcile(root: MapNode, links: Links, remote: ReadonlyMap<strin
 }
 
 /** Range dans les liens ce que le rapprochement a établi : l'accord devient la base, ce qui vient de Google attend la carte. */
-export function settleReconciled(links: Links, plan: Reconciled[], remote: ReadonlyMap<string, Fields> = new Map()): Links {
+export function settleReconciled(links: Links, plan: Reconciled[]): Links {
   const next = { ...links };
   for (const { nodeId, taskId, agreed, pull } of plan) {
     const { incoming: _incoming, ...link } = next[nodeId] ?? {};
     if (link.taskId !== taskId) continue;
     next[nodeId] = { ...(link as Link), ...agreed, ...(Object.keys(pull).length > 0 ? { incoming: pull } : {}) };
   }
-  for (const [nodeId, { lost: _lost, ...link }] of Object.entries(next)) {
-    if (_lost && remote.has(link.taskId)) next[nodeId] = link;
-  }
   return next;
+}
+
+/** Une tâche notée disparue mais revue chez Google redevient suivie. */
+export function recoverLost(links: Links, seen: ReadonlySet<string>): Links {
+  return Object.fromEntries(
+    Object.entries(links).map(([nodeId, { lost, ...link }]) => [nodeId, lost && !seen.has(link.taskId) ? { ...link, lost } : link]),
+  );
 }
 
 /** Les nœuds-tâches dont la tâche Google a disparu. */

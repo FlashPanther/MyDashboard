@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { lostTasks, markerIn, parseLinks, reconcile, settleLinks, settleReconciled, tasksToCreate } from '../lib/mindmap/links.ts';
+import { lostTasks, markerIn, parseLinks, reconcile, recoverLost, settleLinks, settleReconciled, taskTitle, tasksToCreate } from '../lib/mindmap/links.ts';
 import { newNode, type MapNode } from '../lib/mindmap/tree.ts';
 
 function map(): MapNode {
@@ -154,5 +154,13 @@ test('un lien détaché, perdu, ou sans état connu n’est jamais rapproché ; 
   assert.deepEqual(plan({ billets: { ...changed, lost: true } }), []);
   assert.deepEqual(plan({ billets: link('g') }), []);
   assert.equal(lostTasks(map(), { billets: { ...changed, lost: true }, cadeau: { ...changed, lost: true } }), 1);
-  assert.deepEqual(settleReconciled({ billets: { ...changed, lost: true } }, [], new Map([['g', {}]])), { billets: changed });
+  assert.deepEqual(recoverLost({ billets: { ...changed, lost: true } }, new Set(['g'])), { billets: changed });
+  assert.deepEqual(recoverLost({ billets: { ...changed, lost: true } }, new Set(['autre'])), { billets: { ...changed, lost: true } });
+});
+
+test('un titre lu chez Google est normalisé comme la carte l’écrit : pas d’aller-retour pour des espaces ou un retour à la ligne', () => {
+  assert.equal(taskTitle('  Billets\n d’avion  '), 'Billets d’avion');
+  assert.equal(taskTitle('x'.repeat(1500)).length, 1024);
+  const links = { billets: sent('Billets d’avion', false) };
+  assert.deepEqual(plan(links, { g: { title: taskTitle('  Billets  d’avion ') } }), [{ nodeId: 'billets', ...quiet }]);
 });

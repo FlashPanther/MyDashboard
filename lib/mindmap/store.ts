@@ -148,7 +148,8 @@ export function annotate(
     const current = await readMap(id, { dir });
     if (!current) return null;
     const map = { ...current, ...change(current) };
-    await persist(dir, map);
+    const same = map.sendTasks === current.sendTasks && JSON.stringify(map.links) === JSON.stringify(current.links);
+    if (!same) await persist(dir, map);
     return map;
   });
 }
