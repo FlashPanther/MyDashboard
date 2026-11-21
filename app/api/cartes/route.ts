@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     handle(async () => {
       const body = await readMapBody(request);
       if ('error' in body) return NextResponse.json({ error: body.error }, { status: body.status });
-      const created = await createMap(body.root);
+      const created = await createMap(body.root, { sendTasks: body.sendTasks });
       if (!created) return NextResponse.json({ error: 'Trop de cartes : supprimes-en avant d’en créer une autre' }, { status: 507 });
       return { id: created.id, revision: created.revision, updatedAt: created.updatedAt };
     })

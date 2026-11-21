@@ -118,6 +118,9 @@ test('le corps d’une requête est lu comme une carte, avec sa révision', asyn
   assert.equal('root' in body && body.root.text, 'Voyage');
   assert.equal('root' in body && body.root.id, 'r');
   assert.equal('root' in body && body.revision, 3);
+  assert.equal('root' in body && body.sendTasks, false);
+  const wanted = await readMapBody(post(JSON.stringify({ root: node('r'), sendTasks: true })));
+  assert.equal('root' in wanted && wanted.sendTasks, true);
   const loose = await readMapBody(post(JSON.stringify({ root: node('r'), revision: '3' })));
   assert.equal('root' in loose && loose.revision, null);
 });

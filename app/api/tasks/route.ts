@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { handle, requireJson } from '@/lib/api';
 import { allPages } from '@/lib/google/allPages';
 import { googleFetch } from '@/lib/google/oauth';
-import { newTaskRequest } from '@/lib/google/taskWrites';
+import { newTaskRequest, TASK_TITLE_MAX } from '@/lib/google/taskWrites';
 import { parseTags } from '@/lib/tags';
 
 export const dynamic = 'force-dynamic';
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
   const refused = requireJson(request);
   if (refused) return refused;
   const body = await request.json().catch(() => ({}));
-  const title = typeof body.title === 'string' ? body.title.trim().slice(0, 1024) : '';
+  const title = typeof body.title === 'string' ? body.title.trim().slice(0, TASK_TITLE_MAX) : '';
   if (!title) return NextResponse.json({ error: 'Titre vide' }, { status: 400 });
 
   return handle(async () => {

@@ -74,7 +74,10 @@ l'extension et les deux onglets est allumé.
 Les portées demandées sont en lecture seule (`calendar.readonly`, `gmail.readonly`,
 `analytics.readonly`), sauf une : `tasks`, pour le panneau Tâches. C'est la seule écriture
 du dashboard dans ton compte : créer une tâche dans la liste choisie, la marquer comme
-terminée, la déplacer vers une autre liste, chaque fois sur ton geste. Si tu as relié Google
+terminée, la déplacer vers une autre liste, chaque fois sur ton geste. La carte mentale
+s'en sert aussi : un nœud marqué comme tâche est créé dans Google Tasks, dans la liste
+nommée par `mindmap.taskList` de `dashboard.config.ts` (« Cartes » par défaut, créée au
+besoin). Si tu as relié Google
 avant l'arrivée de ce champ, il le signale et propose de relier à nouveau.
 
 ## Relier WhatsApp et Messenger

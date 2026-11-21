@@ -1,4 +1,6 @@
 const API = 'https://tasks.googleapis.com/tasks/v1';
+/** Longueur maximale d'un titre de tache chez Google. */
+export const TASK_TITLE_MAX = 1024;
 
 export type TaskChange = { listId: string } & ({ done: true } | { moveTo: string });
 
@@ -26,12 +28,28 @@ export function parseTaskChange(body: unknown): TaskChange | null {
   return null;
 }
 
-export function newTaskRequest(title: string, listId: unknown): GoogleCall {
+export function newTaskRequest(title: string, listId: unknown, extra: { notes?: string; done?: boolean } = {}): GoogleCall {
   const list = text(listId);
+  const payload = { title, ...(extra.notes ? { notes: extra.notes } : {}), ...(extra.done ? { status: 'completed' } : {}) };
   return {
     url: list ? tasksUrl(list) : `${API}/lists/@default/tasks`,
-    init: jsonInit('POST', { title }),
+    init: jsonInit('POST', payload),
   };
+}
+
+export function taskListsRequest(pageToken?: string): GoogleCall {
+  const params = new URLSearchParams({ maxResults: '100', ...(pageToken ? { pageToken } : {}) });
+  return { url: `${API}/users/@me/lists?${params}`, init: {} };
+}
+
+/** Toutes les tâches d'une liste, faites et masquées comprises : pour reconnaître celles déjà créées. */
+export function tasksInListRequest(listId: string, pageToken?: string): GoogleCall {
+  const params = new URLSearchParams({ maxResults: '100', showCompleted: 'true', showHidden: 'true', ...(pageToken ? { pageToken } : {}) });
+  return { url: `${tasksUrl(listId)}?${params}`, init: {} };
+}
+
+export function newTaskListRequest(title: string): GoogleCall {
+  return { url: `${API}/users/@me/lists`, init: jsonInit('POST', { title }) };
 }
 
 export function taskChangeRequest(taskId: string, change: TaskChange): GoogleCall {

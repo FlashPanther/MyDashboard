@@ -39,10 +39,10 @@ export function MapList() {
 
   useEffect(() => setLocal(browserMap()), []);
 
-  async function create(root: MapNode): Promise<boolean> {
+  async function create(root: MapNode, sendTasks = false): Promise<boolean> {
     setBusy(true);
     setFailure('');
-    const { status, body } = await writeJson('/api/cartes', 'POST', { root });
+    const { status, body } = await writeJson('/api/cartes', 'POST', { root, sendTasks });
     const { id, error } = (body ?? {}) as { id?: string; error?: string };
     if (status === 200 && id) {
       router.push(`/carte/${id}`);
@@ -92,7 +92,7 @@ export function MapList() {
           ← Tableau
         </Link>
         <h1 className="font-display text-xl font-extrabold uppercase tracking-[0.16em] text-ink">Cartes</h1>
-        <button type="button" className="action" disabled={busy} onClick={() => create(newNode(BLANK_TITLE))}>
+        <button type="button" className="action" disabled={busy} onClick={() => create(newNode(BLANK_TITLE), true)}>
           Nouvelle carte
         </button>
         <button type="button" className="action" disabled={busy} onClick={() => fileInput.current?.click()}>
