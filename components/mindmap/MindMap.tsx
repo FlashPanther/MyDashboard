@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { MapCanvas, type CanvasHandle } from '@/components/mindmap/MapCanvas';
 import { Shortcuts } from '@/components/mindmap/Shortcuts';
 import { useMapSync } from '@/components/mindmap/useMapSync';
+import { writeJson } from '@/components/mindmap/writeJson';
 import type { Send } from '@/components/mindmap/types';
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
@@ -30,6 +32,9 @@ const UNKEPT = ' Ce navigateur ne peut rien garder : exporte la carte avant de f
 export function MindMap({ id }: { id: string }) {
   const [opened, setOpened] = useState<Opened | null>(null);
   const [failure, setFailure] = useState('');
+  const [orphan, setOrphan] = useState<{ text: string; root: MapNode } | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     let stale = false;
@@ -45,19 +50,44 @@ export function MindMap({ id }: { id: string }) {
       .catch((error: Error) => {
         if (stale) return;
         const missing = error instanceof HttpError && error.status === 404;
-        setFailure(missing ? 'Cette carte n’existe pas, ou plus.' : error.message);
+        const text = missing ? readStored(draftKey(id)) : null;
+        const draft = parseDraft(text);
+        if (text && draft) setOrphan({ text, root: draft.root });
+        setFailure(missing ? 'Cette carte n’existe pas, ou plus, sur le serveur.' : error.message);
       });
     return () => {
       stale = true;
     };
   }, [id]);
 
+  async function restore(kept: { text: string; root: MapNode }) {
+    setRestoring(true);
+    const { status, body } = await writeJson('/api/cartes', 'POST', { root: kept.root });
+    const created = (body as { id?: string } | null)?.id;
+    if (status !== 200 || !created) {
+      setRestoring(false);
+      return setFailure('La carte n’a pas pu être remise sur le serveur.');
+    }
+    if (readStored(draftKey(id)) === kept.text) writeStored(draftKey(id), null);
+    router.replace(`/carte/${created}`);
+  }
+
   if (opened) return <Editor id={id} opened={opened} />;
   return (
     <Preparing>
       {failure ? (
-        <span>
-          {failure}{' '}
+        <span className="flex max-w-md flex-col items-center gap-3 text-center">
+          {failure}
+          {orphan && (
+            <>
+              <span>
+                Ce navigateur en garde une version non enregistrée : <strong>{orphan.root.text || 'sans titre'}</strong>.
+              </span>
+              <button type="button" className="action" disabled={restoring} onClick={() => restore(orphan)}>
+                La remettre sur le serveur
+              </button>
+            </>
+          )}
           <Link href="/carte" className="underline">
             Retour aux cartes
           </Link>

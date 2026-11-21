@@ -1,7 +1,7 @@
 export async function writeJson(
   url: string,
-  method: 'POST' | 'PUT',
-  payload: object,
+  method: 'POST' | 'PUT' | 'DELETE',
+  payload: object = {},
   keepalive = false,
 ): Promise<{ status: number; body: unknown }> {
   try {

@@ -53,12 +53,13 @@ Puis le lien avec Google Tasks :
   modification part au serveur après un court silence, un brouillon reste dans le navigateur tant que le serveur n'a
   pas répondu, et une carte modifiée sur un autre appareil demande de choisir une version. La carte que le navigateur
   gardait avant se reprend d'un clic.
-- [ ] **7 ter. Supprimer une carte** depuis la liste (le serveur sait déjà la mettre à la corbeille).
+- [x] **7 ter. Supprimer une carte** depuis la liste, après confirmation ; elle part dans la corbeille du serveur.
 - [ ] **8. Une connexion Google qui tient**, et un signal clair quand elle est à refaire.
 - [ ] **9. Créer** : marquer un nœud comme tâche la crée dans Google Tasks, avec le chemin de la branche dans son
   détail.
 - [ ] **10. Relire et cocher**, dans les deux sens.
 - [ ] **11. Détacher ou supprimer** : retirer un nœud détache la tâche ; la supprimer pour de bon est un second geste.
+  Supprimer une carte détache toutes ses tâches : c'est le serveur qui le fait, derrière la suppression.
 - [ ] **12. Le menu latéral** des tâches Google qui ne sont dans aucune carte.
 - [ ] **13. Reprendre les tâches existantes** et réduire le nombre de listes.
 - [ ] **14. Alléger le tableau** : retirer l'ancien onglet « Carte », les panneaux de tâches devenus inutiles et les
