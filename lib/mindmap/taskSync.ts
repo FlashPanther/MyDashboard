@@ -1,8 +1,8 @@
 import { allPages } from '../google/allPages.ts';
-import { newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest, taskUpdateRequest } from '../google/taskWrites.ts';
+import { taskDeleteRequest, newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest, taskUpdateRequest } from '../google/taskWrites.ts';
 import { GoogleHttpError } from '../google/errors.ts';
 import {
-  lostTasks,
+  taskStatus,
   markerIn,
   reconcile,
   absorb,
@@ -15,13 +15,13 @@ import {
   type NewTask,
   type TaskUpdate,
 } from './links.ts';
-import { annotate, readMap, type Options, type StoredMap } from './store.ts';
-import type { RemoteChange } from './tree.ts';
+import { annotate, readMap, tasksFollowedElsewhere, type Options, type StoredMap } from './store.ts';
+import { find, type RemoteChange } from './tree.ts';
 
 export type Google = <T>(url: string, init?: RequestInit) => Promise<T>;
 /** Ce que Google a changé et que l'éditeur doit reprendre dans la carte. */
 export type Pull = RemoteChange;
-export type SyncResult = { enabled: boolean; waiting: number; lost: number; pulls: Pull[] };
+export type SyncResult = { enabled: boolean; waiting: number; lost: number; pulls: Pull[]; linked: string[] };
 type GoogleTask = { id: string; title?: string; notes?: string; status?: string; updated?: string; deleted?: boolean };
 
 const MAX_PER_PASS = 50;
@@ -79,25 +79,94 @@ async function send(map: StoredMap, batch: NewTask[], listId: string, existing: 
   }
 }
 
-/** Chaque tâche est traitée seule : une tâche supprimée chez Google n'empêche pas de mettre les autres à jour. */
-async function update(mapId: string, updates: TaskUpdate[], google: Google, options: Options): Promise<void> {
+/**
+ * Pour chaque tâche, un appel à Google puis ce qu'il faut en garder dans les liens ; une tâche absente chez Google a son
+ * propre sort. Chaque tâche est traitée seule : un refus n'empêche pas les autres, et le premier refus est relancé à la fin.
+ */
+async function eachTask<T extends { nodeId: string; taskId: string }>(
+  mapId: string,
+  items: T[],
+  call: (item: T) => Promise<Partial<Link> | null>,
+  absent: Partial<Link> | null,
+  options: Options,
+): Promise<void> {
   let failure: unknown;
-  for (const { nodeId, taskId, listId, ...changed } of updates) {
-    let change: Partial<Link>;
+  for (const item of items) {
+    let change: Partial<Link> | null;
     try {
-      const { url, init } = taskUpdateRequest(listId, taskId, changed);
-      const { updated } = await google<GoogleTask>(url, init);
-      change = { ...changed, ...(updated ? { updated } : {}) };
+      change = await call(item);
     } catch (error) {
       if (!(error instanceof GoogleHttpError) || error.status !== 404) {
         failure ??= error;
         continue;
       }
-      change = { lost: true };
+      change = absent;
     }
-    await annotate(mapId, ({ links }) => ({ links: { ...links, [nodeId]: { ...links[nodeId], ...change } } }), options);
+    await annotate(mapId, ({ links }) => {
+      const link = links[item.nodeId];
+      if (link?.taskId !== item.taskId) return {};
+      if (change) return { links: { ...links, [item.nodeId]: { ...link, ...change } } };
+      const { [item.nodeId]: _gone, ...rest } = links;
+      return { links: rest };
+    }, options);
   }
   if (failure) throw failure;
+}
+
+function update(mapId: string, updates: TaskUpdate[], google: Google, options: Options): Promise<void> {
+  return eachTask(
+    mapId,
+    updates,
+    async ({ taskId, listId, nodeId: _nodeId, ...changed }) => {
+      const { url, init } = taskUpdateRequest(listId, taskId, changed);
+      const { updated } = await google<GoogleTask>(url, init);
+      return { ...changed, ...(updated ? { updated } : {}) };
+    },
+    { lost: true },
+    options,
+  );
+}
+
+/**
+ * Supprime chez Google les tâches dont le nœud a été retiré avec ce choix ; une tâche déjà absente est simplement oubliée.
+ * Un refus de Google ne fait pas échouer la passe : la suppression est retentée à la suivante.
+ */
+async function purge(map: StoredMap, google: Google, options: Options): Promise<StoredMap> {
+  const candidates = Object.entries(map.links).filter(([, link]) => link.doomed && link.detached);
+  if (candidates.length === 0) return map;
+  for (const [nodeId, { taskId, listId }] of candidates) {
+    // Revérifié juste avant d'envoyer : le nœud a pu revenir entre-temps.
+    const latest = await readMap(map.id, options);
+    const current = latest?.links[nodeId];
+    if (!latest || !current?.doomed || !current.detached || current.taskId !== taskId || find(latest.root, nodeId)) continue;
+    // Une carte réimportée peut suivre la même tâche : elle n'est alors que détachée ici. Une carte illisible empêche de
+    // le savoir : la suppression attend.
+    const elsewhere = await tasksFollowedElsewhere(map.id, options);
+    if (!elsewhere) continue;
+    let gone = elsewhere.has(taskId);
+    if (!gone) {
+      try {
+        const { url, init } = taskDeleteRequest(listId, taskId);
+        await google(url, init);
+        gone = true;
+      } catch (error) {
+        gone = error instanceof GoogleHttpError && error.status === 404;
+        if (!gone) console.error(`Carte ${map.id} : suppression d'une tâche Google en échec :`, (error as Error).message);
+      }
+    }
+    if (!gone) continue;
+    await annotate(
+      map.id,
+      ({ links }) => {
+        const link = links[nodeId];
+        if (!link?.doomed || !link.detached || link.taskId !== taskId) return {};
+        const { [nodeId]: _gone, ...rest } = links;
+        return { links: rest };
+      },
+      options,
+    );
+  }
+  return (await readMap(map.id, options)) ?? map;
 }
 
 function since(cursor: string | undefined): string | undefined {
@@ -110,7 +179,6 @@ function fieldsOf(task: GoogleTask): Fields {
   return { ...(title ? { title } : {}), done: task.status === 'completed' };
 }
 
-/** Crée ce qui manque, lit Google de temps en temps, puis pousse ce que la carte a changé et rend ce que Google a changé. */
 async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, google: Google, options: SyncOptions): Promise<Exchanged> {
   const now = options.now?.getTime() ?? Date.now();
   const followed = Object.keys(map.links).length > 0;
@@ -151,6 +219,7 @@ async function sync(id: string, listTitle: string, google: Google, options: Sync
   const create = tasksToCreate(id, map.root, map.links);
   const batch = map.sendTasks ? create.slice(0, MAX_PER_PASS) : [];
   let exchanged: Exchanged = { waiting: 0, pulls: [] };
+  let settled: StoredMap | null = null;
   try {
     if (map.sendTasks) {
       // Un envoi à la fois pour tout le serveur : deux cartes portant les mêmes nœuds (réimport) ne créent pas la même tâche en parallèle.
@@ -159,13 +228,18 @@ async function sync(id: string, listTitle: string, google: Google, options: Sync
       exchanged = await turn;
     }
   } finally {
-    await annotate(id, (latest) => ({ links: settleLinks(latest.root, latest.links) }), options);
+    settled = await annotate(id, (latest) => ({ links: settleLinks(latest.root, latest.links) }), options);
   }
-  const latest = await readMap(id, options);
+  // Sous le même verrou que les envois : aucune autre carte ne relie une tâche pendant qu'on la supprime.
+  const purged = settled && sending.then(() => purge(settled!, google, options));
+  if (purged) sending = purged.catch(() => undefined);
+  const latest = purged && (await purged);
+  const status = latest ? taskStatus(latest.root, latest.links) : { linked: [], lost: 0 };
   return {
+    linked: status.linked,
     enabled: map.sendTasks,
     waiting: create.length - batch.length + exchanged.waiting,
-    lost: latest ? lostTasks(latest.root, latest.links) : 0,
+    lost: status.lost,
     pulls: exchanged.pulls,
   };
 }

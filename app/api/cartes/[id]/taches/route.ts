@@ -21,8 +21,8 @@ export async function PUT(request: Request, { params }: Context) {
     requireJson(request) ??
     handle(async () => {
       const { enabled } = (await request.json().catch(() => ({}))) as { enabled?: unknown };
-      if (typeof enabled !== 'boolean') return NextResponse.json({ error: 'Choix attendu' }, { status: 400 });
       const { id } = await params;
+      if (typeof enabled !== 'boolean') return NextResponse.json({ error: 'Choix attendu' }, { status: 400 });
       if (!(await annotate(id, () => ({ sendTasks: enabled })))) return missing();
       return (await syncMapTasks(id)) ?? missing();
     })

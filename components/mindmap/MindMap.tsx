@@ -13,7 +13,7 @@ import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed } from '@/lib/mindmap/keymap';
 import { draftKey, isClean, opening, parseDraft, readCopy, type Opened, type SyncStatus } from '@/lib/mindmap/sync';
-import { countDescendants, serialize, taskProgress, type MapNode, type RemoteChange } from '@/lib/mindmap/tree';
+import { branchIds, countDescendants, serialize, taskProgress, type MapNode, type RemoteChange } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
 import { fetcher, HttpError } from '@/lib/useEndpoint';
 
@@ -130,9 +130,19 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     },
     [send],
   );
-  const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
+  const { status, kept, settle, flush, forgetOnSave } = useMapSync(id, opened.sync, root, adopt);
   const pull = useCallback((changes: RemoteChange[]) => send({ type: 'remote', changes }), [send]);
   const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root, pull);
+  // Sur la carte entière : une tâche faite masquée dans la branche est retirée avec elle.
+  const linkedIn = useCallback((nodeId: string) => [...branchIds(root, [nodeId])].filter((each) => google.linked.includes(each)), [root, google.linked]);
+  const removeWithTasks = useCallback(
+    (nodeId: string) => {
+      forgetOnSave(linkedIn(nodeId));
+      send({ type: 'select', id: nodeId });
+      send({ type: 'command', command: 'delete' });
+    },
+    [forgetOnSave, linkedIn, send],
+  );
   const leave = useCallback(() => {
     const draft = editingElement.current?.innerText;
     flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
@@ -234,6 +244,8 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         editing={state.editing}
         editingElement={editingElement}
         send={send}
+        linkedIn={linkedIn}
+        removeWithTasks={removeWithTasks}
       />
       <Shortcuts />
     </div>

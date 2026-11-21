@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { parseLinks, type Links } from './links.ts';
+import { doom, parseLinks, type Links } from './links.ts';
 import { FORMAT_VERSION, parseDocument, type MapNode } from './tree.ts';
 
 const MAPS_DIR = path.join(process.cwd(), '.data', 'cartes');
@@ -98,6 +98,18 @@ export async function readMap(id: string, { dir = MAPS_DIR }: Options = {}): Pro
   }
 }
 
+/** Les tâches suivies (lien non détaché) par les autres cartes ; `null` si l'une d'elles est illisible et qu'on ne peut donc pas le savoir. */
+export async function tasksFollowedElsewhere(mapId: string, { dir = MAPS_DIR }: Options = {}): Promise<Set<string> | null> {
+  const followed = new Set<string>();
+  for (const id of await mapIds(dir)) {
+    if (id === mapId) continue;
+    const map = await readMap(id, { dir }).catch(() => undefined);
+    if (map === undefined) return null;
+    for (const link of Object.values(map?.links ?? {})) if (!link.detached) followed.add(link.taskId);
+  }
+  return followed;
+}
+
 export async function listMaps({ dir = MAPS_DIR }: Options = {}): Promise<MapSummary[]> {
   const maps: MapSummary[] = [];
   for (const id of await mapIds(dir)) {
@@ -126,13 +138,14 @@ export function saveMap(
   id: string,
   root: MapNode,
   revision: number,
-  { now = new Date(), dir = MAPS_DIR }: Options = {},
+  { now = new Date(), dir = MAPS_DIR, forget = [] }: Options & { forget?: readonly string[] } = {},
 ): Promise<SaveResult> {
   return inTurn(id, async () => {
     const current = await readMap(id, { dir });
     if (!current) return null;
     if (current.revision !== revision) return { saved: false, map: current };
-    const map = { ...current, root, revision: revision + 1, updatedAt: now.toISOString() };
+    const links = forget.length > 0 ? doom(current.links, root, forget) : current.links;
+    const map = { ...current, root, links, revision: revision + 1, updatedAt: now.toISOString() };
     await persist(dir, map);
     return { saved: true, map };
   });

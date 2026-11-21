@@ -10,6 +10,8 @@ export type Link = {
   detached?: true;
   /** La tâche n'existe plus chez Google : on ne la recrée pas et on n'y écrit plus. */
   lost?: true;
+  /** Le nœud a été retiré avec le choix de supprimer aussi sa tâche chez Google. */
+  doomed?: true;
   /** Le dernier état sur lequel la carte et Google étaient d'accord : un écart dit lequel des deux a changé. */
   title?: string;
   done?: boolean;
@@ -64,7 +66,7 @@ export function parseLinks(value: unknown): Links {
   const links: Links = {};
   if (typeof value !== 'object' || value === null) return links;
   for (const [nodeId, raw] of Object.entries(value)) {
-    const { taskId, listId, detached, lost, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
+    const { taskId, listId, detached, lost, doomed, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
     const pending = parseFields(incoming);
     if (typeof taskId !== 'string' || !taskId || typeof listId !== 'string' || !listId) continue;
     links[nodeId] = {
@@ -72,6 +74,7 @@ export function parseLinks(value: unknown): Links {
       listId,
       ...(detached === true ? { detached } : {}),
       ...(lost === true ? { lost } : {}),
+      ...(doomed === true ? { doomed } : {}),
       ...parseFields(raw),
       ...(typeof updated === 'string' ? { updated } : {}),
       ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}),
@@ -167,15 +170,31 @@ export function absorb(links: Links, remote: ReadonlyMap<string, Fields>, gone: 
   );
 }
 
-/** Les nœuds-tâches dont la tâche Google a disparu. */
-export function lostTasks(root: MapNode, links: Links): number {
+/** Les nœuds-tâches reliés à une tâche Google qu'on suit encore, et le nombre de ceux dont la tâche a disparu. */
+export function taskStatus(root: MapNode, links: Links): { linked: string[]; lost: number } {
+  const linked: string[] = [];
   let lost = 0;
   const visit = (node: MapNode) => {
-    if (node.task && links[node.id]?.lost) lost += 1;
+    const link = node.task ? links[node.id] : undefined;
+    if (link?.lost) lost += 1;
+    else if (link && !link.detached) linked.push(node.id);
     node.children.forEach(visit);
   };
   visit(root);
-  return lost;
+  return { linked, lost };
+}
+
+/** À l'enregistrement : les nœuds retirés avec le choix de supprimer aussi leur tâche Google sont marqués. */
+export function doom(links: Links, root: MapNode, ids: readonly string[]): Links {
+  const present = new Set<string>();
+  const visit = (node: MapNode) => {
+    present.add(node.id);
+    node.children.forEach(visit);
+  };
+  visit(root);
+  const next = { ...links };
+  for (const id of ids) if (next[id] && !present.has(id)) next[id] = { ...next[id], doomed: true };
+  return next;
 }
 
 export function settleLinks(root: MapNode, links: Links): Links {
@@ -186,9 +205,10 @@ export function settleLinks(root: MapNode, links: Links): Links {
   };
   visit(root);
   return Object.fromEntries(
-    Object.entries(links).map(([nodeId, { detached: _detached, ...link }]) => [
+    Object.entries(links).map(([nodeId, { detached: _detached, doomed, ...link }]) => [
       nodeId,
-      tasks.has(nodeId) ? link : { ...link, detached: true as const },
+      // Un nœud revenu dans la carte (annulation) n'est plus à supprimer chez Google.
+      tasks.has(nodeId) ? link : { ...link, detached: true as const, ...(doomed ? { doomed } : {}) },
     ]),
   );
 }

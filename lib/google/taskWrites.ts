@@ -46,6 +46,10 @@ export function taskListsRequest(pageToken?: string): GoogleCall {
   return { url: `${API}/users/@me/lists?${params}`, init: {} };
 }
 
+export function taskDeleteRequest(listId: string, taskId: string): GoogleCall {
+  return { url: taskUrl(listId, taskId), init: { method: 'DELETE' } };
+}
+
 /** Seuls les champs donnés sont modifiés : renommer ne touche pas à l'état, cocher ne touche pas au titre. */
 export function taskUpdateRequest(listId: string, taskId: string, { title, done }: { title?: string; done?: boolean }): GoogleCall {
   const state = done === undefined ? {} : done ? { status: 'completed' } : { status: 'needsAction', completed: null };

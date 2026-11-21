@@ -7,18 +7,31 @@ const RETRY_MS = 30_000;
 const RETRY_MAX_MS = 300_000;
 const POLL_MS = 60_000;
 
-export type TaskSync = { state: 'ok' | 'unlinked' | 'failed'; enabled: boolean; waiting: number; lost: number };
+export type TaskSync = { state: 'ok' | 'unlinked' | 'failed'; enabled: boolean; waiting: number; lost: number; linked: string[] };
 
 export function useTaskSync(id: string, saved: boolean, root: MapNode, pull: (changes: RemoteChange[]) => void) {
-  const [sync, setSync] = useState<TaskSync>({ state: 'ok', enabled: false, waiting: 0, lost: 0 });
+  const [sync, setSync] = useState<TaskSync>({ state: 'ok', enabled: false, waiting: 0, lost: 0, linked: [] });
   const [round, setRound] = useState(0);
   const failures = useRef(0);
 
   const apply = useCallback(({ status, body }: { status: number; body: unknown }, withPulls = true) => {
-    const answer = (body ?? {}) as { enabled?: boolean; waiting?: number; lost?: number; pulls?: RemoteChange[]; notConnected?: boolean };
+    const answer = (body ?? {}) as {
+      enabled?: boolean;
+      waiting?: number;
+      lost?: number;
+      linked?: string[];
+      pulls?: RemoteChange[];
+      notConnected?: boolean;
+    };
     if (status === 200) {
       failures.current = 0;
-      const next = { state: 'ok' as const, enabled: answer.enabled === true, waiting: answer.waiting ?? 0, lost: answer.lost ?? 0 };
+      const next = {
+        state: 'ok' as const,
+        enabled: answer.enabled === true,
+        waiting: answer.waiting ?? 0,
+        lost: answer.lost ?? 0,
+        linked: answer.linked ?? [],
+      };
       setSync(next);
       if (withPulls && answer.pulls?.length) pull(answer.pulls);
       if (next.enabled && next.waiting > 0) setRound((count) => count + 1);

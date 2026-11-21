@@ -2,7 +2,7 @@ import { parseDocument, type MapNode } from './tree.ts';
 
 export const MAX_BODY = 2_000_000;
 
-export type MapBody = { root: MapNode; revision: number | null; sendTasks: boolean };
+export type MapBody = { root: MapNode; revision: number | null; sendTasks: boolean; forget: string[] };
 export type Refusal = { status: 400 | 413; error: string };
 
 const TOO_BIG: Refusal = { status: 413, error: 'Carte trop volumineuse' };
@@ -42,7 +42,8 @@ export async function readMapBody(request: Request): Promise<MapBody | Refusal> 
     const data: unknown = JSON.parse(text);
     if (typeof data !== 'object' || data === null || !('root' in data) || !soundIds(data.root)) return INVALID;
     const revision = 'revision' in data && Number.isInteger(data.revision) ? (data.revision as number) : null;
-    return { root: parseDocument(data), revision, sendTasks: 'sendTasks' in data && data.sendTasks === true };
+    const forget = 'forget' in data && Array.isArray(data.forget) ? data.forget.filter((id): id is string => typeof id === 'string') : [];
+    return { root: parseDocument(data), revision, sendTasks: 'sendTasks' in data && data.sendTasks === true, forget };
   } catch {
     return INVALID;
   }

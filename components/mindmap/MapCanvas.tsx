@@ -46,6 +46,8 @@ export function MapCanvas({
   editing,
   editingElement,
   send,
+  linkedIn,
+  removeWithTasks,
 }: {
   ref: Ref<CanvasHandle>;
   root: MapNode;
@@ -55,6 +57,8 @@ export function MapCanvas({
   editing: Editing | null;
   editingElement: RefObject<HTMLElement | null>;
   send: Send;
+  linkedIn: (id: string) => string[];
+  removeWithTasks: (id: string) => void;
 }) {
   const [sizes, setSizes] = useState<ReadonlyMap<string, Size>>(new Map());
   const [view, setView] = useState<View | null>(null);
@@ -171,6 +175,17 @@ export function MapCanvas({
       items.push({
         label: node.task ? 'Redevenir une idée' : 'Transformer en tâche',
         run: () => send({ type: 'task', ids: [id] }),
+      });
+    }
+    const inBranch = linkedIn(id);
+    if (id !== root.id && inBranch.length > 0) {
+      const several = inBranch.length > 1;
+      items.push({
+        label: several ? `Supprimer, avec ses ${inBranch.length} tâches Google…` : 'Supprimer, avec sa tâche Google…',
+        then: [
+          { label: several ? `Oui, supprimer aussi les ${inBranch.length} tâches Google` : 'Oui, supprimer aussi la tâche Google', run: () => removeWithTasks(id) },
+          { label: 'Annuler' },
+        ],
       });
     }
     if (node.children.length) {
