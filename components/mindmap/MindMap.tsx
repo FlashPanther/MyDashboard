@@ -15,6 +15,7 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
+import { ContextMenu, type MenuItem } from '@/components/mindmap/ContextMenu';
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, type Editing, type EditorAction } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed, type ZoomCommand } from '@/lib/mindmap/keymap';
@@ -24,6 +25,7 @@ import {
   branchesOn,
   branchIds,
   countDescendants,
+  find,
   newNode,
   parse,
   serialize,
@@ -57,6 +59,7 @@ type Press = {
   last: Point;
 };
 type Frame = { from: Point; to: Point; ids: string[] };
+type Menu = { id: string; x: number; y: number };
 type Drag = Carried & { lifted: ReadonlySet<string>; dx: number; dy: number; drop: Drop | null };
 
 function blankMap(): MapNode {
@@ -309,6 +312,8 @@ function MapCanvas({
 
   const [drag, setDrag] = useState<Drag | null>(null);
   const [frame, setFrame] = useState<Frame | null>(null);
+  const [menu, setMenu] = useState<Menu | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
   const press = useRef<Press | null>(null);
   const gesturing = drag !== null || frame !== null;
   const lifted = drag?.lifted ?? NOTHING;
@@ -332,6 +337,14 @@ function MapCanvas({
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [gesturing, cancelGesture]);
+
+  function menuItems(id: string): MenuItem[] {
+    if (!find(root, id)?.children.length) return [];
+    return [
+      { label: 'Replier toute la branche', run: () => send({ type: 'foldBranch', id, collapsed: true }) },
+      { label: 'Déplier toute la branche', run: () => send({ type: 'foldBranch', id, collapsed: false }) },
+    ];
+  }
 
   function nodeIdAt(target: EventTarget): string | null {
     return (target as Element).closest<HTMLElement>('[data-id]')?.dataset.id ?? null;
@@ -407,12 +420,19 @@ function MapCanvas({
         else if (!drag && pressed.id !== null && group.length > 0) send({ type: 'select', id: pressed.id });
         cancelGesture();
       }}
+      onContextMenu={(event) => {
+        const id = nodeIdAt(event.target);
+        if (!id || id === editing?.id || menuItems(id).length === 0) return;
+        event.preventDefault();
+        send({ type: 'select', id });
+        setMenu({ id, x: event.clientX, y: event.clientY });
+      }}
       onPointerCancel={(event) => {
         if (press.current?.pointerId === event.pointerId) cancelGesture();
       }}
       onDoubleClick={(event) => {
         const id = nodeIdAt(event.target);
-        if (id) send({ type: 'edit', id });
+        if (id && !(event.target as Element).closest('button')) send({ type: 'edit', id });
       }}
     >
       <div
@@ -448,6 +468,9 @@ function MapCanvas({
           />
         )}
       </div>
+      {menu && menuItems(menu.id).length > 0 && (
+        <ContextMenu at={menu} items={menuItems(menu.id)} onClose={closeMenu} />
+      )}
     </main>
   );
 }
@@ -659,6 +682,7 @@ function FoldToggle({
     <button
       type="button"
       title={node.collapsed ? 'Déplier' : 'Replier'}
+      data-id={node.id}
       className={`absolute bg-panel ${shape}${faded ? FADED : ''}`}
       style={
         {
@@ -690,6 +714,7 @@ const SHORTCUTS: [string, string][] = [
   ['Échap', 'Finir la saisie, désélectionner'],
   ['Suppr', 'Supprimer la branche'],
   ['Glisser un nœud', 'Le déplacer avec sa branche : le lien en pointillés montre son futur parent'],
+  ['Clic droit sur un nœud', 'Replier ou déplier toute sa branche'],
   ['Glisser sur le fond', 'Tracer un cadre pour sélectionner plusieurs nœuds, puis les supprimer ou les glisser ensemble'],
   ['Ctrl Z, Ctrl Maj Z', 'Annuler, rétablir'],
   ['= - 0 1', 'Zoom avant, arrière, 100 %, tout voir'],

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   branchesOn,
   countDescendants,
+  foldBranch,
   newNode,
   parse,
   serialize,
@@ -168,4 +169,33 @@ test('toute carte dans les limites se relit après export', () => {
   assert.equal(withinLimits(chain), true);
   assert.equal(parse(serialize(chain)).text, 'x');
   assert.equal(withinLimits({ ...newNode('y'), children: [chain] }), false);
+});
+
+function deep() {
+  const { root, a } = tree();
+  a.children[0].children.push(newNode('a11', 'a11'));
+  return root;
+}
+
+test('replier toute une branche replie chacun de ses niveaux et rien d’autre', () => {
+  const folded = foldBranch(deep(), 'a', true);
+  assert.deepEqual(texts(folded), ['root', 'a', 'b', 'b1']);
+  assert.deepEqual(texts(toggleCollapsed(folded, 'a')), ['root', 'a', 'a1', 'b', 'b1']);
+});
+
+test('déplier toute une branche rouvre chacun de ses niveaux', () => {
+  const root = deep();
+  const reopened = foldBranch(foldBranch(root, 'a', true), 'a', false);
+  assert.deepEqual(reopened, root);
+  assert.deepEqual(texts(foldBranch(foldBranch(root, 'root', true), 'root', false)), ['root', 'a', 'a1', 'a11', 'b', 'b1']);
+});
+
+test('une feuille n’est jamais marquée repliée, et replier sans effet rend la même carte', () => {
+  const root = deep();
+  const folded = foldBranch(root, 'a', true);
+  assert.equal(folded.children[0].children[0].children[0].collapsed, false);
+  assert.equal(foldBranch(folded, 'a', true), folded);
+  assert.equal(foldBranch(root, 'a', false), root);
+  assert.equal(foldBranch(root, 'a11', true), root);
+  assert.equal(foldBranch(root, 'inconnu', true), root);
 });

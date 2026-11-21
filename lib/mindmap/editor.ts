@@ -4,6 +4,7 @@ import {
   addParent,
   addSibling,
   find,
+  foldBranch,
   isEmptyLeaf,
   neighbour,
   parentOf,
@@ -34,6 +35,7 @@ export type EditorAction = { draft?: string; newId?: string } & (
   | { type: 'replace'; root: MapNode }
   | { type: 'move'; ids: string[]; parentId: string; beforeId: string | null; side: Side }
   | { type: 'mark'; ids: string[] }
+  | { type: 'foldBranch'; id: string; collapsed: boolean }
 );
 
 type InsertCommand = 'child' | 'sibling' | 'siblingAbove' | 'parent';
@@ -86,6 +88,10 @@ function step(state: EditorState, action: EditorAction): EditorState {
       const settled = finishEditing(state, action.draft);
       const root = move(settled.root, action.ids, action.parentId, action.beforeId, action.side);
       return withinLimits(root) ? commit(settled, root, settled.selected) : settled;
+    }
+    case 'foldBranch': {
+      const settled = finishEditing(state, action.draft);
+      return commit(settled, foldBranch(settled.root, action.id, action.collapsed), action.id);
     }
     case 'mark': {
       const settled = finishEditing(state, action.draft);

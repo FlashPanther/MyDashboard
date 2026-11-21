@@ -338,3 +338,14 @@ test('après la suppression d’un groupe, la sélection va au voisin resté en 
   const first = run(grouped('A', 'A2'), 'delete');
   assert.equal(selectedText(first), 'B');
 });
+
+test('replier ou déplier toute une branche sélectionne le nœud et s’annule en une étape', () => {
+  const state = grouped('A1', 'B');
+  const a = state.root.children[0].id;
+  const folded = reduce(state, { type: 'foldBranch', id: a, collapsed: true });
+  assert.equal(outline(folded.root), 'Idée(A[+](A1 A2) B)');
+  assert.deepEqual([folded.selected, folded.group.length, folded.past.length], [a, 0, state.past.length + 1]);
+  assert.equal(outline(run(folded, 'undo').root), 'Idée(A(A1 A2) B)');
+  const unchanged = reduce(state, { type: 'foldBranch', id: a, collapsed: false });
+  assert.equal(unchanged.past.length, state.past.length);
+});
