@@ -14,6 +14,10 @@ function tasksUrl(listId: string) {
   return `${API}/lists/${encodeURIComponent(listId)}/tasks`;
 }
 
+function taskUrl(listId: string, taskId: string) {
+  return `${tasksUrl(listId)}/${encodeURIComponent(taskId)}`;
+}
+
 function jsonInit(method: string, payload: object): RequestInit {
   return { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) };
 }
@@ -42,6 +46,12 @@ export function taskListsRequest(pageToken?: string): GoogleCall {
   return { url: `${API}/users/@me/lists?${params}`, init: {} };
 }
 
+/** Seuls les champs donnés sont modifiés : renommer ne touche pas à l'état, cocher ne touche pas au titre. */
+export function taskUpdateRequest(listId: string, taskId: string, { title, done }: { title?: string; done?: boolean }): GoogleCall {
+  const state = done === undefined ? {} : done ? { status: 'completed' } : { status: 'needsAction', completed: null };
+  return { url: taskUrl(listId, taskId), init: jsonInit('PATCH', { ...(title === undefined ? {} : { title }), ...state }) };
+}
+
 /** Toutes les tâches d'une liste, faites et masquées comprises : pour reconnaître celles déjà créées. */
 export function tasksInListRequest(listId: string, pageToken?: string): GoogleCall {
   const params = new URLSearchParams({ maxResults: '100', showCompleted: 'true', showHidden: 'true', ...(pageToken ? { pageToken } : {}) });
@@ -53,7 +63,7 @@ export function newTaskListRequest(title: string): GoogleCall {
 }
 
 export function taskChangeRequest(taskId: string, change: TaskChange): GoogleCall {
-  const url = `${tasksUrl(change.listId)}/${encodeURIComponent(taskId)}`;
+  const url = taskUrl(change.listId, taskId);
   if ('done' in change) return { url, init: jsonInit('PATCH', { status: 'completed' }) };
   return {
     url: `${url}/move?${new URLSearchParams({ destinationTasklist: change.moveTo })}`,

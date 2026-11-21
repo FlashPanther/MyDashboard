@@ -200,6 +200,12 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
                 : 'Tâches envoyées à Google'}
           </ToolbarButton>
         )}
+        {google.lost > 0 && (
+          <p role="status" className="font-mono text-xs text-amber">
+            {google.lost > 1 ? `${google.lost} tâches n’existent plus` : 'Une tâche n’existe plus'} chez Google : la carte les garde, sans les
+            renvoyer.
+          </p>
+        )}
         {google.state === 'unlinked' && (
           <a href="/api/auth/google" className="font-mono text-xs text-amber underline">
             Google n’est pas relié : les tâches restent dans la carte. Relier

@@ -7,7 +7,8 @@
 Vider sa tête dans une carte, transformer en tâches Google les nœuds qui sont des tâches, puis les planifier et les
 cocher dans Google Agenda. La carte garde la structure ; Google Tasks garde l'état des tâches.
 
-Règle : tout nœud-tâche existe dans Google Tasks ; toutes les tâches Google ne sont pas dans une carte.
+Règle : tout nœud-tâche d'une carte dont l'envoi est activé existe dans Google Tasks ; toutes les tâches Google ne sont
+pas dans une carte. Seule exception : une tâche supprimée chez Google, que la carte signale sans la recréer.
 
 ## Comment c'est construit
 
@@ -58,14 +59,17 @@ Puis le lien avec Google Tasks :
   l'en-tête du tableau affiche « Google expiré : relier ». Le signal sera repris dans la page Carte à l'étape 9.
 - [ ] **8 bis. Une liaison qui tient** : cela dépend de Google Cloud, pas du code. Tant que l'application y est en état
   « Test », la liaison tombe après sept jours ; il faut la publier, puis relier de nouveau (voir le README).
-- [ ] **9. Créer** : quand l'envoi est activé pour une carte, ses nœuds-tâches sans lien sont créés dans Google Tasks
+- [x] **9. Créer** : quand l'envoi est activé pour une carte, ses nœuds-tâches sans lien sont créés dans Google Tasks
   après un enregistrement, dans la liste nommée par `mindmap.taskList` de `dashboard.config.ts`, avec le chemin de la
   branche dans leur détail. L'envoi est activé d'office pour une carte neuve et proposé par un bouton pour une carte
   importée ou reprise. Chaque tâche porte une référence dans son détail : une tâche déjà créée est reconnue et reliée
   au lieu d'être recréée. Les liens (nœud → tâche Google) sont gardés par le serveur, à côté de la carte. Un nœud qui
-  n'est plus une tâche garde son lien, marqué « détaché ». Codé et testé avec un faux Google ; **reste à essayer
-  contre le vrai Google** avant de cocher.
-- [ ] **10. Relire et cocher**, dans les deux sens.
+  n'est plus une tâche garde son lien, marqué « détaché ». Essayé contre le vrai Google le 21 novembre 2026.
+- [ ] **10. De la carte vers Google** : cocher, décocher ou renommer un nœud lié met sa tâche Google à jour. Une tâche
+  supprimée chez Google est notée perdue : la carte garde son nœud et n'y écrit plus. Codé et testé avec un Google en
+  mémoire ; **reste à essayer contre le vrai Google** avant de cocher.
+- [ ] **10 bis. De Google vers la carte** : une tâche cochée dans Google Tasks ou Google Agenda se coche dans la carte.
+- [ ] **10 ter. Le serveur envoie de lui-même** derrière chaque enregistrement, sans dépendre d'un onglet ouvert.
 - [ ] **11. Détacher ou supprimer** : retirer un nœud détache la tâche ; la supprimer pour de bon est un second geste.
   Supprimer une carte détache toutes ses tâches : c'est le serveur qui le fait, derrière la suppression.
 - [ ] **12. Le menu latéral** des tâches Google qui ne sont dans aucune carte.

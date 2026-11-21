@@ -1,3 +1,4 @@
+import { GoogleHttpError } from './errors';
 import { readTokens, updateTokens, writeTokens, type StoredTokens } from './tokens';
 
 export const GOOGLE_SCOPES = [
@@ -183,6 +184,6 @@ export async function googleFetch<T>(url: string, init: RequestInit = {}): Promi
     }
     throw new NotConnectedError("Accès refusé par Google : vérifie les autorisations demandées");
   }
-  if (!res.ok) throw new Error(`${new URL(url).pathname} a répondu ${res.status}`);
+  if (!res.ok) throw new GoogleHttpError(`${new URL(url).pathname} a répondu ${res.status}`, res.status);
   return (await res.json()) as T;
 }

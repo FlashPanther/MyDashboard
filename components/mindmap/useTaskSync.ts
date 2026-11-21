@@ -6,18 +6,18 @@ const QUIET_MS = 1500;
 const RETRY_MS = 30_000;
 const RETRY_MAX_MS = 300_000;
 
-export type TaskSync = { state: 'ok' | 'unlinked' | 'failed'; enabled: boolean; waiting: number };
+export type TaskSync = { state: 'ok' | 'unlinked' | 'failed'; enabled: boolean; waiting: number; lost: number };
 
 export function useTaskSync(id: string, saved: boolean, root: MapNode) {
-  const [sync, setSync] = useState<TaskSync>({ state: 'ok', enabled: false, waiting: 0 });
+  const [sync, setSync] = useState<TaskSync>({ state: 'ok', enabled: false, waiting: 0, lost: 0 });
   const [round, setRound] = useState(0);
   const failures = useRef(0);
 
   const apply = useCallback(({ status, body }: { status: number; body: unknown }) => {
-    const answer = (body ?? {}) as { enabled?: boolean; waiting?: number; notConnected?: boolean };
+    const answer = (body ?? {}) as { enabled?: boolean; waiting?: number; lost?: number; notConnected?: boolean };
     if (status === 200) {
       failures.current = 0;
-      const next = { state: 'ok' as const, enabled: answer.enabled === true, waiting: answer.waiting ?? 0 };
+      const next = { state: 'ok' as const, enabled: answer.enabled === true, waiting: answer.waiting ?? 0, lost: answer.lost ?? 0 };
       setSync(next);
       if (next.enabled && next.waiting > 0) setRound((count) => count + 1);
     } else {

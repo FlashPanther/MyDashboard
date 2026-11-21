@@ -1,10 +1,11 @@
 import { allPages } from '../google/allPages.ts';
-import { newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest } from '../google/taskWrites.ts';
-import { markerIn, settleLinks, tasksToCreate, type Link, type NewTask } from './links.ts';
+import { newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest, taskUpdateRequest } from '../google/taskWrites.ts';
+import { GoogleHttpError } from '../google/errors.ts';
+import { lostTasks, markerIn, settleLinks, tasksToCreate, tasksToUpdate, type Link, type NewTask, type TaskUpdate } from './links.ts';
 import { annotate, readMap, type Options, type StoredMap } from './store.ts';
 
 export type Google = <T>(url: string, init?: RequestInit) => Promise<T>;
-export type SyncResult = { enabled: boolean; waiting: number };
+export type SyncResult = { enabled: boolean; waiting: number; lost: number };
 type GoogleTask = { id: string; notes?: string; status?: string; updated?: string };
 
 const MAX_PER_PASS = 50;
@@ -37,8 +38,9 @@ async function destination(known: string | undefined, listTitle: string, google:
   return read(known).catch(async () => read(await listNamed(listTitle, google)));
 }
 
+/** La base du lien est l'état de la carte, même pour une tâche reconnue : ce que Google a de différent sera lu comme un changement venu de Google, jamais écrasé. */
 function linkTo(task: NewTask, listId: string, found: GoogleTask): Link {
-  return { taskId: found.id, listId, title: task.title, done: found.status ? found.status === 'completed' : task.done, ...(found.updated ? { updated: found.updated } : {}) };
+  return { taskId: found.id, listId, title: task.title, done: task.done, ...(found.updated ? { updated: found.updated } : {}) };
 }
 
 async function send(map: StoredMap, batch: NewTask[], listTitle: string, google: Google, options: Options): Promise<void> {
@@ -52,22 +54,53 @@ async function send(map: StoredMap, batch: NewTask[], listTitle: string, google:
   }
 }
 
+/** Chaque tâche est traitée seule : une tâche supprimée chez Google n'empêche pas de mettre les autres à jour. */
+async function update(mapId: string, updates: TaskUpdate[], google: Google, options: Options): Promise<void> {
+  let failure: unknown;
+  for (const { nodeId, taskId, listId, ...changed } of updates) {
+    let change: Partial<Link>;
+    try {
+      const { url, init } = taskUpdateRequest(listId, taskId, changed);
+      const { updated } = await google<GoogleTask>(url, init);
+      change = { ...changed, ...(updated ? { updated } : {}) };
+    } catch (error) {
+      if (!(error instanceof GoogleHttpError) || error.status !== 404) {
+        failure ??= error;
+        continue;
+      }
+      change = { lost: true };
+    }
+    await annotate(mapId, ({ links }) => ({ links: { ...links, [nodeId]: { ...links[nodeId], ...change } } }), options);
+  }
+  if (failure) throw failure;
+}
+
 async function sync(id: string, listTitle: string, google: Google, options: Options): Promise<SyncResult | null> {
   const map = await readMap(id, options);
   if (!map) return null;
   const create = tasksToCreate(id, map.root, map.links);
   const batch = map.sendTasks ? create.slice(0, MAX_PER_PASS) : [];
+  const changed = map.sendTasks ? tasksToUpdate(map.root, settleLinks(map.root, map.links)) : [];
+  const updates = changed.slice(0, MAX_PER_PASS);
   try {
-    if (batch.length > 0) {
+    if (batch.length > 0 || updates.length > 0) {
       // Un envoi à la fois pour tout le serveur : deux cartes portant les mêmes nœuds (réimport) ne créent pas la même tâche en parallèle.
-      const turn = sending.then(() => send(map, batch, listTitle, google, options));
+      const turn = sending.then(async () => {
+        if (batch.length > 0) await send(map, batch, listTitle, google, options);
+        await update(id, updates, google, options);
+      });
       sending = turn.catch(() => undefined);
       await turn;
     }
   } finally {
     await annotate(id, (latest) => ({ links: settleLinks(latest.root, latest.links) }), options);
   }
-  return { enabled: map.sendTasks, waiting: create.length - batch.length };
+  const latest = await readMap(id, options);
+  return {
+    enabled: map.sendTasks,
+    waiting: create.length - batch.length + changed.length - updates.length,
+    lost: latest ? lostTasks(latest.root, latest.links) : 0,
+  };
 }
 
 /** Une passe à la fois par carte ; une demande arrivée pendant une passe en déclenche une autre à la suite. */
