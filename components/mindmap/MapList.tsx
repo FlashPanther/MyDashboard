@@ -62,7 +62,8 @@ export function MapList() {
       const [tasks, followed] = await Promise.all([fetcher('/api/tasks'), fetcher('/api/cartes/suivies')]);
       const root = takeOverMap(tasks.tasks as TaskItem[], new Set(followed.taskIds as string[]));
       if (!root) {
-        setFailure('Toutes tes tâches Google ouvertes sont déjà dans une carte.');
+        const open = (tasks.tasks as TaskItem[]).length;
+        setFailure(open === 0 ? 'Aucune tâche Google ouverte à reprendre.' : 'Toutes tes tâches Google ouvertes sont déjà dans une carte.');
         setBusy(false);
         return;
       }
