@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { MapCanvas, type CanvasHandle } from '@/components/mindmap/MapCanvas';
 import { Shortcuts } from '@/components/mindmap/Shortcuts';
 import { useMapSync } from '@/components/mindmap/useMapSync';
+import { writeJson } from '@/components/mindmap/writeJson';
 import type { Send } from '@/components/mindmap/types';
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
@@ -30,6 +32,8 @@ const UNKEPT = ' Ce navigateur ne peut rien garder : exporte la carte avant de f
 export function MindMap({ id }: { id: string }) {
   const [opened, setOpened] = useState<Opened | null>(null);
   const [failure, setFailure] = useState('');
+  const [orphan, setOrphan] = useState<MapNode | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     let stale = false;
@@ -45,19 +49,38 @@ export function MindMap({ id }: { id: string }) {
       .catch((error: Error) => {
         if (stale) return;
         const missing = error instanceof HttpError && error.status === 404;
-        setFailure(missing ? 'Cette carte n’existe pas, ou plus.' : error.message);
+        if (missing) setOrphan(parseDraft(readStored(draftKey(id)))?.root ?? null);
+        setFailure(missing ? 'Cette carte n’existe pas, ou plus, sur le serveur.' : error.message);
       });
     return () => {
       stale = true;
     };
   }, [id]);
 
+  async function restore(root: MapNode) {
+    const { status, body } = await writeJson('/api/cartes', 'POST', { root });
+    const created = (body as { id?: string } | null)?.id;
+    if (status !== 200 || !created) return setFailure('La carte n’a pas pu être remise sur le serveur.');
+    writeStored(draftKey(id), null);
+    router.replace(`/carte/${created}`);
+  }
+
   if (opened) return <Editor id={id} opened={opened} />;
   return (
     <Preparing>
       {failure ? (
-        <span>
-          {failure}{' '}
+        <span className="flex max-w-md flex-col items-center gap-3 text-center">
+          {failure}
+          {orphan && (
+            <>
+              <span>
+                Ce navigateur en garde une version non enregistrée : <strong>{orphan.text || 'sans titre'}</strong>.
+              </span>
+              <button type="button" className="action" onClick={() => restore(orphan)}>
+                La remettre sur le serveur
+              </button>
+            </>
+          )}
           <Link href="/carte" className="underline">
             Retour aux cartes
           </Link>

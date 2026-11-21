@@ -32,6 +32,7 @@ export function MapList() {
   const [failure, setFailure] = useState('');
   const [busy, setBusy] = useState(false);
   const [doomed, setDoomed] = useState<string | null>(null);
+  const [removed, setRemoved] = useState<string[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const notice = failure || list.error;
 
@@ -55,11 +56,15 @@ export function MapList() {
     setBusy(true);
     setFailure('');
     const { status, body } = await writeJson(`/api/cartes/${id}`, 'DELETE');
-    if (status === 200 || status === 404) writeStored(draftKey(id), null);
-    else setFailure((body as { error?: string } | null)?.error ?? 'Suppression impossible');
+    if (status === 200 || status === 404) {
+      writeStored(draftKey(id), null);
+      setRemoved((ids) => [...ids, id]);
+      list.refresh();
+    } else {
+      setFailure((body as { error?: string } | null)?.error ?? 'Suppression impossible');
+    }
     setDoomed(null);
     setBusy(false);
-    list.refresh();
   }
 
   async function importFile(file: File | undefined) {
@@ -73,7 +78,7 @@ export function MapList() {
     await create(root);
   }
 
-  const maps = list.data?.maps;
+  const maps = list.data?.maps.filter((map) => !removed.includes(map.id));
   if (!maps && !notice) return <Preparing>Préparation des cartes…</Preparing>;
 
   return (
@@ -132,8 +137,9 @@ export function MapList() {
             <li key={map.id} className="panel flex items-center gap-3 pr-3 hover:border-ink">
               {doomed === map.id ? (
                 <>
-                  <p className="min-w-0 flex-1 truncate px-4 py-3 text-sm">
+                  <p className="min-w-0 flex-1 px-4 py-3 text-sm">
                     Supprimer <strong>{title}</strong> ?
+                    {readStored(draftKey(map.id)) && ' Des modifications de ce navigateur, pas encore enregistrées, seront perdues.'}
                   </p>
                   <button type="button" className="action" disabled={busy} onClick={() => remove(map.id)}>
                     Oui, supprimer
