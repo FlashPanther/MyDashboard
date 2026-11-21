@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
+import { syncSoon } from '@/lib/mindmap/background';
 import { handle, requireJson } from '@/lib/api';
 import { readMapBody } from '@/lib/mindmap/request';
 import { readMap, saveMap, trashMap } from '@/lib/mindmap/store';
@@ -25,6 +26,7 @@ export async function PUT(request: Request, { params }: Context) {
       if (!result.saved) {
         return NextResponse.json({ error: 'Carte modifiée ailleurs', current: result.map }, { status: 409 });
       }
+      after(() => syncSoon(result.map.id));
       return { revision: result.map.revision, updatedAt: result.map.updatedAt };
     })
   );

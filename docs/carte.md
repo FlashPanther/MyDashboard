@@ -72,7 +72,9 @@ Puis le lien avec Google Tasks :
   se renomme dans la carte ouverte, au plus une minute plus tard. Champ par champ : changé d'un seul côté, l'autre
   suit ; changé des deux côtés, la carte l'emporte. Codé et testé avec un Google en mémoire ; **reste à constater
   contre le vrai Google** avant de cocher.
-- [ ] **10 ter. Le serveur envoie de lui-même** derrière chaque enregistrement, sans dépendre d'un onglet ouvert.
+- [ ] **10 ter. Le serveur envoie et lit de lui-même** : juste après chaque enregistrement, et toutes les cinq minutes
+  pour chaque carte qui envoie ses tâches, ouverte ou non. Ce que Google a changé pour une carte fermée attend dans ses
+  liens et revient à son ouverture. Codé et testé avec un Google en mémoire ; **reste à constater en ligne**.
 - [ ] **11. Détacher ou supprimer** : retirer un nœud détache la tâche ; la supprimer pour de bon est un second geste.
   Supprimer une carte détache toutes ses tâches : c'est le serveur qui le fait, derrière la suppression.
 - [ ] **12. Le menu latéral** des tâches Google qui ne sont dans aucune carte.
@@ -82,9 +84,8 @@ Puis le lien avec Google Tasks :
 
 ## Décisions à reprendre aux étapes suivantes
 
-- **Qui déclenche l'envoi vers Google** : aujourd'hui l'éditeur, une seconde et demie après l'enregistrement, et à
-  l'ouverture d'une carte. Une carte importée et jamais ouverte n'est donc pas envoyée. À l'étape 10, le serveur
-  devra le faire lui-même derrière chaque enregistrement.
+- **Qui déclenche l'envoi vers Google** : le serveur, après chaque enregistrement et toutes les cinq minutes ; l'éditeur
+  ouvert redemande en plus toutes les minutes. Une carte importée n'envoie rien tant que son envoi n'est pas activé.
 - **Comment le serveur parle à l'éditeur** : l'état coché vit dans la carte, que seul l'éditeur écrit. Ce que Google a
   changé est rendu par l'envoi des tâches (`pulls`) et gardé dans le lien (`incoming`) tant que l'éditeur ne l'a pas
   repris ; l'éditeur l'applique comme une modification ordinaire. L'annuler aussitôt ne sert à rien : tant que le
