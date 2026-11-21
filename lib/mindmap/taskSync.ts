@@ -38,8 +38,9 @@ async function destination(known: string | undefined, listTitle: string, google:
   return read(known).catch(async () => read(await listNamed(listTitle, google)));
 }
 
+/** La base du lien est l'état de la carte, même pour une tâche reconnue : ce que Google a de différent sera lu comme un changement venu de Google, jamais écrasé. */
 function linkTo(task: NewTask, listId: string, found: GoogleTask): Link {
-  return { taskId: found.id, listId, title: task.title, done: found.status ? found.status === 'completed' : task.done, ...(found.updated ? { updated: found.updated } : {}) };
+  return { taskId: found.id, listId, title: task.title, done: task.done, ...(found.updated ? { updated: found.updated } : {}) };
 }
 
 async function send(map: StoredMap, batch: NewTask[], listTitle: string, google: Google, options: Options): Promise<void> {
@@ -79,7 +80,7 @@ async function sync(id: string, listTitle: string, google: Google, options: Opti
   if (!map) return null;
   const create = tasksToCreate(id, map.root, map.links);
   const batch = map.sendTasks ? create.slice(0, MAX_PER_PASS) : [];
-  const changed = map.sendTasks ? tasksToUpdate(map.root, map.links) : [];
+  const changed = map.sendTasks ? tasksToUpdate(map.root, settleLinks(map.root, map.links)) : [];
   const updates = changed.slice(0, MAX_PER_PASS);
   try {
     if (batch.length > 0 || updates.length > 0) {

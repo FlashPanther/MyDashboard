@@ -138,14 +138,17 @@ test('des liens perdus (fichier restauré, écriture ratée) se reconstituent sa
   assert.deepEqual(Object.values(await links()).map((link) => link.taskId), ['g1', 'g2']);
 });
 
-test('une tâche cochée chez Google entre-temps est reliée avec son état du moment', async () => {
+test('une tâche reconnue alors qu’elle est cochée chez Google est reliée sans que la carte la décoche', async () => {
   const { dir, id, links } = await sending(map('une'));
   const fake = fakeGoogle();
   await syncTasks(id, 'Cartes', fake.google, { dir });
   fake.tasks.L1[0].status = 'completed';
   await annotate(id, () => ({ links: {} }), { dir });
   await syncTasks(id, 'Cartes', fake.google, { dir });
-  assert.equal((await links()).une.done, true);
+  await syncTasks(id, 'Cartes', fake.google, { dir });
+  assert.deepEqual(fake.patches, []);
+  assert.equal(fake.tasks.L1[0].status, 'completed');
+  assert.equal((await links()).une.done, false);
 });
 
 test('enregistrer la carte garde les liens ; retirer un nœud-tâche le détache sans rien toucher chez Google', async () => {
@@ -335,4 +338,20 @@ test('une carte dont l’envoi est éteint ne met rien à jour chez Google', asy
   fake.calls.length = 0;
   assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: false, waiting: 0, lost: 0 });
   assert.deepEqual(fake.calls, []);
+});
+
+test('un nœud détaché, renommé, puis redevenu tâche retrouve sa tâche et lui envoie son nouveau titre dans la même passe', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir });
+  const idea = edited(map('une'), { une: { text: 'Une, renommée' } });
+  delete idea.children[0].task;
+  await saveMap(id, idea, 1, { dir });
+  await syncTasks(id, 'Cartes', fake.google, { dir });
+  assert.equal((await links()).une.detached, true);
+  await saveMap(id, edited(map('une'), { une: { text: 'Une, renommée' } }), 2, { dir });
+  await syncTasks(id, 'Cartes', fake.google, { dir });
+  assert.deepEqual(fake.patches, [{ title: 'Une, renommée' }]);
+  assert.deepEqual(fake.titles(), ['Une, renommée']);
+  assert.equal('detached' in (await links()).une, false);
 });
