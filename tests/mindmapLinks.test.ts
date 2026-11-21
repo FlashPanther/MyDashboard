@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { markerIn, parseLinks, settleLinks, tasksToCreate } from '../lib/mindmap/links.ts';
 import { newNode, type MapNode } from '../lib/mindmap/tree.ts';
@@ -17,12 +18,16 @@ function map(): MapNode {
 
 const link = (taskId: string) => ({ taskId, listId: 'liste' });
 
-const notes = (id: string) => `Carte : Voyage au Japon › Avant de partir\n\nRéf. carte : carte-1/${id}`;
+const ref: Record<string, string> = {
+  billets: createHash('sha256').update('billets').digest('hex').slice(0, 16),
+  passeports: createHash('sha256').update('passeports').digest('hex').slice(0, 16),
+};
+const notes = (id: string) => `Carte : Voyage au Japon › Avant de partir\n\nRéf. carte : carte-1/${ref[id]}`;
 
 test('chaque nœud-tâche sans lien est à créer, avec son chemin, son état et une référence pour le retrouver', () => {
   assert.deepEqual(tasksToCreate('carte-1', map(), {}), [
-    { nodeId: 'billets', marker: 'carte-1/billets', title: 'Billets d’avion', notes: notes('billets'), done: false },
-    { nodeId: 'passeports', marker: 'carte-1/passeports', title: 'Passeports', notes: notes('passeports'), done: true },
+    { nodeId: 'billets', marker: `carte-1/${ref.billets}`, title: 'Billets d’avion', notes: notes('billets'), done: false },
+    { nodeId: 'passeports', marker: `carte-1/${ref.passeports}`, title: 'Passeports', notes: notes('passeports'), done: true },
   ]);
 });
 
@@ -36,8 +41,8 @@ test('la référence d’un nœud à identifiant unique ne dépend pas de la car
 
 test('la référence se relit dans le détail d’une tâche Google, même si du texte a été ajouté autour', () => {
   const [task] = tasksToCreate('carte-1', map(), {});
-  assert.equal(markerIn(task.notes), 'carte-1/billets');
-  assert.equal(markerIn(`Note perso\n${task.notes}\nautre ligne`), 'carte-1/billets');
+  assert.equal(markerIn(task.notes), task.marker);
+  assert.equal(markerIn(`Note perso\n${task.notes}\nautre ligne`), task.marker);
   assert.equal(markerIn('Une tâche ordinaire'), null);
   assert.equal(markerIn(undefined), null);
 });
@@ -54,7 +59,7 @@ test('une tâche sans texte attend ; un titre ou un chemin trop longs sont coup�
   assert.deepEqual(others, []);
   assert.equal(task.title.length, 1024);
   assert.equal(task.notes.length < 8192, true);
-  assert.equal(markerIn(task.notes), 'carte-1/long');
+  assert.equal(markerIn(task.notes), task.marker);
 });
 
 test('un lien dont le nœud a disparu ou n’est plus une tâche est marqué détaché, pas effacé', () => {
@@ -85,4 +90,16 @@ test('les liens lus dans un fichier sont filtrés : seuls les liens complets son
     e: link('g5'),
   });
   assert.deepEqual(parseLinks(null), {});
+});
+
+test('un identifiant fait main, même bizarre ou immense, donne une référence courte, relisible et sans collision', () => {
+  const root = newNode('Carte', 'root');
+  const ids = ['a', 'a ', 'x'.repeat(8200), 'avec\nretour'];
+  root.children.push(...ids.map((id) => ({ ...newNode('Tâche', id), task: { done: false } })));
+  const tasks = tasksToCreate('carte-1', root, {});
+  assert.equal(new Set(tasks.map((task) => task.marker)).size, ids.length);
+  for (const task of tasks) {
+    assert.equal(markerIn(task.notes), task.marker);
+    assert.equal(task.notes.length < 8192, true);
+  }
 });

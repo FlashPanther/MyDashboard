@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { TASK_TITLE_MAX } from '../google/taskWrites.ts';
 import type { MapNode } from './tree.ts';
 
@@ -25,7 +26,8 @@ function titleOf(node: MapNode): string {
 
 /** Ce qui identifie le nœud dans le détail de sa tâche Google : un identifiant fait main n'est unique que dans sa carte. */
 function markerOf(mapId: string, nodeId: string): string {
-  return UUID.test(nodeId) ? nodeId : `${mapId}/${nodeId}`;
+  if (UUID.test(nodeId)) return nodeId;
+  return `${mapId}/${createHash('sha256').update(nodeId).digest('hex').slice(0, 16)}`;
 }
 
 export function markerIn(notes: string | undefined): string | null {

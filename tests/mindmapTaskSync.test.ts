@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +10,7 @@ import { newNode, type MapNode } from '../lib/mindmap/tree.ts';
 
 const folder = () => fs.mkdtemp(path.join(os.tmpdir(), 'cartes-'));
 const UPDATED = '2026-11-21T10:00:00.000Z';
+const hash = (id: string) => createHash('sha256').update(id).digest('hex').slice(0, 16);
 
 function map(...tasks: string[]): MapNode {
   const root = newNode('Voyage', 'root');
@@ -69,8 +71,8 @@ test('les nœuds-tâches sont créés dans la liste voulue, avec leur chemin, le
   const fake = fakeGoogle();
   await syncTasks(id, 'Cartes', fake.google, { dir });
   assert.deepEqual(fake.tasks.L1.map(({ title, notes, status }) => ({ title, notes, status })), [
-    { title: 'à faire', notes: `Carte : Voyage\n\nRéf. carte : ${id}/à faire`, status: undefined },
-    { title: 'faite', notes: `Carte : Voyage\n\nRéf. carte : ${id}/faite`, status: 'completed' },
+    { title: 'à faire', notes: `Carte : Voyage\n\nRéf. carte : ${id}/${hash('à faire')}`, status: undefined },
+    { title: 'faite', notes: `Carte : Voyage\n\nRéf. carte : ${id}/${hash('faite')}`, status: 'completed' },
   ]);
   assert.deepEqual(await links(), {
     'à faire': { taskId: 'g1', listId: 'L1', title: 'à faire', done: false, updated: UPDATED },
@@ -221,4 +223,17 @@ test('une grosse carte est envoyée par paquets de cinquante', async () => {
 
 test('une carte inconnue ne fait rien', async () => {
   assert.equal(await syncTasks('00000000-0000-4000-8000-000000000000', 'Cartes', fakeGoogle().google, { dir: await folder() }), null);
+});
+
+test('la même carte importée deux fois et envoyée en même temps ne crée chaque tâche qu’une fois', async () => {
+  const dir = await folder();
+  const root = newNode('Voyage', 'root');
+  root.children.push({ ...newNode('Billets', '3f2b8c1e-5a4d-4e6f-9a7b-1c2d3e4f5a6b'), task: { done: false } });
+  const first = (await createMap(root, { dir, sendTasks: true }))!;
+  const second = (await createMap(structuredClone(root), { dir, sendTasks: true }))!;
+  const fake = fakeGoogle();
+  await Promise.all([syncTasks(first.id, 'Cartes', fake.google, { dir }), syncTasks(second.id, 'Cartes', fake.google, { dir })]);
+  assert.deepEqual(fake.titles(), ['Billets']);
+  const links = await Promise.all([first, second].map(async ({ id }) => Object.values((await readMap(id, { dir }))!.links)[0].taskId));
+  assert.deepEqual(links, ['g1', 'g1']);
 });

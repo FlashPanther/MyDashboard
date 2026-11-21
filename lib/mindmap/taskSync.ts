@@ -10,6 +10,7 @@ type GoogleTask = { id: string; notes?: string; status?: string; updated?: strin
 const MAX_PER_PASS = 50;
 const running = new Map<string, Promise<SyncResult | null>>();
 const again = new Set<string>();
+let sending: Promise<unknown> = Promise.resolve();
 
 async function listNamed(title: string, google: Google): Promise<string> {
   const lists = await allPages<{ id: string; title: string }>((pageToken) => {
@@ -57,7 +58,12 @@ async function sync(id: string, listTitle: string, google: Google, options: Opti
   const create = tasksToCreate(id, map.root, map.links);
   const batch = map.sendTasks ? create.slice(0, MAX_PER_PASS) : [];
   try {
-    if (batch.length > 0) await send(map, batch, listTitle, google, options);
+    if (batch.length > 0) {
+      // Un envoi à la fois pour tout le serveur : deux cartes portant les mêmes nœuds (réimport) ne créent pas la même tâche en parallèle.
+      const turn = sending.then(() => send(map, batch, listTitle, google, options));
+      sending = turn.catch(() => undefined);
+      await turn;
+    }
   } finally {
     await annotate(id, (latest) => ({ links: settleLinks(latest.root, latest.links) }), options);
   }
