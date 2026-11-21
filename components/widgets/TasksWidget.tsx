@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { config } from '@/dashboard.config';
 import { Panel, Empty, CHIP } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
@@ -11,7 +11,6 @@ import { TASK_TITLE_MAX } from '@/lib/google/taskWrites';
 import { tagColor } from '@/lib/tags';
 import { taskAlert } from '@/lib/taskAlert';
 import { shortDate } from '@/lib/time';
-import { isPressing } from '@/lib/taskMap';
 import type { TaskItem, TaskList } from '@/app/api/tasks/route';
 
 const TASKS_URL = '/api/tasks';
@@ -63,8 +62,6 @@ export function TasksWidget() {
   const [tag, chooseTag] = useStored('tasks-tag');
   const [changeError, setChangeError] = useState<string | null>(null);
   const [writing, setWriting] = useState(false);
-  const [chosenList, setChosenList] = useState<string | null>(null);
-  const addInput = useRef<HTMLInputElement>(null);
   const lists = data?.lists ?? [];
 
   // Une ecriture a la fois : SWR ne revalide pas apres deux mutations croisees, et un
@@ -122,7 +119,7 @@ export function TasksWidget() {
 
   // Deja triees par l'API : en retard, puis du jour, puis par echeance.
   const tasks = (data?.tasks ?? []).filter((task) => !active || task.tags.includes(active));
-  const pressing = tasks.filter(isPressing);
+  const pressing = tasks.filter((task) => task.overdue || task.dueToday);
   const upcoming = tasks.filter((task) => task.due && !pressing.includes(task));
   // Les plus anciennes d'abord : ce sont celles qu'on a le plus surement oubliees.
   const undated = tasks
@@ -153,9 +150,6 @@ export function TasksWidget() {
         {/* Une tache creee n'a pas d'echeance : on montre l'onglet ou elle arrive. */}
         <QuickAdd
           lists={lists}
-          listId={chosenList ?? lists[0]?.id}
-          onChooseList={setChosenList}
-          inputRef={addInput}
           busy={writing}
           onBusy={setWriting}
           onCreated={() => {
@@ -338,22 +332,18 @@ function TaskRows({
 /** Une ligne, Entree : la tache part dans la liste choisie de Google Tasks. */
 function QuickAdd({
   lists,
-  listId,
-  onChooseList,
-  inputRef,
   busy,
   onBusy,
   onCreated,
 }: {
   lists: TaskList[];
-  listId: string | undefined;
-  onChooseList: (listId: string) => void;
-  inputRef: RefObject<HTMLInputElement | null>;
   busy: boolean;
   onBusy: (busy: boolean) => void;
   onCreated: () => void;
 }) {
   const [title, setTitle] = useState('');
+  const [chosen, setChosen] = useState<string | null>(null);
+  const listId = chosen ?? lists[0]?.id;
   const [problem, setProblem] = useState<{ text: string; relink?: boolean } | null>(null);
 
   async function submit(event: FormEvent) {
@@ -381,7 +371,6 @@ function QuickAdd({
           +
         </span>
         <input
-          ref={inputRef}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Nouvelle tâche (#étiquette), puis Entrée"
@@ -393,7 +382,7 @@ function QuickAdd({
         {lists.length > 1 && (
           <select
             value={listId}
-            onChange={(event) => onChooseList(event.target.value)}
+            onChange={(event) => setChosen(event.target.value)}
             aria-label="Liste de la nouvelle tâche"
             className="max-w-28 shrink-0 cursor-pointer truncate bg-transparent font-mono text-[11px] text-muted hover:text-ink"
           >
