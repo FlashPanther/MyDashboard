@@ -8,6 +8,7 @@ import {
   parse,
   serialize,
   taskProgress,
+  applyRemote,
   toggleCollapsed,
   toggleDone,
   toggleTask,
@@ -267,4 +268,12 @@ test('une tâche faite reste visible tant que sa branche contient une tâche à 
   const pending = toggleDone(toggleTask(root, ['a', 'a1']), ['a']);
   assert.deepEqual(texts(withoutFinished(pending)), ['root', 'a', 'a1', 'b', 'b1']);
   assert.deepEqual(texts(withoutFinished(toggleDone(pending, ['a1']))), ['root', 'b', 'b1']);
+});
+
+test('reprendre un changement venu d’ailleurs ne touche qu’aux tâches existantes, et rien si tout est déjà à jour', () => {
+  const { root } = tree();
+  const tasks = toggleTask(root, ['a', 'b1']);
+  const taken = applyRemote(tasks, [{ id: 'a', done: true, title: 'A renommée' }, { id: 'b', done: true }, { id: 'disparu', done: true }]);
+  assert.deepEqual([taken.children[0].text, taken.children[0].task, taken.children[1].task], ['A renommée', { done: true }, undefined]);
+  assert.equal(applyRemote(taken, [{ id: 'a', done: true, title: 'A renommée' }]), taken);
 });

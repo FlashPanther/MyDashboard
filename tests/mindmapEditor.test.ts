@@ -483,3 +483,24 @@ test('reposer un nœud à sa place visible ne déplace pas les tâches masquées
   const moved = reduce(hidden, { type: 'move', ids: [c], parentId: 'root', beforeId: a, side: 'right' });
   assert.equal(outline(moved.root), 'Idée(C A(A1 A2) B)');
 });
+
+test('un changement venu de Google est une étape d’annulation ordinaire, garde la sélection et le groupe', () => {
+  const marked = run(sample(), 'task');
+  const id = marked.selected!;
+  const ids = marked.root.children.map((node) => node.id);
+  const grouped = reduce(marked, { type: 'mark', ids });
+  const taken = reduce(grouped, { type: 'remote', changes: [{ id, done: true, title: 'B, renommée chez Google' }] });
+  assert.deepEqual([find(taken.root, id)!.text, find(taken.root, id)!.task], ['B, renommée chez Google', { done: true }]);
+  assert.equal(modeOf(taken), 'multiple');
+  assert.equal(find(run(taken, 'undo').root, id)!.task?.done, false);
+});
+
+test('un changement venu de Google ne touche pas le nœud en cours de saisie, et rien ne bouge s’il n’y a rien à reprendre', () => {
+  const marked = run(sample(), 'task');
+  const id = marked.selected!;
+  const typing = run(marked, 'edit');
+  const untouched = reduce(typing, { type: 'remote', changes: [{ id, title: 'Écrasé ?' }] });
+  assert.equal(untouched.root, typing.root);
+  assert.equal(untouched.editing?.id, id);
+  assert.equal(reduce(marked, { type: 'remote', changes: [{ id, done: false }] }).past.length, marked.past.length);
+});

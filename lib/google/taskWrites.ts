@@ -52,9 +52,15 @@ export function taskUpdateRequest(listId: string, taskId: string, { title, done 
   return { url: taskUrl(listId, taskId), init: jsonInit('PATCH', { ...(title === undefined ? {} : { title }), ...state }) };
 }
 
-/** Toutes les tâches d'une liste, faites et masquées comprises : pour reconnaître celles déjà créées. */
-export function tasksInListRequest(listId: string, pageToken?: string): GoogleCall {
-  const params = new URLSearchParams({ maxResults: '100', showCompleted: 'true', showHidden: 'true', ...(pageToken ? { pageToken } : {}) });
+/** Les tâches d'une liste, faites et masquées comprises ; avec `updatedMin`, seulement celles modifiées depuis, supprimées comprises. */
+export function tasksInListRequest(listId: string, pageToken?: string, updatedMin?: string): GoogleCall {
+  const params = new URLSearchParams({
+    maxResults: '100',
+    showCompleted: 'true',
+    showHidden: 'true',
+    ...(updatedMin ? { updatedMin, showDeleted: 'true' } : {}),
+    ...(pageToken ? { pageToken } : {}),
+  });
   return { url: `${tasksUrl(listId)}?${params}`, init: {} };
 }
 

@@ -20,13 +20,16 @@ function map(...tasks: string[]): MapNode {
   return root;
 }
 
-type Stored = { id: string; title: string; notes?: string; status?: string; updated: string };
+type Stored = { id: string; title: string; notes?: string; status?: string; updated: string; deleted?: true };
 
 /** Un Google Tasks en mémoire : listes, tâches par liste, et pannes réglables. */
 function fakeGoogle(lists: { id: string; title: string }[] = [{ id: 'L1', title: 'Cartes' }]) {
   const tasks: Record<string, Stored[]> = {};
   const calls: string[] = [];
   const patches: Record<string, unknown>[] = [];
+  const deleted: Record<string, (Stored & { deleted: true })[]> = {};
+  let clock = 0;
+  const reads: (string | null)[] = [];
   const faults = { loseAnswerOf: 0, refuseFrom: Infinity, missingList: '', refuseUpdateOf: '' };
   let posts = 0;
   const google = (async (url: string, init: RequestInit = {}) => {
@@ -40,7 +43,12 @@ function fakeGoogle(lists: { id: string; title: string }[] = [{ id: 'L1', title:
     }
     const listId = pathname.split('/')[4];
     if (listId === faults.missingList) throw new Error('liste disparue');
-    if (method === 'GET') return { items: tasks[listId] ?? [] };
+    if (method === 'GET') {
+      const since = new URL(url).searchParams.get('updatedMin');
+      reads.push(since);
+      const all = [...(tasks[listId] ?? []), ...(since ? (deleted[listId] ?? []) : [])];
+      return { items: since ? all.filter((task) => task.updated >= since) : all };
+    }
     if (method === 'PATCH') {
       const found = (tasks[listId] ?? []).find((task) => task.id === pathname.split('/')[6]);
       if (!found) throw new GoogleHttpError('tâche introuvable', 404);
@@ -56,7 +64,14 @@ function fakeGoogle(lists: { id: string; title: string }[] = [{ id: 'L1', title:
     return task;
   }) as Google;
   const titles = (listId = 'L1') => (tasks[listId] ?? []).map((task) => task.title);
-  return { google, calls, patches, faults, tasks, titles };
+  /** Une modification faite directement dans Google : la tâche reçoit une date de modification plus récente. */
+  const edit = (index: number, changes: Partial<Stored>) =>
+    Object.assign(tasks.L1[index], changes, { updated: new Date(Date.UTC(2026, 10, 21, 13, ++clock)).toISOString() });
+  const remove = (index: number) => {
+    const [task] = tasks.L1.splice(index, 1);
+    (deleted.L1 ??= []).push({ ...task, deleted: true, updated: new Date(Date.UTC(2026, 10, 21, 13, ++clock)).toISOString() });
+  };
+  return { google, calls, patches, faults, tasks, titles, edit, remove, reads };
 }
 
 async function sending(root: MapNode) {
@@ -69,10 +84,10 @@ test('une carte dont l’envoi n’est pas activé n’envoie rien : elle dit se
   const dir = await folder();
   const { id } = (await createMap(map('à faire', 'faite'), { dir }))!;
   const fake = fakeGoogle();
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: false, waiting: 2, lost: 0 });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: false, waiting: 2, lost: 0, pulls: [] });
   assert.deepEqual(fake.calls, []);
   await annotate(id, () => ({ sendTasks: true }), { dir });
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 0 });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 0, pulls: [] });
   assert.deepEqual(fake.titles(), ['à faire', 'faite']);
 });
 
@@ -95,7 +110,7 @@ test('relancer ne recrée rien et n’interroge même pas Google', async () => {
   const fake = fakeGoogle();
   await syncTasks(id, 'Cartes', fake.google, { dir });
   fake.calls.length = 0;
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 0 });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 0, pulls: [] });
   assert.deepEqual(fake.calls, []);
 });
 
@@ -142,7 +157,7 @@ test('une tâche reconnue alors qu’elle est cochée chez Google est reliée sa
   const { dir, id, links } = await sending(map('une'));
   const fake = fakeGoogle();
   await syncTasks(id, 'Cartes', fake.google, { dir });
-  fake.tasks.L1[0].status = 'completed';
+  fake.edit(0, { status: 'completed' });
   await annotate(id, () => ({ links: {} }), { dir });
   await syncTasks(id, 'Cartes', fake.google, { dir });
   await syncTasks(id, 'Cartes', fake.google, { dir });
@@ -221,7 +236,7 @@ test('une tâche ajoutée pendant une passe part dans la passe suivante, sans at
   await saveMap(id, map('une', 'deux'), 1, { dir });
   const joined = syncTasks(id, 'Cartes', slow, { dir });
   release();
-  assert.deepEqual(await joined, { enabled: true, waiting: 0, lost: 0 });
+  assert.deepEqual(await joined, { enabled: true, waiting: 0, lost: 0, pulls: [] });
   await pass;
   assert.deepEqual(fake.titles(), ['une', 'deux']);
 });
@@ -229,8 +244,8 @@ test('une tâche ajoutée pendant une passe part dans la passe suivante, sans at
 test('une grosse carte est envoyée par paquets de cinquante', async () => {
   const { dir, id } = await sending(map(...Array.from({ length: 60 }, (_, index) => `t${index}`)));
   const fake = fakeGoogle();
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 10, lost: 0 });
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 0 });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 10, lost: 0, pulls: [] });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 0, pulls: [] });
   assert.equal(fake.titles().length, 60);
 });
 
@@ -280,8 +295,8 @@ test('renommer n’envoie que le titre, cocher n’envoie que l’état : ce que
   const { dir, id, links } = await sending(map('une', 'deux'));
   const fake = fakeGoogle();
   await syncTasks(id, 'Cartes', fake.google, { dir });
-  fake.tasks.L1[0].status = 'completed';
-  fake.tasks.L1[1].title = 'Deux, retouchée chez Google';
+  fake.edit(0, { status: 'completed' });
+  fake.edit(1, { title: 'Deux, retouchée chez Google' });
   await saveMap(id, edited(map('une', 'deux'), { une: { text: 'Une, renommée' }, deux: { done: true } }), 1, { dir });
   await syncTasks(id, 'Cartes', fake.google, { dir });
   assert.deepEqual(fake.patches, [{ title: 'Une, renommée' }, { status: 'completed' }]);
@@ -293,13 +308,13 @@ test('une tâche supprimée chez Google est notée perdue et signalée : plus d�
   const { dir, id, links } = await sending(map('une', 'deux'));
   const fake = fakeGoogle();
   await syncTasks(id, 'Cartes', fake.google, { dir });
-  fake.tasks.L1.shift();
+  fake.remove(0);
   await saveMap(id, edited(map('une', 'deux'), { une: { done: true }, deux: { done: true } }), 1, { dir });
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 1 });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 1, pulls: [] });
   assert.equal((await links()).une.lost, true);
   assert.equal((await links()).deux.done, true);
   fake.calls.length = 0;
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 1 });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 1, pulls: [] });
   assert.deepEqual(fake.calls, []);
   assert.deepEqual(fake.titles(), ['deux']);
 });
@@ -324,8 +339,8 @@ test('au-delà de cinquante mises à jour, le reste est annoncé comme en attent
   await syncTasks(id, 'Cartes', fake.google, { dir });
   await syncTasks(id, 'Cartes', fake.google, { dir });
   await saveMap(id, edited(map(...names), Object.fromEntries(names.map((name) => [name, { done: true }]))), 1, { dir });
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 10, lost: 0 });
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 0 });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 10, lost: 0, pulls: [] });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: true, waiting: 0, lost: 0, pulls: [] });
   assert.equal(fake.tasks.L1.every((task) => task.status === 'completed'), true);
 });
 
@@ -336,7 +351,7 @@ test('une carte dont l’envoi est éteint ne met rien à jour chez Google', asy
   await annotate(id, () => ({ sendTasks: false }), { dir });
   await saveMap(id, edited(map('une'), { une: { done: true } }), 1, { dir });
   fake.calls.length = 0;
-  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: false, waiting: 0, lost: 0 });
+  assert.deepEqual(await syncTasks(id, 'Cartes', fake.google, { dir }), { enabled: false, waiting: 0, lost: 0, pulls: [] });
   assert.deepEqual(fake.calls, []);
 });
 
@@ -354,4 +369,147 @@ test('un nœud détaché, renommé, puis redevenu tâche retrouve sa tâche et l
   assert.deepEqual(fake.patches, [{ title: 'Une, renommée' }]);
   assert.deepEqual(fake.titles(), ['Une, renommée']);
   assert.equal('detached' in (await links()).une, false);
+});
+
+const minute = (count: number) => new Date(Date.UTC(2026, 10, 21, 12, count));
+
+test('une tâche cochée ou renommée chez Google revient vers la carte, sans rien écrire chez Google', async () => {
+  const { dir, id, links } = await sending(map('une', 'deux'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  fake.edit(0, { status: 'completed' });
+  fake.edit(1, { title: 'Deux, retouchée chez Google' });
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.deepEqual(result?.pulls, [{ id: 'une', done: true }, { id: 'deux', title: 'Deux, retouchée chez Google' }]);
+  assert.deepEqual(fake.patches, []);
+  assert.deepEqual((await links()).une.incoming, { done: true });
+});
+
+test('tant que la carte n’a pas repris le changement, il est redonné à chaque passe, même sans relire Google', async () => {
+  const { dir, id } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  fake.edit(0, { status: 'completed' });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  fake.calls.length = 0;
+  const again = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.deepEqual(again?.pulls, [{ id: 'une', done: true }]);
+  assert.deepEqual(fake.calls, []);
+});
+
+test('une fois le changement repris et enregistré, plus rien ne circule et le lien retient le nouvel état', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  fake.edit(0, { status: 'completed' });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  await saveMap(id, edited(map('une'), { une: { done: true } }), 1, { dir });
+  fake.calls.length = 0;
+  const settled = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.deepEqual(settled?.pulls, []);
+  assert.deepEqual(fake.calls, []);
+  assert.deepEqual((await links()).une, { taskId: 'g1', listId: 'L1', title: 'une', done: true, updated: UPDATED });
+});
+
+test('si la carte a changé le même champ pendant ce temps, c’est elle qui l’emporte et Google est corrigé', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  fake.edit(0, { title: 'Titre de Google' });
+  await saveMap(id, edited(map('une'), { une: { text: 'Titre de la carte' } }), 1, { dir });
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.deepEqual(result?.pulls, []);
+  assert.deepEqual(fake.patches, [{ title: 'Titre de la carte' }]);
+  assert.equal((await links()).une.title, 'Titre de la carte');
+});
+
+test('Google n’est relu qu’après un délai : deux passes rapprochées ne le lisent qu’une fois', async () => {
+  const { dir, id } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  fake.calls.length = 0;
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: new Date(minute(0).getTime() + 5000) });
+  assert.deepEqual(fake.calls, []);
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.deepEqual(fake.calls, ['GET /tasks/v1/lists/L1/tasks']);
+});
+
+test('une tâche notée perdue puis revue dans la liste est retrouvée', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await annotate(id, (latest) => ({ links: { une: { ...latest.links.une, lost: true } } }), { dir });
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.equal(result?.lost, 0);
+  assert.equal('lost' in (await links()).une, false);
+});
+
+test('après une première lecture complète, Google n’est relu que pour ce qui a changé, et une tâche supprimée n’y est pas reprise', async () => {
+  const { dir, id } = await sending(map('une', 'deux'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  fake.edit(1, { title: 'Deux, retouchée' });
+  fake.remove(0);
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
+  assert.equal(fake.reads[0], null);
+  assert.equal(fake.reads.at(-1), '2026-11-21T09:59:55.000Z');
+  assert.deepEqual(result?.pulls, [{ id: 'deux', title: 'Deux, retouchée' }]);
+});
+
+test('un titre retouché chez Google avec des espaces en trop revient une fois, normalisé, puis plus rien ne circule', async () => {
+  const { dir, id } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  fake.edit(0, { title: '  Une   retouchée ' });
+  const first = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.deepEqual(first?.pulls, [{ id: 'une', title: 'Une retouchée' }]);
+  await saveMap(id, edited(map('une'), { une: { text: 'Une retouchée' } }), 1, { dir });
+  const settled = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
+  assert.deepEqual(settled?.pulls, []);
+  assert.deepEqual(fake.patches, []);
+});
+
+test('repris dans la carte puis changé de nouveau chez Google avant d’être entériné : c’est le changement de Google qui gagne', async () => {
+  const { dir, id } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  fake.edit(0, { status: 'completed' });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  await saveMap(id, edited(map('une'), { une: { done: true } }), 1, { dir });
+  fake.edit(0, { status: 'needsAction' });
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
+  assert.deepEqual(fake.patches, []);
+  assert.deepEqual(result?.pulls, [{ id: 'une', done: false }]);
+});
+
+test('une tâche supprimée chez Google alors qu’un changement en attendait la reprise est notée perdue, rien n’est renvoyé', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  fake.edit(0, { status: 'completed' });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
+  fake.remove(0);
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(3) });
+  assert.deepEqual(result?.pulls, []);
+  assert.equal(result?.lost, 1);
+  assert.equal('incoming' in (await links()).une, false);
+});
+
+test('ce qui change chez Google pendant qu’un nœud est détaché revient quand il redevient une tâche', async () => {
+  const { dir, id } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  const idea = map('une');
+  delete idea.children[0].task;
+  await saveMap(id, idea, 1, { dir });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
+  fake.edit(0, { status: 'completed' });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(3) });
+  await saveMap(id, map('une'), 2, { dir });
+  const back = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(4) });
+  assert.deepEqual(back?.pulls, [{ id: 'une', done: true }]);
+  assert.deepEqual(fake.patches, []);
 });

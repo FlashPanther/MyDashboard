@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { lostTasks, markerIn, parseLinks, settleLinks, tasksToCreate, tasksToUpdate } from '../lib/mindmap/links.ts';
+import { lostTasks, markerIn, parseLinks, absorb, reconcile, settleLinks, settleReconciled, taskTitle, tasksToCreate } from '../lib/mindmap/links.ts';
 import { newNode, type MapNode } from '../lib/mindmap/tree.ts';
 
 function map(): MapNode {
@@ -104,22 +104,84 @@ test('un identifiant fait main, même bizarre ou immense, donne une référence 
   }
 });
 
-test('une tâche liée n’est à mettre à jour que sur ce qui a changé dans la carte : le titre, l’état, ou les deux', () => {
-  const sent = (title: string, done: boolean) => ({ ...link('g'), title, done });
-  const target = { taskId: 'g', listId: 'liste' };
-  assert.deepEqual(tasksToUpdate(map(), { billets: sent('Billets d’avion', false), passeports: sent('Passeports', false) }), [
-    { nodeId: 'passeports', ...target, done: true },
+const sent = (title: string, done: boolean) => ({ ...link('g'), title, done });
+const plan = (links: Parameters<typeof reconcile>[1], remote?: Record<string, { title?: string; done?: boolean }>) =>
+  reconcile(map(), links, new Map(Object.entries(remote ?? {}))).map(({ nodeId, push, pull, agreed }) => ({ nodeId, push, pull, agreed }));
+const quiet = { push: {}, pull: {}, agreed: {} };
+
+test('sans nouvelle de Google, seul ce qui a changé dans la carte part : le titre, l’état, ou les deux', () => {
+  assert.deepEqual(plan({ billets: sent('Billets d’avion', false), passeports: sent('Passeports', false) }), [
+    { nodeId: 'billets', ...quiet },
+    { nodeId: 'passeports', ...quiet, push: { done: true } },
   ]);
-  assert.deepEqual(tasksToUpdate(map(), { billets: sent('Ancien titre', false) }), [{ nodeId: 'billets', ...target, title: 'Billets d’avion' }]);
-  assert.deepEqual(tasksToUpdate(map(), { billets: sent('Ancien titre', true) }), [
-    { nodeId: 'billets', ...target, title: 'Billets d’avion', done: false },
+  assert.deepEqual(plan({ billets: sent('Ancien titre', true) }), [{ nodeId: 'billets', ...quiet, push: { title: 'Billets d’avion', done: false } }]);
+});
+
+test('ce que Google a changé seul revient vers la carte ; ce que la carte a changé seule part', () => {
+  const links = { billets: sent('Billets d’avion', false), passeports: sent('Passeports', false) };
+  const remote = { g: { title: 'Billets retouchés chez Google', done: true } };
+  assert.deepEqual(plan(links, remote), [
+    { nodeId: 'billets', ...quiet, pull: { title: 'Billets retouchés chez Google', done: true } },
+    { nodeId: 'passeports', push: {}, pull: { title: 'Billets retouchés chez Google' }, agreed: { done: true } },
   ]);
 });
 
-test('un lien détaché, perdu, ou sans état connu n’est jamais mis à jour ; les tâches perdues se comptent', () => {
+test('le même champ changé des deux côtés : la carte l’emporte ; déjà d’accord : rien ne part, la base suit', () => {
+  assert.deepEqual(plan({ passeports: sent('Passeports', false) }, { g: { title: 'Passeports', done: true } }), [
+    { nodeId: 'passeports', ...quiet, agreed: { done: true } },
+  ]);
+  assert.deepEqual(plan({ billets: sent('Ancien titre', false) }, { g: { title: 'Autre titre chez Google', done: false } }), [
+    { nodeId: 'billets', ...quiet, push: { title: 'Billets d’avion' } },
+  ]);
+});
+
+test('ce qui est arrivé de Google reste en attente tant que la carte ne l’a pas repris, puis devient la base', () => {
+  const pending = { passeports: { ...sent('Passeports', true), incoming: { done: false } } };
+  assert.deepEqual(plan(pending), [{ nodeId: 'passeports', ...quiet, pull: { done: false } }]);
+  const waiting = settleReconciled(pending, reconcile(map(), pending));
+  assert.deepEqual(waiting.passeports.incoming, { done: false });
+
+  const root = map();
+  root.children[0].children[1].task = { done: false };
+  const taken = reconcile(root, pending);
+  assert.deepEqual(taken.map(({ push, pull, agreed }) => ({ push, pull, agreed })), [{ ...quiet, agreed: { done: false } }]);
+  assert.deepEqual(settleReconciled(pending, taken).passeports, sent('Passeports', false));
+});
+
+test('un lien détaché, perdu, ou sans état connu n’est jamais rapproché ; un lien perdu revu chez Google est retrouvé', () => {
   const changed = { ...link('g'), title: 'Autre', done: true };
-  assert.deepEqual(tasksToUpdate(map(), { billets: { ...changed, detached: true } }), []);
-  assert.deepEqual(tasksToUpdate(map(), { billets: { ...changed, lost: true } }), []);
-  assert.deepEqual(tasksToUpdate(map(), { billets: link('g') }), []);
+  assert.deepEqual(plan({ billets: { ...changed, detached: true } }), []);
+  assert.deepEqual(plan({ billets: { ...changed, lost: true } }), []);
+  assert.deepEqual(plan({ billets: link('g') }), []);
   assert.equal(lostTasks(map(), { billets: { ...changed, lost: true }, cadeau: { ...changed, lost: true } }), 1);
+  const none = new Set<string>();
+  assert.deepEqual(absorb({ billets: { ...changed, lost: true } }, new Map([['g', {}]]), none), { billets: changed });
+  assert.deepEqual(absorb({ billets: { ...changed, lost: true } }, new Map([['autre', {}]]), none), { billets: { ...changed, lost: true } });
+});
+
+test('un titre lu chez Google est normalisé comme la carte l’écrit : pas d’aller-retour pour des espaces ou un retour à la ligne', () => {
+  assert.equal(taskTitle('  Billets\n d’avion  '), 'Billets d’avion');
+  assert.equal(taskTitle('x'.repeat(1500)).length, 1024);
+  const links = { billets: sent('Billets d’avion', false) };
+  assert.deepEqual(plan(links, { g: { title: taskTitle('  Billets  d’avion ') } }), [{ nodeId: 'billets', ...quiet }]);
+});
+
+test('la lecture de Google marque perdue une tâche supprimée en oubliant ce qui en était arrivé, et garde en attente ce qui change sur un nœud détaché', () => {
+  const base = { ...link('g'), title: 'Billets', done: false };
+  assert.deepEqual(absorb({ billets: { ...base, incoming: { done: true } } }, new Map(), new Set(['g'])), { billets: { ...base, lost: true } });
+  assert.deepEqual(absorb({ billets: { ...base, detached: true } }, new Map([['g', { title: 'Billets', done: true }]]), new Set()), {
+    billets: { ...base, detached: true, incoming: { done: true } },
+  });
+});
+
+test('une carte qui montre ce que Google avait envoyé laisse Google décider : un changement plus récent de Google revient, rien ne repart', () => {
+  const pending = { passeports: { ...sent('Passeports', false), incoming: { done: true } } };
+  assert.deepEqual(plan(pending, { g: { title: 'Passeports', done: false } }), [{ nodeId: 'passeports', ...quiet, pull: { done: false } }]);
+});
+
+test('sur un nœud détaché, un changement de Google annulé chez Google avant le retour du nœud n’est plus en attente', () => {
+  const base = { ...link('g'), title: 'Billets', done: false, detached: true as const };
+  assert.deepEqual(absorb({ billets: { ...base, incoming: { title: 'Autre' } } }, new Map([['g', { title: 'Billets', done: false }]]), new Set()), {
+    billets: base,
+  });
 });

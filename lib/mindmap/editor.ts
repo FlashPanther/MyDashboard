@@ -3,6 +3,7 @@ import {
   addChild,
   addParent,
   addSibling,
+  applyRemote,
   find,
   foldBranch,
   isEmptyLeaf,
@@ -21,6 +22,7 @@ import {
   withinLimits,
   withoutFinished,
   type MapNode,
+  type RemoteChange,
   type Side,
 } from './tree.ts';
 
@@ -48,6 +50,7 @@ export type EditorAction = { draft?: string; newId?: string } & (
   | { type: 'mark'; ids: string[] }
   | { type: 'foldBranch'; id: string; collapsed: boolean }
   | { type: 'hideDone'; hide: boolean }
+  | { type: 'remote'; changes: RemoteChange[] }
 );
 
 type InsertCommand = 'child' | 'sibling' | 'siblingAbove' | 'parent';
@@ -81,6 +84,7 @@ export function reduce(state: EditorState, action: EditorAction): EditorState {
   const keepsGroup =
     action.type === 'mark' ||
     action.type === 'move' ||
+    action.type === 'remote' ||
     (action.type === 'command' && (action.command === 'task' || action.command === 'tick'));
   if (keepsGroup || next.group.length === 0) return next;
   return { ...next, group: [] };
@@ -125,6 +129,11 @@ function step(state: EditorState, action: EditorAction): EditorState {
       if (move(shown, action.ids, action.parentId, action.beforeId, action.side) === shown) return settled;
       const root = move(settled.root, action.ids, action.parentId, action.beforeId, action.side);
       return withinLimits(root) ? commit(settled, root, settled.selected) : settled;
+    }
+    case 'remote': {
+      // Le nœud en cours de saisie n'est pas touché : son changement reviendra au prochain passage.
+      const changes = action.changes.filter(({ id }) => id !== state.editing?.id);
+      return commit(state, applyRemote(state.root, changes), state.selected);
     }
     case 'hideDone':
       return { ...finishEditing(state, action.draft), hideDone: action.hide };
