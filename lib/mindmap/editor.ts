@@ -51,6 +51,7 @@ export type EditorAction = { draft?: string; newId?: string } & (
   | { type: 'foldBranch'; id: string; collapsed: boolean }
   | { type: 'hideDone'; hide: boolean }
   | { type: 'remote'; changes: RemoteChange[] }
+  | { type: 'adopt'; parentId: string; id: string; text: string; from: { taskId: string; listId: string } }
 );
 
 type InsertCommand = 'child' | 'sibling' | 'siblingAbove' | 'parent';
@@ -134,6 +135,11 @@ function step(state: EditorState, action: EditorAction): EditorState {
       // Le nœud en cours de saisie n'est pas touché : son changement reviendra au prochain passage.
       const changes = action.changes.filter(({ id }) => id !== state.editing?.id);
       return commit(state, applyRemote(state.root, changes), state.selected);
+    }
+    case 'adopt': {
+      const settled = finishEditing(state, action.draft);
+      const root = addChild(settled.root, action.parentId, action.id, { text: action.text, task: { done: false }, from: action.from });
+      return withinLimits(root) ? commit(settled, root, action.id) : settled;
     }
     case 'hideDone':
       return { ...finishEditing(state, action.draft), hideDone: action.hide };

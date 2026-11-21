@@ -79,7 +79,10 @@ Puis le lien avec Google Tasks :
   est retiré, et l'enregistrement qui le retire demande au serveur de supprimer ses tâches chez Google. Annuler après
   coup remet le nœud et crée une tâche neuve. Supprimer une carte détache ses tâches, qui restent chez Google. Codé et
   testé avec un Google en mémoire ; **reste à constater en ligne**.
-- [ ] **12. Le menu latéral** des tâches Google qui ne sont dans aucune carte.
+- [ ] **12. Les tâches libres** : un panneau, ouvert depuis l'en-tête d'une carte qui envoie ses tâches, liste les tâches
+  Google ouvertes qui ne sont dans aucune carte ; « Ajouter » la place sous le nœud sélectionné. La tâche reste dans sa
+  liste Google : la carte suit chaque liste où elle a des tâches. Codé et testé avec un Google en mémoire ; **reste à
+  constater en ligne**.
 - [ ] **13. Reprendre les tâches existantes** et réduire le nombre de listes.
 - [ ] **14. Alléger le tableau** : retirer l'ancien onglet « Carte », les panneaux de tâches devenus inutiles et les
   étiquettes dans les titres.
@@ -91,6 +94,11 @@ Puis le lien avec Google Tasks :
   changé est lu à l'ouverture de la carte. L'éditeur ouvert redemande toutes les minutes, et 1,5 s après chaque
   enregistrement : ce second appel fait en partie doublon avec l'envoi du serveur, mais c'est lui qui rapporte à la
   carte ce que Google a changé. Une carte importée n'envoie rien tant que son envoi n'est pas activé.
+- **Tâche reprise d'une autre liste** : elle reste dans sa liste ; la carte relit chaque liste où elle a des tâches. Une
+  liste supprimée chez Google rend ses tâches « disparues » dans la carte. La carte ne propose pas de supprimer chez
+  Google une tâche reprise. Une tâche déjà suivie par une autre carte n'est pas reprise une seconde fois : la carte le
+  signale. Une carte importée peut désigner n'importe laquelle de tes tâches ; rien n'en part tant que son envoi n'est
+  pas activé. À trancher avant l'étape 13 : garder N listes, ou déplacer les tâches reprises dans « Cartes ».
 - **Une seule instance du tableau** : les verrous d'envoi vivent dans la mémoire du processus. À plusieurs instances,
   il faudrait une tâche planifiée Coolify ou un verrou dans un fichier.
 - **Comment le serveur parle à l'éditeur** : l'état coché vit dans la carte, que seul l'éditeur écrit. Ce que Google a

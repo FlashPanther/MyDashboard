@@ -98,8 +98,8 @@ export async function readMap(id: string, { dir = MAPS_DIR }: Options = {}): Pro
   }
 }
 
-/** Les tâches suivies (lien non détaché) par les autres cartes ; `null` si l'une d'elles est illisible et qu'on ne peut donc pas le savoir. */
-export async function tasksFollowedElsewhere(mapId: string, { dir = MAPS_DIR }: Options = {}): Promise<Set<string> | null> {
+/** Les tâches suivies (lien non détaché) par les cartes autres que `mapId` (toutes si `null`) ; `null` si l'une d'elles est illisible. */
+export async function tasksFollowedElsewhere(mapId: string | null, { dir = MAPS_DIR }: Options = {}): Promise<Set<string> | null> {
   const followed = new Set<string>();
   for (const id of await mapIds(dir)) {
     if (id === mapId) continue;

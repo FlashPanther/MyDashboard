@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { TASK_TITLE_MAX } from '../google/taskWrites.ts';
-import type { MapNode } from './tree.ts';
+import { find, type MapNode } from './tree.ts';
 
 export type Fields = { title?: string; done?: boolean };
 export type Link = {
@@ -12,6 +12,8 @@ export type Link = {
   lost?: true;
   /** Le nœud a été retiré avec le choix de supprimer aussi sa tâche chez Google. */
   doomed?: true;
+  /** Tâche existante reprise dans la carte : elle reste dans sa liste, la carte n'y crée rien. */
+  adopted?: true;
   /** Le dernier état sur lequel la carte et Google étaient d'accord : un écart dit lequel des deux a changé. */
   title?: string;
   done?: boolean;
@@ -66,7 +68,7 @@ export function parseLinks(value: unknown): Links {
   const links: Links = {};
   if (typeof value !== 'object' || value === null) return links;
   for (const [nodeId, raw] of Object.entries(value)) {
-    const { taskId, listId, detached, lost, doomed, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
+    const { taskId, listId, detached, lost, doomed, adopted, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
     const pending = parseFields(incoming);
     if (typeof taskId !== 'string' || !taskId || typeof listId !== 'string' || !listId) continue;
     links[nodeId] = {
@@ -75,6 +77,7 @@ export function parseLinks(value: unknown): Links {
       ...(detached === true ? { detached } : {}),
       ...(lost === true ? { lost } : {}),
       ...(doomed === true ? { doomed } : {}),
+      ...(adopted === true ? { adopted } : {}),
       ...parseFields(raw),
       ...(typeof updated === 'string' ? { updated } : {}),
       ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}),
@@ -87,7 +90,7 @@ export function tasksToCreate(mapId: string, root: MapNode, links: Links): NewTa
   const create: NewTask[] = [];
   const visit = (node: MapNode, path: string[]) => {
     const title = titleOf(node);
-    if (node.task && title && !links[node.id]) {
+    if (node.task && !node.from && title && !links[node.id]) {
       const marker = markerOf(mapId, node.id);
       const where = `Carte : ${path.join(SEPARATOR)}`.slice(0, PATH_MAX);
       create.push({ nodeId: node.id, marker, title: taskTitleOf(node), notes: `${where}\n\n${REFERENCE}${marker}`, done: node.task.done });
@@ -177,7 +180,8 @@ export function taskStatus(root: MapNode, links: Links): { linked: string[]; los
   const visit = (node: MapNode) => {
     const link = node.task ? links[node.id] : undefined;
     if (link?.lost) lost += 1;
-    else if (link && !link.detached) linked.push(node.id);
+    // Une tâche reprise vient d'une liste de l'utilisateur : on ne propose pas de la supprimer depuis la carte.
+    else if (link && !link.detached && !link.adopted) linked.push(node.id);
     node.children.forEach(visit);
   };
   visit(root);
@@ -185,15 +189,47 @@ export function taskStatus(root: MapNode, links: Links): { linked: string[]; los
 }
 
 /** À l'enregistrement : les nœuds retirés avec le choix de supprimer aussi leur tâche Google sont marqués. */
-export function doom(links: Links, root: MapNode, ids: readonly string[]): Links {
-  const present = new Set<string>();
+function allIds(root: MapNode): Set<string> {
+  const ids = new Set<string>();
   const visit = (node: MapNode) => {
-    present.add(node.id);
+    ids.add(node.id);
     node.children.forEach(visit);
   };
   visit(root);
+  return ids;
+}
+
+export function doom(links: Links, root: MapNode, ids: readonly string[]): Links {
+  const present = allIds(root);
   const next = { ...links };
   for (const id of ids) if (next[id] && !present.has(id)) next[id] = { ...next[id], doomed: true };
+  return next;
+}
+
+/**
+ * Relie les nœuds repris d'une tâche Google existante (`from`), si cette tâche n'est suivie ni par cette carte ni
+ * par une autre. Sinon le nœud reste sans lien : il n'est jamais créé chez Google.
+ */
+/** Les nœuds repris pas (encore) reliés : la tâche est déjà suivie par une autre carte, ou on attend de pouvoir le vérifier. */
+export function unlinkedAdoptions(root: MapNode, links: Links): number {
+  const visit = (node: MapNode): number =>
+    (node.task && node.from && !links[node.id] ? 1 : 0) + node.children.reduce((total, child) => total + visit(child), 0);
+  return visit(root);
+}
+
+export function adoptLinks(links: Links, root: MapNode, followedElsewhere: ReadonlySet<string>): Links {
+  const followed = new Set([...followedElsewhere, ...Object.values(links).filter((link) => !link.detached).map((link) => link.taskId)]);
+  const next = { ...links };
+  const visit = (node: MapNode) => {
+    const from = node.task ? node.from : undefined;
+    const title = taskTitleOf(node);
+    if (from && title && !next[node.id] && !followed.has(from.taskId)) {
+      next[node.id] = { taskId: from.taskId, listId: from.listId, title, done: node.task!.done, adopted: true };
+      followed.add(from.taskId);
+    }
+    node.children.forEach(visit);
+  };
+  visit(root);
   return next;
 }
 

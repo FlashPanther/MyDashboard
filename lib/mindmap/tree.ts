@@ -1,6 +1,8 @@
 export type Side = 'left' | 'right';
 
 export type Task = { done: boolean };
+/** Une tâche Google existante reprise dans la carte : le serveur la relie, sans jamais la créer. */
+export type Source = { taskId: string; listId: string };
 
 export type MapNode = {
   id: string;
@@ -9,6 +11,8 @@ export type MapNode = {
   children: MapNode[];
   colour?: number;
   side?: 'left';
+  /** Porté par le nœud et non par sa case : redevenir une idée puis une tâche ne le perd pas. */
+  from?: Source;
   task?: Task;
 };
 
@@ -185,11 +189,11 @@ function stripBranchMarks(node: MapNode): void {
   node.children.forEach(stripBranchMarks);
 }
 
-export function addChild(root: MapNode, parentId: string, id: string): MapNode {
-  if (!find(root, parentId)) return root;
+export function addChild(root: MapNode, parentId: string, id: string, content: Partial<Pick<MapNode, 'text' | 'task' | 'from'>> = {}): MapNode {
+  if (!find(root, parentId) || find(root, id)) return root;
   return change(root, (draft) => {
     const parent = find(draft, parentId)!;
-    parent.children.push(newNode('', id));
+    parent.children.push({ ...newNode('', id), ...content });
     parent.collapsed = false;
   });
 }
@@ -400,13 +404,18 @@ export function parseDocument(data: unknown): MapNode {
   return root;
 }
 
+function sourceOf(value: unknown): Pick<MapNode, 'from'> {
+  const { taskId, listId } = (value ?? {}) as Record<string, unknown>;
+  return typeof taskId === 'string' && taskId && typeof listId === 'string' && listId ? { from: { taskId, listId } } : {};
+}
+
 function isTask(value: unknown): value is Task {
   return typeof value === 'object' && value !== null && typeof (value as Task).done === 'boolean';
 }
 
 function parseNode(value: unknown, depth: number, seen: Set<string>): MapNode {
   if (typeof value !== 'object' || value === null) throw new Error('Nœud invalide');
-  const { id, text, collapsed, children, colour, side, task } = value as Record<string, unknown>;
+  const { id, text, collapsed, children, colour, side, task, from } = value as Record<string, unknown>;
   if (typeof text !== 'string' || !Array.isArray(children)) throw new Error('Nœud invalide');
   if (depth > MAX_DEPTH || seen.size >= MAX_NODES) throw new Error('Carte trop grande');
   const uniqueId = typeof id === 'string' && id !== '' && !seen.has(id) ? id : crypto.randomUUID();
@@ -423,5 +432,6 @@ function parseNode(value: unknown, depth: number, seen: Set<string>): MapNode {
     ...(branch && typeof colour === 'number' && Number.isInteger(colour) && colour >= 0 ? { colour } : {}),
     ...(branch && side === 'left' ? { side } : {}),
     ...(depth > 0 && isTask(task) ? { task: { done: task.done } } : {}),
+    ...(depth > 0 ? sourceOf(from) : {}),
   };
 }
