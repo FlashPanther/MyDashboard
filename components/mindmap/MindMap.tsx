@@ -132,17 +132,16 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     },
     [send],
   );
-  const { status, kept, settle, flush, forgetOnSave, adoptOnSave } = useMapSync(id, opened.sync, root, adopt);
+  const { status, kept, settle, flush, forgetOnSave } = useMapSync(id, opened.sync, root, adopt);
   const [shelf, setShelf] = useState(false);
   const pull = useCallback((changes: RemoteChange[]) => send({ type: 'remote', changes }), [send]);
   const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root, pull);
   const addTask = useCallback(
     (task: TaskItem) => {
-      const nodeId = crypto.randomUUID();
-      adoptOnSave({ nodeId, taskId: task.id, listId: task.listId, title: task.title });
-      send({ type: 'adopt', parentId: latest.current.selected ?? root.id, id: nodeId, text: task.title });
+      const from = { taskId: task.id, listId: task.listId };
+      send({ type: 'adopt', parentId: latest.current.selected ?? root.id, id: crypto.randomUUID(), text: task.title, from });
     },
-    [adoptOnSave, send, root.id],
+    [send, root.id],
   );
   // Sur la carte entière : une tâche faite masquée dans la branche est retirée avec elle.
   const linkedIn = useCallback((nodeId: string) => [...branchIds(root, [nodeId])].filter((each) => google.linked.includes(each)), [root, google.linked]);

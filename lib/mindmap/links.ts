@@ -90,7 +90,7 @@ export function tasksToCreate(mapId: string, root: MapNode, links: Links): NewTa
   const create: NewTask[] = [];
   const visit = (node: MapNode, path: string[]) => {
     const title = titleOf(node);
-    if (node.task && title && !links[node.id]) {
+    if (node.task && !node.task.from && title && !links[node.id]) {
       const marker = markerOf(mapId, node.id);
       const where = `Carte : ${path.join(SEPARATOR)}`.slice(0, PATH_MAX);
       create.push({ nodeId: node.id, marker, title: taskTitleOf(node), notes: `${where}\n\n${REFERENCE}${marker}`, done: node.task.done });
@@ -206,18 +206,28 @@ export function doom(links: Links, root: MapNode, ids: readonly string[]): Links
   return next;
 }
 
-/** Une tâche Google existante à relier à un nœud ajouté pour elle. */
-export type Adoption = { nodeId: string; taskId: string; listId: string; title: string };
+/**
+ * Relie les nœuds repris d'une tâche Google existante (`task.from`), si cette tâche n'est suivie ni par cette carte ni
+ * par une autre. Sinon le nœud reste sans lien : il n'est jamais créé chez Google.
+ */
+export function hasUnlinkedAdoption(root: MapNode, links: Links): boolean {
+  const visit = (node: MapNode): boolean => Boolean(node.task?.from && !links[node.id]) || node.children.some(visit);
+  return visit(root);
+}
 
-/** À l'enregistrement : relie les nœuds ajoutés pour une tâche existante, si le nœud est là et la tâche pas déjà suivie ici. */
-export function adoptLinks(links: Links, root: MapNode, adoptions: readonly Adoption[]): Links {
-  const followed = new Set(Object.values(links).filter((link) => !link.detached).map((link) => link.taskId));
+export function adoptLinks(links: Links, root: MapNode, followedElsewhere: ReadonlySet<string>): Links {
+  const followed = new Set([...followedElsewhere, ...Object.values(links).filter((link) => !link.detached).map((link) => link.taskId)]);
   const next = { ...links };
-  for (const { nodeId, taskId, listId, title } of adoptions) {
-    if (!find(root, nodeId)?.task || next[nodeId] || followed.has(taskId)) continue;
-    next[nodeId] = { taskId, listId, title: taskTitle(title), done: false, adopted: true };
-    followed.add(taskId);
-  }
+  const visit = (node: MapNode) => {
+    const from = node.task?.from;
+    const title = taskTitleOf(node);
+    if (from && title && !next[node.id] && !followed.has(from.taskId)) {
+      next[node.id] = { taskId: from.taskId, listId: from.listId, title, done: node.task!.done, adopted: true };
+      followed.add(from.taskId);
+    }
+    node.children.forEach(visit);
+  };
+  visit(root);
   return next;
 }
 

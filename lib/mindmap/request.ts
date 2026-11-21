@@ -1,9 +1,8 @@
-import type { Adoption } from './links.ts';
 import { parseDocument, type MapNode } from './tree.ts';
 
 export const MAX_BODY = 2_000_000;
 
-export type MapBody = { root: MapNode; revision: number | null; sendTasks: boolean; forget: string[]; adopt: Adoption[] };
+export type MapBody = { root: MapNode; revision: number | null; sendTasks: boolean; forget: string[] };
 export type Refusal = { status: 400 | 413; error: string };
 
 const TOO_BIG: Refusal = { status: 413, error: 'Carte trop volumineuse' };
@@ -36,11 +35,6 @@ function soundIds(value: unknown, seen = new Set<string>()): boolean {
   return children.every((child) => soundIds(child, seen));
 }
 
-function isAdoption(value: unknown): value is Adoption {
-  const { nodeId, taskId, listId, title } = (value ?? {}) as Record<string, unknown>;
-  return [nodeId, taskId, listId, title].every((field) => typeof field === 'string' && field !== '');
-}
-
 export async function readMapBody(request: Request): Promise<MapBody | Refusal> {
   const text = await readLimited(request);
   if (text === null) return TOO_BIG;
@@ -49,8 +43,7 @@ export async function readMapBody(request: Request): Promise<MapBody | Refusal> 
     if (typeof data !== 'object' || data === null || !('root' in data) || !soundIds(data.root)) return INVALID;
     const revision = 'revision' in data && Number.isInteger(data.revision) ? (data.revision as number) : null;
     const forget = 'forget' in data && Array.isArray(data.forget) ? data.forget.filter((id): id is string => typeof id === 'string') : [];
-    const adopt = 'adopt' in data && Array.isArray(data.adopt) ? data.adopt.filter(isAdoption) : [];
-    return { root: parseDocument(data), revision, sendTasks: 'sendTasks' in data && data.sendTasks === true, forget, adopt };
+    return { root: parseDocument(data), revision, sendTasks: 'sendTasks' in data && data.sendTasks === true, forget };
   } catch {
     return INVALID;
   }

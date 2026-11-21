@@ -21,7 +21,7 @@ export async function PUT(request: Request, { params }: Context) {
       const body = await readMapBody(request);
       if ('error' in body) return NextResponse.json({ error: body.error }, { status: body.status });
       if (body.revision === null) return NextResponse.json({ error: 'Révision attendue' }, { status: 400 });
-      const result = await saveMap((await params).id, body.root, body.revision, { forget: body.forget, adopt: body.adopt });
+      const result = await saveMap((await params).id, body.root, body.revision, { forget: body.forget });
       if (!result) return missing();
       if (!result.saved) {
         return NextResponse.json({ error: 'Carte modifiée ailleurs', current: result.map }, { status: 409 });

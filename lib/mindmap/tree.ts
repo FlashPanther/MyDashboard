@@ -1,6 +1,7 @@
 export type Side = 'left' | 'right';
 
-export type Task = { done: boolean };
+/** `from` : tâche Google existante reprise dans la carte ; le serveur la relie, sans jamais la créer. */
+export type Task = { done: boolean; from?: { taskId: string; listId: string } };
 
 export type MapNode = {
   id: string;
@@ -328,7 +329,7 @@ export function toggleDone(root: MapNode, ids: string[]): MapNode {
   const done = !tasks.every((node) => node.task!.done);
   return change(root, (draft) => {
     for (const node of among(draft, wanted)) {
-      if (node.task) node.task = { done };
+      if (node.task) node.task = { ...node.task, done };
     }
   });
 }
@@ -349,7 +350,7 @@ export function applyRemote(root: MapNode, changes: RemoteChange[]): MapNode {
     for (const node of among(draft, wanted)) {
       const { title, done } = byId.get(node.id)!;
       if (title !== undefined) node.text = title;
-      if (done !== undefined) node.task = { done };
+      if (done !== undefined) node.task = { ...node.task, done };
     }
   });
 }
@@ -400,6 +401,11 @@ export function parseDocument(data: unknown): MapNode {
   return root;
 }
 
+function sourceOf(task: Task): Pick<Task, 'from'> {
+  const { taskId, listId } = (task.from ?? {}) as Record<string, unknown>;
+  return typeof taskId === 'string' && taskId && typeof listId === 'string' && listId ? { from: { taskId, listId } } : {};
+}
+
 function isTask(value: unknown): value is Task {
   return typeof value === 'object' && value !== null && typeof (value as Task).done === 'boolean';
 }
@@ -422,6 +428,6 @@ function parseNode(value: unknown, depth: number, seen: Set<string>): MapNode {
     children: kept,
     ...(branch && typeof colour === 'number' && Number.isInteger(colour) && colour >= 0 ? { colour } : {}),
     ...(branch && side === 'left' ? { side } : {}),
-    ...(depth > 0 && isTask(task) ? { task: { done: task.done } } : {}),
+    ...(depth > 0 && isTask(task) ? { task: { done: task.done, ...sourceOf(task) } } : {}),
   };
 }

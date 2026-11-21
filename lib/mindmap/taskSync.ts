@@ -6,6 +6,8 @@ import {
   markerIn,
   reconcile,
   absorb,
+  adoptLinks,
+  hasUnlinkedAdoption,
   settleLinks,
   settleReconciled,
   taskTitle,
@@ -232,9 +234,18 @@ async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, goo
   };
 }
 
+/** Relie les nœuds repris d'une tâche existante ; si une autre carte est illisible, on attend de savoir qui la suit déjà. */
+async function relinkAdopted(map: StoredMap, options: Options): Promise<StoredMap> {
+  if (!hasUnlinkedAdoption(map.root, map.links)) return map;
+  const elsewhere = await tasksFollowedElsewhere(map.id, options);
+  if (!elsewhere) return map;
+  return (await annotate(map.id, ({ root, links }) => ({ links: adoptLinks(links, root, elsewhere) }), options)) ?? map;
+}
+
 async function sync(id: string, listTitle: string, google: Google, options: SyncOptions): Promise<SyncResult | null> {
-  const map = await readMap(id, options);
-  if (!map) return null;
+  const read = await readMap(id, options);
+  if (!read) return null;
+  const map = await relinkAdopted(read, options);
   const create = tasksToCreate(id, map.root, map.links);
   const batch = map.sendTasks ? create.slice(0, MAX_PER_PASS) : [];
   let exchanged: Exchanged = { waiting: 0, pulls: [] };
