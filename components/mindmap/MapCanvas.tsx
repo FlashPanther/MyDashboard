@@ -15,8 +15,10 @@ import { MapLayer } from '@/components/mindmap/MapLayer';
 import type { Drag, Send } from '@/components/mindmap/types';
 import type { Editing } from '@/lib/mindmap/editor';
 import type { ZoomCommand } from '@/lib/mindmap/keymap';
-import { dropAt, grabbed, type Carried } from '@/lib/mindmap/drop';
-import { boxesIn, layout, type Point, type Size } from '@/lib/mindmap/layout';
+import { dropAt, grabbed, type Carried, type Drop } from '@/lib/mindmap/drop';
+import { boxesIn, layout, linkPath, type Box, type Point, type Size } from '@/lib/mindmap/layout';
+import { LINK } from '@/components/mindmap/nodeStyle';
+import type { TaskItem } from '@/app/api/tasks/route';
 import { branchIds, find, visibleNodes, type MapNode, type Progress } from '@/lib/mindmap/tree';
 import { fit, reveal, toWorld, zoomAt, type View } from '@/lib/mindmap/view';
 
@@ -33,7 +35,18 @@ type Press = {
   y: number;
   start: Point;
   last: Point;
+  toShelf: boolean;
+  releasable: boolean;
 };
+/** Le panneau des tâches libres ouvert à côté de la carte : on y prend des tâches, on y lâche des nœuds-tâches. */
+export type ShelfLink = {
+  carried: TaskItem | null;
+  adopt: (task: TaskItem, at: Drop) => void;
+  canRelease: (ids: string[]) => boolean;
+  release: (ids: string[]) => void;
+  hover: (over: boolean) => void;
+};
+type Incoming = { box: Box; drop: Drop | null };
 type Frame = { from: Point; to: Point; ids: string[] };
 type Menu = { id: string; x: number; y: number };
 
@@ -48,6 +61,7 @@ export function MapCanvas({
   send,
   linkedIn,
   removeWithTasks,
+  shelf,
 }: {
   ref: Ref<CanvasHandle>;
   root: MapNode;
@@ -59,6 +73,7 @@ export function MapCanvas({
   send: Send;
   linkedIn: (id: string) => string[];
   removeWithTasks: (id: string) => void;
+  shelf: ShelfLink | null;
 }) {
   const [sizes, setSizes] = useState<ReadonlyMap<string, Size>>(new Map());
   const [view, setView] = useState<View | null>(null);
@@ -149,11 +164,18 @@ export function MapCanvas({
   const markedIds = frame?.ids ?? group;
   const marked = useMemo(() => new Set(markedIds), [markedIds]);
 
+  const [incoming, setIncoming] = useState<Incoming | null>(null);
+  const hoverShelf = shelf?.hover;
   const cancelGesture = useCallback(() => {
     press.current = null;
     setDrag(null);
     setFrame(null);
-  }, []);
+    hoverShelf?.(false);
+  }, [hoverShelf]);
+  const carriedTask = shelf?.carried ?? null;
+  useEffect(() => {
+    if (!carriedTask) setIncoming(null);
+  }, [carriedTask]);
 
   useEffect(() => {
     if (!gesturing) return;
@@ -217,7 +239,7 @@ export function MapCanvas({
     if (!origin) return cancelGesture();
     const dx = point.x - pressed.start.x;
     const dy = point.y - pressed.start.y;
-    const drop = dropAt(root, boxes, ids, { ...origin, x: origin.x + dx, y: origin.y + dy });
+    const drop = pressed.toShelf ? null : dropAt(root, boxes, ids, { ...origin, x: origin.x + dx, y: origin.y + dy });
     setDrag((current) => ({ ids, anchorId, lifted: current?.lifted ?? branchIds(root, ids), dx, dy, drop }));
   }
 
@@ -250,6 +272,8 @@ export function MapCanvas({
           y: event.clientY,
           start: toWorld(view, at.x, at.y),
           last: at,
+          toShelf: false,
+          releasable: false,
         };
       }}
       onPointerMove={(event) => {
@@ -259,14 +283,21 @@ export function MapCanvas({
         if (!gesturing) {
           if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < DRAG_THRESHOLD) return;
           event.currentTarget.setPointerCapture(event.pointerId);
+          pressed.releasable = Boolean(pressed.carried && shelf?.canRelease(pressed.carried.ids));
         }
         pressed.last = viewportPoint(event);
+        if (pressed.releasable && shelf) {
+          // Le pointeur est capturé par la carte : seule la position dit s'il survole le panneau.
+          pressed.toShelf = Boolean(document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-shelf]'));
+          shelf.hover(pressed.toShelf);
+        }
         follow();
       }}
       onPointerUp={(event) => {
         const pressed = press.current;
         if (pressed?.pointerId !== event.pointerId) return;
         if (frame) send({ type: 'mark', ids: frame.ids });
+        else if (drag && pressed.toShelf) shelf?.release(drag.ids);
         else if (drag?.drop) send({ type: 'move', ids: drag.ids, ...drag.drop });
         else if (!drag && pressed.id !== null && group.length > 0) send({ type: 'select', id: pressed.id });
         cancelGesture();
@@ -280,6 +311,27 @@ export function MapCanvas({
       }}
       onPointerCancel={(event) => {
         if (press.current?.pointerId === event.pointerId) cancelGesture();
+      }}
+      onDragOver={(event) => {
+        if (!carriedTask || !view) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        const at = viewportPoint(event);
+        const point = toWorld(view, at.x, at.y);
+        const box = { ...UNMEASURED, x: point.x - UNMEASURED.width / 2, y: point.y - UNMEASURED.height / 2 };
+        const drop = dropAt(root, boxes, [], box);
+        setIncoming((current) =>
+          current && current.box.x === box.x && current.box.y === box.y ? current : { box, drop },
+        );
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIncoming(null);
+      }}
+      onDrop={(event) => {
+        if (!carriedTask) return;
+        event.preventDefault();
+        if (incoming?.drop) shelf?.adopt(carriedTask, incoming.drop);
+        setIncoming(null);
       }}
       onDoubleClick={(event) => {
         const id = nodeIdAt(event.target);
@@ -308,6 +360,7 @@ export function MapCanvas({
           send={send}
         />
         {drag && <Ghost visible={visible} boxes={boxes} lifted={lifted} drag={drag} />}
+        {incoming && carriedTask && <Arriving incoming={incoming} target={incoming.drop && boxes.get(incoming.drop.parentId)} title={carriedTask.title} />}
         {frame && (
           <div
             className="pointer-events-none absolute border border-sky bg-sky/10"
@@ -324,5 +377,24 @@ export function MapCanvas({
         <ContextMenu at={menu} items={menuItems(menu.id)} onClose={closeMenu} />
       )}
     </main>
+  );
+}
+
+function Arriving({ incoming, target, title }: { incoming: Incoming; target: Box | null | undefined; title: string }) {
+  const { box } = incoming;
+  return (
+    <div className="pointer-events-none absolute left-0 top-0">
+      {target && (
+        <svg aria-hidden="true" className="absolute left-0 top-0 h-px w-px overflow-visible">
+          <path d={linkPath(target, box)} {...LINK} stroke="var(--color-sky)" strokeDasharray="7 6" />
+        </svg>
+      )}
+      <div
+        className="absolute max-w-[300px] truncate border border-dashed border-sky bg-panel px-3 py-2 text-sm text-ink shadow-lg"
+        style={{ left: box.x, top: box.y, minWidth: box.width }}
+      >
+        {title}
+      </div>
+    </div>
   );
 }

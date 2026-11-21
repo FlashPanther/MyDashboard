@@ -51,7 +51,8 @@ export type EditorAction = { draft?: string; newId?: string } & (
   | { type: 'foldBranch'; id: string; collapsed: boolean }
   | { type: 'hideDone'; hide: boolean }
   | { type: 'remote'; changes: RemoteChange[] }
-  | { type: 'adopt'; parentId: string; id: string; text: string; from: { taskId: string; listId: string } }
+  | { type: 'adopt'; parentId: string; id: string; text: string; from: { taskId: string; listId: string }; beforeId?: string | null; side?: Side }
+  | { type: 'remove'; ids: string[] }
 );
 
 type InsertCommand = 'child' | 'sibling' | 'siblingAbove' | 'parent';
@@ -138,8 +139,17 @@ function step(state: EditorState, action: EditorAction): EditorState {
     }
     case 'adopt': {
       const settled = finishEditing(state, action.draft);
-      const root = addChild(settled.root, action.parentId, action.id, { text: action.text, task: { done: false }, from: action.from });
+      if (holds(settled.root, action.from.taskId)) return settled;
+      const added = addChild(settled.root, action.parentId, action.id, { text: action.text, task: { done: false }, from: action.from });
+      const root = action.side && added !== settled.root ? move(added, [action.id], action.parentId, action.beforeId ?? null, action.side) : added;
       return withinLimits(root) ? commit(settled, root, action.id) : settled;
+    }
+    case 'remove': {
+      const settled = finishEditing(state, action.draft);
+      const ids = action.ids.filter((id) => id !== settled.root.id && find(settled.root, id));
+      if (ids.length === 0) return settled;
+      const removal = removeShown(settled.root, settled.hideDone, ids);
+      return commit({ ...settled, group: [] }, removal.root, removal.next);
     }
     case 'hideDone':
       return { ...finishEditing(state, action.draft), hideDone: action.hide };
@@ -182,6 +192,10 @@ function removeShown(root: MapNode, hideDone: boolean, ids: string[]): { root: M
   const whole = drop(root);
   const shown = shownRoot({ root, hideDone });
   return shown === root ? whole : { root: whole.root, next: drop(shown).next };
+}
+
+function holds(node: MapNode, taskId: string): boolean {
+  return node.from?.taskId === taskId || node.children.some((child) => holds(child, taskId));
 }
 
 function targetOf(state: EditorState): string {

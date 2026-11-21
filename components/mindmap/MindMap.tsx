@@ -15,7 +15,8 @@ import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed } from '@/lib/mindmap/keymap';
 import { draftKey, isClean, opening, parseDraft, readCopy, type Opened, type SyncStatus } from '@/lib/mindmap/sync';
-import { branchIds, countDescendants, serialize, taskProgress, type MapNode, type RemoteChange } from '@/lib/mindmap/tree';
+import { branchIds, countDescendants, find, serialize, taskProgress, type MapNode, type RemoteChange } from '@/lib/mindmap/tree';
+import type { Drop } from '@/lib/mindmap/drop';
 import { readStored, writeStored } from '@/lib/storage';
 import { fetcher, HttpError } from '@/lib/useEndpoint';
 
@@ -137,11 +138,34 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
   const pull = useCallback((changes: RemoteChange[]) => send({ type: 'remote', changes }), [send]);
   const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root, pull);
   const addTask = useCallback(
-    (task: TaskItem) => {
+    (task: TaskItem, at?: Drop) => {
       const from = { taskId: task.id, listId: task.listId };
-      send({ type: 'adopt', parentId: latest.current.selected ?? root.id, id: crypto.randomUUID(), text: task.title, from });
+      const place = at ?? { parentId: latest.current.selected ?? root.id };
+      send({ type: 'adopt', id: crypto.randomUUID(), text: task.title, from, ...place });
     },
     [send, root.id],
+  );
+  const [carried, setCarried] = useState<TaskItem | null>(null);
+  const [catching, setCatching] = useState(false);
+  const [released, setReleased] = useState<ReadonlySet<string>>(new Set());
+  const inMap = useMemo(() => new Set(fromIds(root)), [root]);
+  // Sur la carte entière : un nœud qui porte des tâches faites masquées n'est pas retiré d'un geste.
+  const canRelease = useCallback(
+    (ids: string[]) =>
+      ids.every((id) => {
+        const node = find(latest.current.root, id);
+        return node?.task && node.children.length === 0;
+      }),
+    [],
+  );
+  const forgetReleased = useCallback((ids: string[]) => setReleased((current) => new Set([...current].filter((id) => !ids.includes(id)))), []);
+  const release = useCallback(
+    (ids: string[]) => {
+      const gone = ids.flatMap((id) => fromIds(find(latest.current.root, id)!));
+      setReleased((current) => new Set([...current, ...gone]));
+      send({ type: 'remove', ids });
+    },
+    [send],
   );
   // Sur la carte entière : une tâche faite masquée dans la branche est retirée avec elle.
   const linkedIn = useCallback((nodeId: string) => [...branchIds(root, [nodeId])].filter((each) => google.linked.includes(each)), [root, google.linked]);
@@ -266,8 +290,33 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         send={send}
         linkedIn={linkedIn}
         removeWithTasks={removeWithTasks}
+        shelf={
+          shelf && google.enabled
+            ? {
+                carried,
+                adopt: (task: TaskItem, at: Drop) => {
+                  setCarried(null);
+                  addTask(task, at);
+                },
+                canRelease,
+                release,
+                hover: setCatching,
+              }
+            : null
+        }
       />
-      {shelf && google.enabled && <TaskShelf onAdd={addTask} onClose={() => setShelf(false)} />}
+      {shelf && google.enabled && (
+        <TaskShelf
+          inMap={inMap}
+          released={released}
+          onSettled={forgetReleased}
+          linked={google.linked.join()}
+          catching={catching}
+          onAdd={addTask}
+          onCarry={setCarried}
+          onClose={() => setShelf(false)}
+        />
+      )}
       <Shortcuts />
     </div>
   );
@@ -287,4 +336,8 @@ function ToolbarButton({ onPress, pressed, children }: { onPress: () => void; pr
       {children}
     </button>
   );
+}
+
+function fromIds(node: MapNode): string[] {
+  return [...(node.from ? [node.from.taskId] : []), ...node.children.flatMap(fromIds)];
 }
