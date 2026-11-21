@@ -1,10 +1,11 @@
 import { allPages } from '../google/allPages.ts';
 import { newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest, taskUpdateRequest } from '../google/taskWrites.ts';
-import { markerIn, settleLinks, tasksToCreate, tasksToUpdate, type Link, type NewTask, type TaskUpdate } from './links.ts';
+import { GoogleHttpError } from '../google/errors.ts';
+import { lostTasks, markerIn, settleLinks, tasksToCreate, tasksToUpdate, type Link, type NewTask, type TaskUpdate } from './links.ts';
 import { annotate, readMap, type Options, type StoredMap } from './store.ts';
 
 export type Google = <T>(url: string, init?: RequestInit) => Promise<T>;
-export type SyncResult = { enabled: boolean; waiting: number };
+export type SyncResult = { enabled: boolean; waiting: number; lost: number };
 type GoogleTask = { id: string; notes?: string; status?: string; updated?: string };
 
 const MAX_PER_PASS = 50;
@@ -55,19 +56,20 @@ async function send(map: StoredMap, batch: NewTask[], listTitle: string, google:
 /** Chaque tâche est traitée seule : une tâche supprimée chez Google n'empêche pas de mettre les autres à jour. */
 async function update(mapId: string, updates: TaskUpdate[], google: Google, options: Options): Promise<void> {
   let failure: unknown;
-  for (const { nodeId, taskId, listId, title, done } of updates) {
-    const { url, init } = taskUpdateRequest(listId, taskId, { title, done });
-    const change = await google<GoogleTask>(url, init).then(
-      ({ updated }): Partial<Link> => ({ title, done, ...(updated ? { updated } : {}) }),
-      (error): Partial<Link> | null => {
-        if ((error as { status?: number }).status === 404) return { lost: true };
+  for (const { nodeId, taskId, listId, ...changed } of updates) {
+    let change: Partial<Link>;
+    try {
+      const { url, init } = taskUpdateRequest(listId, taskId, changed);
+      const { updated } = await google<GoogleTask>(url, init);
+      change = { ...changed, ...(updated ? { updated } : {}) };
+    } catch (error) {
+      if (!(error instanceof GoogleHttpError) || error.status !== 404) {
         failure ??= error;
-        return null;
-      },
-    );
-    if (change) {
-      await annotate(mapId, ({ links }) => (links[nodeId]?.taskId === taskId ? { links: { ...links, [nodeId]: { ...links[nodeId], ...change } } } : {}), options);
+        continue;
+      }
+      change = { lost: true };
     }
+    await annotate(mapId, ({ links }) => ({ links: { ...links, [nodeId]: { ...links[nodeId], ...change } } }), options);
   }
   if (failure) throw failure;
 }
@@ -77,7 +79,8 @@ async function sync(id: string, listTitle: string, google: Google, options: Opti
   if (!map) return null;
   const create = tasksToCreate(id, map.root, map.links);
   const batch = map.sendTasks ? create.slice(0, MAX_PER_PASS) : [];
-  const updates = map.sendTasks ? tasksToUpdate(map.root, map.links).slice(0, MAX_PER_PASS) : [];
+  const changed = map.sendTasks ? tasksToUpdate(map.root, map.links) : [];
+  const updates = changed.slice(0, MAX_PER_PASS);
   try {
     if (batch.length > 0 || updates.length > 0) {
       // Un envoi à la fois pour tout le serveur : deux cartes portant les mêmes nœuds (réimport) ne créent pas la même tâche en parallèle.
@@ -91,7 +94,12 @@ async function sync(id: string, listTitle: string, google: Google, options: Opti
   } finally {
     await annotate(id, (latest) => ({ links: settleLinks(latest.root, latest.links) }), options);
   }
-  return { enabled: map.sendTasks, waiting: create.length - batch.length };
+  const latest = await readMap(id, options);
+  return {
+    enabled: map.sendTasks,
+    waiting: create.length - batch.length + changed.length - updates.length,
+    lost: latest ? lostTasks(latest.root, latest.links) : 0,
+  };
 }
 
 /** Une passe à la fois par carte ; une demande arrivée pendant une passe en déclenche une autre à la suite. */

@@ -7,7 +7,8 @@
 Vider sa tête dans une carte, transformer en tâches Google les nœuds qui sont des tâches, puis les planifier et les
 cocher dans Google Agenda. La carte garde la structure ; Google Tasks garde l'état des tâches.
 
-Règle : tout nœud-tâche existe dans Google Tasks ; toutes les tâches Google ne sont pas dans une carte.
+Règle : tout nœud-tâche d'une carte dont l'envoi est activé existe dans Google Tasks ; toutes les tâches Google ne sont
+pas dans une carte. Seule exception : une tâche supprimée chez Google, que la carte signale sans la recréer.
 
 ## Comment c'est construit
 
