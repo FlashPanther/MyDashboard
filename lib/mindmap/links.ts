@@ -161,7 +161,8 @@ export function absorb(links: Links, remote: ReadonlyMap<string, Fields>, gone: 
         if (fields[field] === alive[field]) delete pending[field];
         else Object.assign(pending, { [field]: fields[field] });
       }
-      return [nodeId, { ...alive, ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}) }];
+      const { incoming: _previous, ...rest } = alive;
+      return [nodeId, { ...rest, ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}) }];
     }),
   );
 }
