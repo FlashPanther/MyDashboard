@@ -42,6 +42,13 @@ export function taskListsRequest(pageToken?: string): GoogleCall {
   return { url: `${API}/users/@me/lists?${params}`, init: {} };
 }
 
+export function taskUpdateRequest(listId: string, taskId: string, { title, done }: { title: string; done: boolean }): GoogleCall {
+  return {
+    url: `${tasksUrl(listId)}/${encodeURIComponent(taskId)}`,
+    init: jsonInit('PATCH', { title, ...(done ? { status: 'completed' } : { status: 'needsAction', completed: null }) }),
+  };
+}
+
 /** Toutes les tâches d'une liste, faites et masquées comprises : pour reconnaître celles déjà créées. */
 export function tasksInListRequest(listId: string, pageToken?: string): GoogleCall {
   const params = new URLSearchParams({ maxResults: '100', showCompleted: 'true', showHidden: 'true', ...(pageToken ? { pageToken } : {}) });

@@ -1,6 +1,6 @@
 import { allPages } from '../google/allPages.ts';
-import { newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest } from '../google/taskWrites.ts';
-import { markerIn, settleLinks, tasksToCreate, type Link, type NewTask } from './links.ts';
+import { newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest, taskUpdateRequest } from '../google/taskWrites.ts';
+import { markerIn, settleLinks, tasksToCreate, tasksToUpdate, type Link, type NewTask, type TaskUpdate } from './links.ts';
 import { annotate, readMap, type Options, type StoredMap } from './store.ts';
 
 export type Google = <T>(url: string, init?: RequestInit) => Promise<T>;
@@ -52,15 +52,39 @@ async function send(map: StoredMap, batch: NewTask[], listTitle: string, google:
   }
 }
 
+/** Chaque tâche est traitée seule : une tâche supprimée chez Google n'empêche pas de mettre les autres à jour. */
+async function update(mapId: string, updates: TaskUpdate[], google: Google, options: Options): Promise<void> {
+  let failure: unknown;
+  for (const { nodeId, taskId, listId, title, done } of updates) {
+    const { url, init } = taskUpdateRequest(listId, taskId, { title, done });
+    const change = await google<GoogleTask>(url, init).then(
+      ({ updated }): Partial<Link> => ({ title, done, ...(updated ? { updated } : {}) }),
+      (error): Partial<Link> | null => {
+        if ((error as { status?: number }).status === 404) return { lost: true };
+        failure ??= error;
+        return null;
+      },
+    );
+    if (change) {
+      await annotate(mapId, ({ links }) => (links[nodeId]?.taskId === taskId ? { links: { ...links, [nodeId]: { ...links[nodeId], ...change } } } : {}), options);
+    }
+  }
+  if (failure) throw failure;
+}
+
 async function sync(id: string, listTitle: string, google: Google, options: Options): Promise<SyncResult | null> {
   const map = await readMap(id, options);
   if (!map) return null;
   const create = tasksToCreate(id, map.root, map.links);
   const batch = map.sendTasks ? create.slice(0, MAX_PER_PASS) : [];
+  const updates = map.sendTasks ? tasksToUpdate(map.root, map.links).slice(0, MAX_PER_PASS) : [];
   try {
-    if (batch.length > 0) {
+    if (batch.length > 0 || updates.length > 0) {
       // Un envoi à la fois pour tout le serveur : deux cartes portant les mêmes nœuds (réimport) ne créent pas la même tâche en parallèle.
-      const turn = sending.then(() => send(map, batch, listTitle, google, options));
+      const turn = sending.then(async () => {
+        if (batch.length > 0) await send(map, batch, listTitle, google, options);
+        await update(id, updates, google, options);
+      });
       sending = turn.catch(() => undefined);
       await turn;
     }

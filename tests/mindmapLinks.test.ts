@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { markerIn, parseLinks, settleLinks, tasksToCreate } from '../lib/mindmap/links.ts';
+import { markerIn, parseLinks, settleLinks, tasksToCreate, tasksToUpdate } from '../lib/mindmap/links.ts';
 import { newNode, type MapNode } from '../lib/mindmap/tree.ts';
 
 function map(): MapNode {
@@ -102,4 +102,18 @@ test('un identifiant fait main, même bizarre ou immense, donne une référence 
     assert.equal(markerIn(task.notes), task.marker);
     assert.equal(task.notes.length < 8192, true);
   }
+});
+
+test('seules les tâches liées dont le titre ou l’état a changé depuis l’envoi sont à mettre à jour', () => {
+  const sent = (title: string, done: boolean) => ({ ...link('g'), title, done });
+  const links = { billets: sent('Billets d’avion', false), passeports: sent('Passeports', false) };
+  assert.deepEqual(tasksToUpdate(map(), links), [{ nodeId: 'passeports', taskId: 'g', listId: 'liste', title: 'Passeports', done: true }]);
+  assert.deepEqual(tasksToUpdate(map(), { billets: sent('Ancien titre', false) }).map((update) => update.title), ['Billets d’avion']);
+});
+
+test('un lien détaché, perdu, ou sans état connu n’est jamais mis à jour', () => {
+  const changed = { ...link('g'), title: 'Autre', done: true };
+  assert.deepEqual(tasksToUpdate(map(), { billets: { ...changed, detached: true } }), []);
+  assert.deepEqual(tasksToUpdate(map(), { billets: { ...changed, lost: true } }), []);
+  assert.deepEqual(tasksToUpdate(map(), { billets: link('g') }), []);
 });

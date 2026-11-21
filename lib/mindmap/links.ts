@@ -7,12 +7,15 @@ export type Link = {
   listId: string;
   /** Le nœud n'est plus une tâche : la tâche Google est gardée, et retrouvée si le nœud revient. */
   detached?: true;
+  /** La tâche n'existe plus chez Google : on ne la recrée pas et on n'y écrit plus. */
+  lost?: true;
   /** Ce qui a été envoyé à Google, et quand il l'a enregistré : la base pour comparer plus tard. */
   title?: string;
   done?: boolean;
   updated?: string;
 };
 export type Links = Record<string, Link>;
+export type TaskUpdate = { nodeId: string; taskId: string; listId: string; title: string; done: boolean };
 export type NewTask = { nodeId: string; marker: string; title: string; notes: string; done: boolean };
 
 const SEPARATOR = ' › ';
@@ -42,12 +45,13 @@ export function parseLinks(value: unknown): Links {
   const links: Links = {};
   if (typeof value !== 'object' || value === null) return links;
   for (const [nodeId, raw] of Object.entries(value)) {
-    const { taskId, listId, detached, title, done, updated } = (raw ?? {}) as Record<string, unknown>;
+    const { taskId, listId, detached, lost, title, done, updated } = (raw ?? {}) as Record<string, unknown>;
     if (typeof taskId !== 'string' || !taskId || typeof listId !== 'string' || !listId) continue;
     links[nodeId] = {
       taskId,
       listId,
       ...(detached === true ? { detached } : {}),
+      ...(lost === true ? { lost } : {}),
       ...(typeof title === 'string' ? { title } : {}),
       ...(typeof done === 'boolean' ? { done } : {}),
       ...(typeof updated === 'string' ? { updated } : {}),
@@ -69,6 +73,23 @@ export function tasksToCreate(mapId: string, root: MapNode, links: Links): NewTa
   };
   visit(root, []);
   return create;
+}
+
+/** Les tâches liées dont le titre ou l'état a changé dans la carte depuis le dernier envoi. */
+export function tasksToUpdate(root: MapNode, links: Links): TaskUpdate[] {
+  const updates: TaskUpdate[] = [];
+  const visit = (node: MapNode) => {
+    const link = links[node.id];
+    const title = titleOf(node).slice(0, TASK_TITLE_MAX);
+    if (node.task && title && link && !link.detached && !link.lost && link.title !== undefined) {
+      if (link.title !== title || link.done !== node.task.done) {
+        updates.push({ nodeId: node.id, taskId: link.taskId, listId: link.listId, title, done: node.task.done });
+      }
+    }
+    node.children.forEach(visit);
+  };
+  visit(root);
+  return updates;
 }
 
 export function settleLinks(root: MapNode, links: Links): Links {
