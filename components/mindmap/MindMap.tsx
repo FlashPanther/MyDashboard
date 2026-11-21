@@ -9,8 +9,8 @@ import type { Send } from '@/components/mindmap/types';
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed } from '@/lib/mindmap/keymap';
-import { draftKey, opening, parseDraft, type SyncState, type SyncStatus } from '@/lib/mindmap/sync';
-import { countDescendants, parseDocument, serialize, taskProgress, type MapNode } from '@/lib/mindmap/tree';
+import { draftKey, opening, parseDraft, type Copy, type Opened, type SyncStatus } from '@/lib/mindmap/sync';
+import { countDescendants, serialize, taskProgress, type MapNode } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
 
 const HIDE_DONE_KEY = 'carte.masquerFaites';
@@ -21,44 +21,15 @@ const STATUS: Record<SyncStatus, string> = {
   offline: 'Serveur injoignable : la carte est gardée dans ce navigateur, nouvel essai en cours.',
   conflict: 'Cette carte a été modifiée sur un autre appareil.',
   gone: 'Cette carte a été supprimée sur le serveur : exporte-la pour la garder.',
+  refused: 'Le serveur refuse l’enregistrement : recharge la page, ou exporte la carte pour la garder.',
 };
 
-type Opened = { root: MapNode; sync: SyncState };
-
-export function MindMap({ id }: { id: string }) {
+export function MindMap({ id, server }: { id: string; server: Copy }) {
   const [opened, setOpened] = useState<Opened | null>(null);
-  const [failure, setFailure] = useState('');
 
-  useEffect(() => {
-    let stale = false;
-    fetch(`/api/cartes/${id}`)
-      .then(async (response) => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(response.status === 404 ? 'Cette carte n’existe pas, ou plus.' : body.error);
-        const server = { revision: body.revision, root: parseDocument(body) };
-        if (!stale) setOpened(opening(server, parseDraft(readStored(draftKey(id)))));
-      })
-      .catch((error: Error) => !stale && setFailure(error.message || 'Carte illisible'));
-    return () => {
-      stale = true;
-    };
-  }, [id]);
+  useEffect(() => setOpened(opening(server, parseDraft(readStored(draftKey(id))))), [id, server]);
 
-  if (opened) return <Editor id={id} opened={opened} />;
-  return (
-    <Preparing>
-      {failure ? (
-        <span>
-          {failure}{' '}
-          <Link href="/carte" className="underline">
-            Retour aux cartes
-          </Link>
-        </span>
-      ) : (
-        'Préparation de la carte…'
-      )}
-    </Preparing>
-  );
+  return opened ? <Editor id={id} opened={opened} /> : <Preparing>Préparation de la carte…</Preparing>;
 }
 
 function Editor({ id, opened }: { id: string; opened: Opened }) {
@@ -84,7 +55,19 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
 
   useEffect(() => writeStored(HIDE_DONE_KEY, hideDone ? '1' : '0'), [hideDone]);
 
-  const { status, theirs, resolve, flush } = useMapSync(id, opened.sync, root);
+  const adopt = useCallback(
+    (theirs: MapNode) => {
+      send({ type: 'replace', root: theirs });
+      setRefits((count) => count + 1);
+    },
+    [send],
+  );
+  const { status, settle, flush } = useMapSync(id, opened.sync, root, adopt);
+  const leave = useCallback(() => {
+    const draft = editingElement.current?.innerText;
+    flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
+  }, [flush]);
+  useEffect(() => leave, [leave]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -98,8 +81,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     };
     // À la fermeture, rien ne garantit un rendu React : la saisie en cours est validée et écrite sur-le-champ.
     const onLeave = () => {
-      const draft = editingElement.current?.innerText;
-      flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
+      leave();
       send({ type: 'command', command: 'stop' });
     };
     window.addEventListener('keydown', onKey);
@@ -108,14 +90,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('pagehide', onLeave);
     };
-  }, [mode, send, flush]);
-
-  function takeTheirs() {
-    if (!theirs) return;
-    resolve({ type: 'takeTheirs' });
-    send({ type: 'replace', root: theirs.root });
-    setRefits((count) => count + 1);
-  }
+  }, [mode, send, leave]);
 
   function exportFile(map: MapNode) {
     const name = map.text.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'carte';
@@ -147,8 +122,8 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         </p>
         {status === 'conflict' && (
           <>
-            <ToolbarButton onPress={() => resolve({ type: 'keepMine' })}>Garder ma version</ToolbarButton>
-            <ToolbarButton onPress={takeTheirs}>Prendre l’autre version</ToolbarButton>
+            <ToolbarButton onPress={() => settle(false)}>Garder ma version</ToolbarButton>
+            <ToolbarButton onPress={() => settle(true)}>Prendre l’autre version</ToolbarButton>
           </>
         )}
       </header>

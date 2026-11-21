@@ -2,24 +2,29 @@ import { FORMAT_VERSION, parseDocument, sameMap, type MapNode } from './tree.ts'
 
 export type Copy = { revision: number; root: MapNode };
 export type Draft = { base: number; root: MapNode };
+export type Trouble = 'offline' | 'gone' | 'refused';
 
 export type SyncState = {
-  revision: number;
-  saved: MapNode;
+  base: Copy;
   sending: MapNode | null;
   theirs: Copy | null;
-  trouble: 'none' | 'offline' | 'gone';
+  trouble: Trouble | null;
+  retries: number;
 };
 
 export type SyncEvent =
   | { type: 'sent'; root: MapNode }
   | { type: 'accepted'; revision: number }
-  | { type: 'refused'; theirs: Copy }
-  | { type: 'failed'; gone: boolean }
-  | { type: 'keepMine' }
-  | { type: 'takeTheirs' };
+  | { type: 'conflict'; theirs: Copy }
+  | { type: 'failed'; trouble: Trouble }
+  | { type: 'settled' };
 
-export type SyncStatus = 'saved' | 'saving' | 'offline' | 'conflict' | 'gone';
+export type SyncStatus = 'saved' | 'saving' | 'conflict' | Trouble;
+export type Opened = { root: MapNode; sync: SyncState };
+
+const QUIET_MS = 600;
+const RETRY_MS = 5000;
+const RETRY_MAX_MS = 60_000;
 
 export function draftKey(id: string): string {
   return `carte.brouillon.${id}`;
@@ -39,37 +44,62 @@ export function parseDraft(text: string | null): Draft | null {
   }
 }
 
-export function opening(server: Copy, draft: Draft | null): { root: MapNode; sync: SyncState } {
-  const clean: SyncState = { revision: server.revision, saved: server.root, sending: null, theirs: null, trouble: 'none' };
+function readCopy(value: unknown): Copy | null {
+  try {
+    const { revision } = value as { revision?: unknown };
+    return Number.isInteger(revision) ? { revision: revision as number, root: parseDocument(value) } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function opening(server: Copy, draft: Draft | null): Opened {
+  const clean: SyncState = { base: server, sending: null, theirs: null, trouble: null, retries: 0 };
   if (!draft || sameMap(draft.root, server.root)) return { root: server.root, sync: clean };
   if (draft.base === server.revision) return { root: draft.root, sync: clean };
-  return { root: draft.root, sync: { ...clean, theirs: server } };
+  return { root: draft.root, sync: { ...clean, base: { revision: draft.base, root: server.root }, theirs: server } };
 }
 
 export function toSend(sync: SyncState, root: MapNode): MapNode | null {
-  if (sync.sending || sync.theirs || sync.trouble === 'gone' || root === sync.saved) return null;
-  return root;
+  const stopped = sync.sending || sync.theirs || sync.trouble === 'gone' || sync.trouble === 'refused';
+  return stopped || root === sync.base.root ? null : root;
+}
+
+export function sendDelay(sync: SyncState): number {
+  return sync.trouble === 'offline' ? Math.min(RETRY_MS * 2 ** (sync.retries - 1), RETRY_MAX_MS) : QUIET_MS;
 }
 
 export function statusOf(sync: SyncState, root: MapNode): SyncStatus {
   if (sync.theirs) return 'conflict';
-  if (sync.trouble !== 'none') return sync.trouble;
-  return sync.sending || root !== sync.saved ? 'saving' : 'saved';
+  if (sync.trouble) return sync.trouble;
+  return sync.sending || root !== sync.base.root ? 'saving' : 'saved';
+}
+
+export function eventOf(status: number, body: unknown): SyncEvent {
+  const { revision, current } = (body ?? {}) as { revision?: unknown; current?: unknown };
+  if (status >= 200 && status < 300 && Number.isInteger(revision)) return { type: 'accepted', revision: revision as number };
+  const theirs = status === 409 ? readCopy(current) : null;
+  if (theirs) return { type: 'conflict', theirs };
+  if (status === 404) return { type: 'failed', trouble: 'gone' };
+  return { type: 'failed', trouble: status >= 400 && status < 500 ? 'refused' : 'offline' };
 }
 
 export function syncStep(sync: SyncState, event: SyncEvent): SyncState {
   switch (event.type) {
     case 'sent':
       return { ...sync, sending: event.root };
-    case 'accepted':
-      return { ...sync, revision: event.revision, saved: sync.sending ?? sync.saved, sending: null, trouble: 'none' };
-    case 'refused':
-      return { ...sync, sending: null, theirs: event.theirs, trouble: 'none' };
+    case 'accepted': {
+      const base = { revision: event.revision, root: sync.sending ?? sync.base.root };
+      return { ...sync, base, sending: null, trouble: null, retries: 0 };
+    }
+    case 'conflict': {
+      const settled = { ...sync, sending: null, trouble: null, retries: 0 };
+      const mine = sync.sending && sameMap(sync.sending, event.theirs.root);
+      return mine ? { ...settled, base: { revision: event.theirs.revision, root: sync.sending! } } : { ...settled, theirs: event.theirs };
+    }
     case 'failed':
-      return { ...sync, sending: null, trouble: event.gone ? 'gone' : 'offline' };
-    case 'keepMine':
-      return sync.theirs ? { ...sync, revision: sync.theirs.revision, theirs: null } : sync;
-    case 'takeTheirs':
-      return sync.theirs ? { ...sync, revision: sync.theirs.revision, saved: sync.theirs.root, theirs: null } : sync;
+      return { ...sync, sending: null, trouble: event.trouble, retries: sync.retries + 1 };
+    case 'settled':
+      return sync.theirs ? { ...sync, base: sync.theirs, theirs: null } : sync;
   }
 }

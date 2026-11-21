@@ -3,13 +3,15 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { writeJson } from '@/components/mindmap/writeJson';
 import { Preparing } from '@/components/Preparing';
 import type { MapSummary } from '@/lib/mindmap/store';
 import { newNode, parse, type MapNode } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
+import { relative } from '@/lib/time';
+import { useEndpoint } from '@/lib/useEndpoint';
 
 const BROWSER_MAP_KEY = 'carte.document';
-const DAY = new Intl.DateTimeFormat('fr-BE', { dateStyle: 'medium', timeStyle: 'short' });
 
 function browserMap(): MapNode | null {
   try {
@@ -23,40 +25,27 @@ function browserMap(): MapNode | null {
 
 export function MapList() {
   const router = useRouter();
-  const [maps, setMaps] = useState<MapSummary[] | null>(null);
+  const list = useEndpoint<{ maps: MapSummary[] }>('/api/cartes', 0);
   const [local, setLocal] = useState<MapNode | null>(null);
-  const [notice, setNotice] = useState('');
+  const [failure, setFailure] = useState('');
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const notice = failure || list.error;
 
-  useEffect(() => {
-    setLocal(browserMap());
-    fetch('/api/cartes')
-      .then(async (response) => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error);
-        setMaps(body.maps);
-      })
-      .catch((error: Error) => setNotice(error.message || 'Liste des cartes illisible'));
-  }, []);
+  useEffect(() => setLocal(browserMap()), []);
 
-  async function create(root: MapNode, created?: () => void) {
+  async function create(root: MapNode): Promise<boolean> {
     setBusy(true);
-    setNotice('');
-    try {
-      const response = await fetch('/api/cartes', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ root }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
-      created?.();
-      router.push(`/carte/${body.id}`);
-    } catch (error) {
-      setNotice((error as Error).message || 'Création impossible');
-      setBusy(false);
+    setFailure('');
+    const { status, body } = await writeJson('/api/cartes', 'POST', { root });
+    const { id, error } = (body ?? {}) as { id?: string; error?: string };
+    if (status === 200 && id) {
+      router.push(`/carte/${id}`);
+      return true;
     }
+    setFailure(error ?? 'Création impossible');
+    setBusy(false);
+    return false;
   }
 
   async function importFile(file: File | undefined) {
@@ -65,11 +54,12 @@ export function MapList() {
     try {
       root = parse(await file.text());
     } catch {
-      return setNotice(`« ${file.name} » n'est pas une carte valide.`);
+      return setFailure(`« ${file.name} » n'est pas une carte valide.`);
     }
     await create(root);
   }
 
+  const maps = list.data?.maps;
   if (!maps && !notice) return <Preparing>Préparation des cartes…</Preparing>;
 
   return (
@@ -112,7 +102,7 @@ export function MapList() {
             type="button"
             className="action"
             disabled={busy}
-            onClick={() => create(local, () => writeStored(BROWSER_MAP_KEY, null))}
+            onClick={async () => (await create(local)) && writeStored(BROWSER_MAP_KEY, null)}
           >
             La mettre sur le serveur
           </button>
@@ -127,7 +117,7 @@ export function MapList() {
             <Link href={`/carte/${map.id}`} className="panel flex items-baseline justify-between gap-4 px-4 py-3 hover:border-ink">
               <span className="min-w-0 truncate font-display font-bold text-ink">{map.title || 'Sans titre'}</span>
               <time dateTime={map.updatedAt} className="shrink-0 font-mono text-xs text-muted">
-                {DAY.format(new Date(map.updatedAt))}
+                {relative(map.updatedAt)}
               </time>
             </Link>
           </li>
