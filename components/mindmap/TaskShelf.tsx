@@ -1,28 +1,51 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { TaskItem } from '@/app/api/tasks/route';
 import { ListChecks } from 'lucide-react';
 import { Empty, Panel } from '@/components/Panel';
 import { useEndpoint } from '@/lib/useEndpoint';
 
 /** Les tâches Google qui ne sont dans aucune carte, à reprendre dans la carte ouverte. */
-export function TaskShelf({ onAdd, onClose }: { onAdd: (task: TaskItem) => void; onClose: () => void }) {
+export function TaskShelf({
+  inMap,
+  released,
+  linked,
+  catching,
+  onAdd,
+  onCarry,
+  onClose,
+}: {
+  inMap: ReadonlySet<string>;
+  released: ReadonlySet<string>;
+  linked: string;
+  catching: boolean;
+  onAdd: (task: TaskItem) => void;
+  onCarry: (task: TaskItem | null) => void;
+  onClose: () => void;
+}) {
   const tasks = useEndpoint<{ tasks: TaskItem[] }>('/api/tasks', 0);
   const followed = useEndpoint<{ taskIds: string[] }>('/api/cartes/suivies', 0);
   const [query, setQuery] = useState('');
-  const [taken, setTaken] = useState<string[]>([]);
+  const refreshFollowed = followed.refresh;
+
+  useEffect(() => {
+    refreshFollowed();
+  }, [linked, refreshFollowed]);
 
   const free = useMemo(() => {
-    const known = new Set([...(followed.data?.taskIds ?? []), ...taken]);
     const words = query.trim().toLowerCase();
+    const elsewhere = new Set((followed.data?.taskIds ?? []).filter((id) => !released.has(id)));
     return (tasks.data?.tasks ?? []).filter(
-      (task) => !known.has(task.id) && (!words || `${task.title} ${task.list}`.toLowerCase().includes(words)),
+      (task) => !elsewhere.has(task.id) && !inMap.has(task.id) && (!words || `${task.title} ${task.list}`.toLowerCase().includes(words)),
     );
-  }, [tasks.data, followed.data, taken, query]);
+  }, [tasks.data, followed.data, inMap, released, query]);
 
   return (
-    <aside className="fixed bottom-3 right-3 top-16 z-10 flex w-80 max-w-[calc(100vw-1.5rem)] flex-col">
+    <aside
+      data-shelf
+      className={`fixed bottom-3 right-3 top-16 z-10 flex w-80 max-w-[calc(100vw-1.5rem)] flex-col ${catching ? 'outline-2 outline-offset-2 outline-dashed outline-sky' : ''}`}
+    >
       <Panel
         title="Tâches libres"
         icon={ListChecks}
@@ -37,7 +60,11 @@ export function TaskShelf({ onAdd, onClose }: { onAdd: (task: TaskItem) => void;
         }
       >
         <div className="flex min-h-0 flex-1 flex-col gap-2 text-sm">
-          <p className="text-xs text-muted">Les tâches Google qui ne sont dans aucune carte. « Ajouter » la place sous le nœud sélectionné.</p>
+          <p className="text-xs text-muted">
+            {catching
+              ? 'Lâche ici pour retirer de la carte : la tâche reste dans Google.'
+              : 'Les tâches Google qui ne sont dans aucune carte. Glisse-les sur la carte, ou « Ajouter » sous le nœud sélectionné. Glisse un nœud-tâche ici pour le retirer de la carte.'}
+          </p>
           <input
             type="search"
             value={query}
@@ -48,19 +75,23 @@ export function TaskShelf({ onAdd, onClose }: { onAdd: (task: TaskItem) => void;
           {free.length === 0 && <Empty>Aucune tâche libre.</Empty>}
           <ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
             {free.map((task) => (
-              <li key={task.id} className="flex items-baseline gap-2 border-b border-rule py-1">
+              <li
+                key={task.id}
+                draggable
+                onDragStart={(event) => {
+                  // Firefox ne commence pas le glissement sans donnée attachée.
+                  event.dataTransfer.setData('text/plain', task.title);
+                  event.dataTransfer.effectAllowed = 'copy';
+                  onCarry(task);
+                }}
+                onDragEnd={() => onCarry(null)}
+                className="flex cursor-grab items-baseline gap-2 border-b border-rule py-1 active:cursor-grabbing"
+              >
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-ink">{task.title}</span>
                   <span className="font-mono text-[11px] text-muted">{task.list}</span>
                 </span>
-                <button
-                  type="button"
-                  className="shrink-0 font-mono text-xs text-muted hover:text-ink"
-                  onClick={() => {
-                    setTaken((current) => [...current, task.id]);
-                    onAdd(task);
-                  }}
-                >
+                <button type="button" className="shrink-0 font-mono text-xs text-muted hover:text-ink" onClick={() => onAdd(task)}>
                   Ajouter
                 </button>
               </li>

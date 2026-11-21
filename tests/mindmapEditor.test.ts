@@ -515,3 +515,22 @@ test('reprendre une tâche existante ajoute un nœud-tâche nommé sous le paren
   assert.equal(find(run(adopted, 'undo').root, 'livres'), null);
   assert.equal(reduce(adopted, { type: 'adopt', parentId: parent, id: 'livres', text: 'Encore', from: { taskId: 'p1', listId: 'L9' } }).root, adopted.root);
 });
+
+test('une tâche reprise par glisser-déposer arrive à l’endroit visé : parent, rang et côté', () => {
+  const state = sample();
+  const [first, second] = state.root.children.map((child) => child.id);
+  const dropped = reduce(state, { type: 'adopt', parentId: state.root.id, id: 'livres', text: 'Rendre les livres', from: { taskId: 'p1', listId: 'L9' }, beforeId: second, side: 'right' });
+  assert.deepEqual(dropped.root.children.map((child) => child.id).slice(0, 3), [first, 'livres', second]);
+  assert.equal(dropped.selected, 'livres');
+  assert.equal(find(run(dropped, 'undo').root, 'livres'), null);
+});
+
+test('retirer des nœuds glissés hors de la carte les supprime en une étape d’annulation, jamais la racine', () => {
+  const state = sample();
+  const [first, second] = state.root.children.map((child) => child.id);
+  const removed = reduce(state, { type: 'remove', ids: [first, second, state.root.id] });
+  assert.equal(find(removed.root, first), null);
+  assert.equal(find(removed.root, second), null);
+  assert.equal(find(run(removed, 'undo').root, first)?.id, first);
+  assert.equal(reduce(state, { type: 'remove', ids: [state.root.id] }).root, state.root);
+});
