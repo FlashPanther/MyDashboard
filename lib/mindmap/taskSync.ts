@@ -32,6 +32,8 @@ const readAt = new Map<string, number>();
 /** Par carte, la plus récente modification vue chez Google : la lecture suivante ne demande que ce qui a changé depuis. */
 const cursors = new Map<string, string>();
 type Exchanged = { waiting: number; pulls: Pull[] };
+/** `read: false` : ne lire Google que s'il faut créer ; pour les passes sans éditeur, qui n'ont personne à qui rendre ce qui a changé. */
+export type SyncOptions = Options & { read?: boolean };
 const running = new Map<string, Promise<SyncResult | null>>();
 const again = new Set<string>();
 let sending: Promise<unknown> = Promise.resolve();
@@ -108,12 +110,13 @@ function fieldsOf(task: GoogleTask): Fields {
 }
 
 /** Crée ce qui manque, lit Google de temps en temps, puis pousse ce que la carte a changé et rend ce que Google a changé. */
-async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, google: Google, options: Options): Promise<Exchanged> {
+async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, google: Google, options: SyncOptions): Promise<Exchanged> {
   const now = options.now?.getTime() ?? Date.now();
   const followed = Object.keys(map.links).length > 0;
   const remote = new Map<string, Fields>();
   const gone = new Set<string>();
-  if (batch.length > 0 || (followed && now - (readAt.get(map.id) ?? 0) >= READ_EVERY_MS)) {
+  const due = followed && options.read !== false && now - (readAt.get(map.id) ?? 0) >= READ_EVERY_MS;
+  if (batch.length > 0 || due) {
     // Créer demande toute la liste, pour reconnaître les tâches déjà créées ; sinon, seul ce qui a changé suffit.
     const known = Object.values(map.links)[0]?.listId;
     const delta = batch.length === 0 && known ? since(cursors.get(map.id)) : undefined;
@@ -141,7 +144,7 @@ async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, goo
   };
 }
 
-async function sync(id: string, listTitle: string, google: Google, options: Options): Promise<SyncResult | null> {
+async function sync(id: string, listTitle: string, google: Google, options: SyncOptions): Promise<SyncResult | null> {
   const map = await readMap(id, options);
   if (!map) return null;
   const create = tasksToCreate(id, map.root, map.links);
@@ -167,7 +170,7 @@ async function sync(id: string, listTitle: string, google: Google, options: Opti
 }
 
 /** Une passe à la fois par carte ; une demande arrivée pendant une passe en déclenche une autre à la suite. */
-export function syncTasks(id: string, listTitle: string, google: Google, options: Options = {}): Promise<SyncResult | null> {
+export function syncTasks(id: string, listTitle: string, google: Google, options: SyncOptions = {}): Promise<SyncResult | null> {
   const current = running.get(id);
   if (current) {
     again.add(id);

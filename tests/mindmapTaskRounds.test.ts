@@ -18,16 +18,18 @@ function map(task: string): MapNode {
 
 function fakeGoogle(failFor = '') {
   const created: string[] = [];
+  const reads: string[] = [];
   let count = 0;
   const google = (async (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET';
+    if (method === 'GET') reads.push(new URL(url).pathname);
     if (method === 'GET') return { items: url.includes('/users/@me/lists') ? [{ id: 'L1', title: 'Cartes' }] : [] };
     const { title } = JSON.parse(String(init.body));
     if (title === failFor) throw new Error('Google a lâché');
     created.push(title);
     return { id: `g${++count}`, updated: '2026-11-21T10:00:00.000Z' };
   }) as Google;
-  return { google, created };
+  return { google, created, reads };
 }
 
 test('un tour envoie les tâches de chaque carte qui le demande, ouverte ou non, et ignore les autres', async () => {
@@ -35,7 +37,7 @@ test('un tour envoie les tâches de chaque carte qui le demande, ouverte ou non,
   const sent = (await createMap(map('envoyée'), { dir, sendTasks: true }))!;
   await createMap(map('gardée'), { dir });
   const fake = fakeGoogle();
-  assert.deepEqual(await syncAllMaps('Cartes', fake.google, { dir }), { maps: 1, failed: 0 });
+  await syncAllMaps('Cartes', fake.google, { dir });
   assert.deepEqual(fake.created, ['envoyée']);
   assert.deepEqual(Object.keys((await readMap(sent.id, { dir }))!.links), ['envoyée']);
 });
@@ -45,6 +47,18 @@ test('une carte en échec n’empêche pas les autres de passer', async () => {
   await createMap(map('cassée'), { dir, sendTasks: true });
   await createMap(map('saine'), { dir, sendTasks: true });
   const fake = fakeGoogle('cassée');
-  assert.deepEqual(await syncAllMaps('Cartes', fake.google, { dir }), { maps: 2, failed: 1 });
+  const failures = await syncAllMaps('Cartes', fake.google, { dir });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /Google a lâché/);
   assert.deepEqual(fake.created, ['saine']);
+});
+
+test('sans rien à créer, un tour ne lit pas Google : les changements de Google attendent l’ouverture de la carte', async () => {
+  const dir = await folder();
+  await createMap(map('envoyée'), { dir, sendTasks: true });
+  const fake = fakeGoogle();
+  await syncAllMaps('Cartes', fake.google, { dir });
+  fake.reads.length = 0;
+  await syncAllMaps('Cartes', fake.google, { dir });
+  assert.deepEqual(fake.reads, []);
 });

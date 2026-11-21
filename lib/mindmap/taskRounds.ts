@@ -1,19 +1,17 @@
-import { listMaps, readMap, type Options } from './store.ts';
+import { listMaps, type Options } from './store.ts';
 import { syncTasks, type Google } from './taskSync.ts';
 
-export type Round = { maps: number; failed: number };
-
-/** Une passe pour chaque carte qui envoie ses tâches : ce qui a changé dans une carte part, ce qui a changé chez Google attend sa réouverture. */
-export async function syncAllMaps(listTitle: string, google: Google, options: Options = {}): Promise<Round> {
-  let maps = 0;
-  let failed = 0;
-  for (const { id } of await listMaps(options)) {
-    const map = await readMap(id, options).catch(() => null);
-    if (!map?.sendTasks) continue;
-    maps += 1;
-    await syncTasks(id, listTitle, google, options).catch(() => {
-      failed += 1;
+/**
+ * Une passe pour chaque carte qui envoie ses tâches : ce qui n'a pas pu partir part. Google n'est pas relu (sauf pour
+ * créer) : ce qu'il a changé sera lu à l'ouverture de la carte, sans dépenser de requêtes pour des cartes fermées.
+ */
+export async function syncAllMaps(listTitle: string, google: Google, options: Options = {}): Promise<string[]> {
+  const failures: string[] = [];
+  for (const { id, sendTasks } of await listMaps(options)) {
+    if (!sendTasks) continue;
+    await syncTasks(id, listTitle, google, { ...options, read: false }).catch((error) => {
+      failures.push(`${id} : ${(error as Error).message}`);
     });
   }
-  return { maps, failed };
+  return failures;
 }

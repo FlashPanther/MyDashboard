@@ -72,9 +72,8 @@ Puis le lien avec Google Tasks :
   se renomme dans la carte ouverte, au plus une minute plus tard. Champ par champ : changé d'un seul côté, l'autre
   suit ; changé des deux côtés, la carte l'emporte. Codé et testé avec un Google en mémoire ; **reste à constater
   contre le vrai Google** avant de cocher.
-- [ ] **10 ter. Le serveur envoie et lit de lui-même** : juste après chaque enregistrement, et toutes les cinq minutes
-  pour chaque carte qui envoie ses tâches, ouverte ou non. Ce que Google a changé pour une carte fermée attend dans ses
-  liens et revient à son ouverture. Codé et testé avec un Google en mémoire ; **reste à constater en ligne**.
+- [ ] **10 ter. Le serveur envoie de lui-même** : juste après chaque enregistrement, même si l'onglet se ferme, et toutes
+  les cinq minutes ce qui n'a pas pu partir. Codé et testé avec un Google en mémoire ; **reste à constater en ligne**.
 - [ ] **11. Détacher ou supprimer** : retirer un nœud détache la tâche ; la supprimer pour de bon est un second geste.
   Supprimer une carte détache toutes ses tâches : c'est le serveur qui le fait, derrière la suppression.
 - [ ] **12. Le menu latéral** des tâches Google qui ne sont dans aucune carte.
@@ -84,8 +83,13 @@ Puis le lien avec Google Tasks :
 
 ## Décisions à reprendre aux étapes suivantes
 
-- **Qui déclenche l'envoi vers Google** : le serveur, après chaque enregistrement et toutes les cinq minutes ; l'éditeur
-  ouvert redemande en plus toutes les minutes. Une carte importée n'envoie rien tant que son envoi n'est pas activé.
+- **Qui déclenche l'envoi vers Google** : le serveur, juste après chaque enregistrement, et un tour toutes les cinq
+  minutes pour ce qui n'a pas pu partir (en production seulement). Sans éditeur, Google n'est pas relu : ce qu'il a
+  changé est lu à l'ouverture de la carte. L'éditeur ouvert redemande toutes les minutes, et 1,5 s après chaque
+  enregistrement : ce second appel fait en partie doublon avec l'envoi du serveur, mais c'est lui qui rapporte à la
+  carte ce que Google a changé. Une carte importée n'envoie rien tant que son envoi n'est pas activé.
+- **Une seule instance du tableau** : les verrous d'envoi vivent dans la mémoire du processus. À plusieurs instances,
+  il faudrait une tâche planifiée Coolify ou un verrou dans un fichier.
 - **Comment le serveur parle à l'éditeur** : l'état coché vit dans la carte, que seul l'éditeur écrit. Ce que Google a
   changé est rendu par l'envoi des tâches (`pulls`) et gardé dans le lien (`incoming`) tant que l'éditeur ne l'a pas
   repris ; l'éditeur l'applique comme une modification ordinaire. L'annuler aussitôt ne sert à rien : tant que le
