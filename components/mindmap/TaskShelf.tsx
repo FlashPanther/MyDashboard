@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TaskItem } from '@/app/api/tasks/route';
 import { ListChecks } from 'lucide-react';
 import { Empty, Panel } from '@/components/Panel';
@@ -14,6 +14,7 @@ export function TaskShelf({
   catching,
   onAdd,
   onCarry,
+  onSettled,
   onClose,
 }: {
   inMap: ReadonlySet<string>;
@@ -22,16 +23,27 @@ export function TaskShelf({
   catching: boolean;
   onAdd: (task: TaskItem) => void;
   onCarry: (task: TaskItem | null) => void;
+  onSettled: (ids: string[]) => void;
   onClose: () => void;
 }) {
   const tasks = useEndpoint<{ tasks: TaskItem[] }>('/api/tasks', 0);
   const followed = useEndpoint<{ taskIds: string[] }>('/api/cartes/suivies', 0);
   const [query, setQuery] = useState('');
-  const refreshFollowed = followed.refresh;
+  const refreshFollowed = useRef(followed.refresh);
+  refreshFollowed.current = followed.refresh;
 
   useEffect(() => {
-    refreshFollowed();
-  }, [linked, refreshFollowed]);
+    refreshFollowed.current();
+  }, [linked]);
+
+  // Une tâche retirée de la carte que le serveur ne compte plus comme suivie n'a plus besoin d'être forcée dans la liste.
+  const settled = useMemo(() => {
+    const taskIds = followed.data?.taskIds;
+    return taskIds ? [...released].filter((id) => !taskIds.includes(id)) : [];
+  }, [followed.data, released]);
+  useEffect(() => {
+    if (settled.length > 0) onSettled(settled);
+  }, [settled, onSettled]);
 
   const free = useMemo(() => {
     const words = query.trim().toLowerCase();

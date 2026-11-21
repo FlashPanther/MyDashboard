@@ -36,6 +36,7 @@ type Press = {
   start: Point;
   last: Point;
   toShelf: boolean;
+  releasable: boolean;
 };
 /** Le panneau des tâches libres ouvert à côté de la carte : on y prend des tâches, on y lâche des nœuds-tâches. */
 export type ShelfLink = {
@@ -272,6 +273,7 @@ export function MapCanvas({
           start: toWorld(view, at.x, at.y),
           last: at,
           toShelf: false,
+          releasable: false,
         };
       }}
       onPointerMove={(event) => {
@@ -281,11 +283,12 @@ export function MapCanvas({
         if (!gesturing) {
           if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < DRAG_THRESHOLD) return;
           event.currentTarget.setPointerCapture(event.pointerId);
+          pressed.releasable = Boolean(pressed.carried && shelf?.canRelease(pressed.carried.ids));
         }
         pressed.last = viewportPoint(event);
-        if (pressed.carried && shelf) {
-          const over = Boolean(document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-shelf]'));
-          pressed.toShelf = over && shelf.canRelease(pressed.carried.ids);
+        if (pressed.releasable && shelf) {
+          // Le pointeur est capturé par la carte : seule la position dit s'il survole le panneau.
+          pressed.toShelf = Boolean(document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-shelf]'));
           shelf.hover(pressed.toShelf);
         }
         follow();
@@ -316,7 +319,10 @@ export function MapCanvas({
         const at = viewportPoint(event);
         const point = toWorld(view, at.x, at.y);
         const box = { ...UNMEASURED, x: point.x - UNMEASURED.width / 2, y: point.y - UNMEASURED.height / 2 };
-        setIncoming({ box, drop: dropAt(root, boxes, [], box) });
+        const drop = dropAt(root, boxes, [], box);
+        setIncoming((current) =>
+          current && current.box.x === box.x && current.box.y === box.y ? current : { box, drop },
+        );
       }}
       onDragLeave={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIncoming(null);

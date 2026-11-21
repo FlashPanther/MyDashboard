@@ -534,3 +534,10 @@ test('retirer des nœuds glissés hors de la carte les supprime en une étape d�
   assert.equal(find(run(removed, 'undo').root, first)?.id, first);
   assert.equal(reduce(state, { type: 'remove', ids: [state.root.id] }).root, state.root);
 });
+
+test('une tâche déjà reprise dans la carte n’y est pas reprise une seconde fois, même sous un autre nœud', () => {
+  const state = sample();
+  const from = { taskId: 'p1', listId: 'L9' };
+  const once = reduce(state, { type: 'adopt', parentId: state.root.id, id: 'livres', text: 'Rendre les livres', from });
+  assert.equal(reduce(once, { type: 'adopt', parentId: state.root.children[0].id, id: 'encore', text: 'Rendre les livres', from }).root, once.root);
+});

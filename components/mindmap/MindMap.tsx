@@ -150,15 +150,22 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
   const [released, setReleased] = useState<ReadonlySet<string>>(new Set());
   const inMap = useMemo(() => new Set(fromIds(root)), [root]);
   // Sur la carte entière : un nœud qui porte des tâches faites masquées n'est pas retiré d'un geste.
-  const canRelease = useCallback((ids: string[]) => ids.every((id) => find(latest.current.root, id)?.task && find(latest.current.root, id)!.children.length === 0), []);
+  const canRelease = useCallback(
+    (ids: string[]) =>
+      ids.every((id) => {
+        const node = find(latest.current.root, id);
+        return node?.task && node.children.length === 0;
+      }),
+    [],
+  );
+  const forgetReleased = useCallback((ids: string[]) => setReleased((current) => new Set([...current].filter((id) => !ids.includes(id)))), []);
   const release = useCallback(
     (ids: string[]) => {
-      if (!canRelease(ids)) return;
       const gone = ids.flatMap((id) => fromIds(find(latest.current.root, id)!));
       setReleased((current) => new Set([...current, ...gone]));
       send({ type: 'remove', ids });
     },
-    [canRelease, send],
+    [send],
   );
   // Sur la carte entière : une tâche faite masquée dans la branche est retirée avec elle.
   const linkedIn = useCallback((nodeId: string) => [...branchIds(root, [nodeId])].filter((each) => google.linked.includes(each)), [root, google.linked]);
@@ -285,7 +292,16 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         removeWithTasks={removeWithTasks}
         shelf={
           shelf && google.enabled
-            ? { carried, adopt: addTask, canRelease, release, hover: setCatching }
+            ? {
+                carried,
+                adopt: (task: TaskItem, at: Drop) => {
+                  setCarried(null);
+                  addTask(task, at);
+                },
+                canRelease,
+                release,
+                hover: setCatching,
+              }
             : null
         }
       />
@@ -293,6 +309,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         <TaskShelf
           inMap={inMap}
           released={released}
+          onSettled={forgetReleased}
           linked={google.linked.join()}
           catching={catching}
           onAdd={addTask}

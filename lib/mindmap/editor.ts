@@ -139,6 +139,7 @@ function step(state: EditorState, action: EditorAction): EditorState {
     }
     case 'adopt': {
       const settled = finishEditing(state, action.draft);
+      if (holds(settled.root, action.from.taskId)) return settled;
       const added = addChild(settled.root, action.parentId, action.id, { text: action.text, task: { done: false }, from: action.from });
       const root = action.side && added !== settled.root ? move(added, [action.id], action.parentId, action.beforeId ?? null, action.side) : added;
       return withinLimits(root) ? commit(settled, root, action.id) : settled;
@@ -191,6 +192,10 @@ function removeShown(root: MapNode, hideDone: boolean, ids: string[]): { root: M
   const whole = drop(root);
   const shown = shownRoot({ root, hideDone });
   return shown === root ? whole : { root: whole.root, next: drop(shown).next };
+}
+
+function holds(node: MapNode, taskId: string): boolean {
+  return node.from?.taskId === taskId || node.children.some((child) => holds(child, taskId));
 }
 
 function targetOf(state: EditorState): string {
