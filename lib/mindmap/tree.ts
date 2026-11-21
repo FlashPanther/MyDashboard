@@ -102,7 +102,13 @@ function change(root: MapNode, mutate: (draft: MapNode) => void): MapNode {
     for (const child of branch.children) stripBranchMarks(child);
   }
   colourBranches(draft);
+  unfoldLeaves(draft);
   return draft;
+}
+
+function unfoldLeaves(node: MapNode): void {
+  if (node.children.length === 0) node.collapsed = false;
+  node.children.forEach(unfoldLeaves);
 }
 
 function stripBranchMarks(node: MapNode): void {
@@ -154,9 +160,52 @@ export function remove(root: MapNode, id: string): { root: MapNode; next: string
     root: change(root, (draft) => {
       const target = locate(draft, id)!;
       target.parent.children.splice(target.index, 1);
-      if (target.parent.children.length === 0) target.parent.collapsed = false;
     }),
   };
+}
+
+export function branchIds(root: MapNode, ids: string[]): Set<string> {
+  const branches = ids.map((id) => find(root, id)).filter((node) => node !== null);
+  return new Set(branches.flatMap((branch) => visibleNodes(branch).map(({ node }) => node.id)));
+}
+
+export function topmost(root: MapNode, ids: ReadonlySet<string>): string[] {
+  const result: string[] = [];
+  const visit = (node: MapNode): void => {
+    for (const child of node.children) {
+      if (ids.has(child.id)) result.push(child.id);
+      else visit(child);
+    }
+  };
+  visit(root);
+  return result;
+}
+
+export function move(root: MapNode, moved: string[], parentId: string, beforeId: string | null, side: Side): MapNode {
+  const ids = topmost(root, new Set(moved));
+  const stuck = (id: string): boolean => find(find(root, id)!, parentId) !== null;
+  if (ids.length === 0 || !find(root, parentId) || ids.some(stuck) || (beforeId !== null && ids.includes(beforeId))) {
+    return root;
+  }
+  const next = change(root, (draft) => {
+    const nodes = ids.map((id) => {
+      const { parent, index } = locate(draft, id)!;
+      return parent.children.splice(index, 1)[0];
+    });
+    const parent = find(draft, parentId)!;
+    for (const node of nodes) {
+      if (parent === draft && side === 'left') node.side = 'left';
+      else delete node.side;
+    }
+    const index = parent.children.findIndex((child) => child.id === beforeId);
+    parent.children.splice(index < 0 ? parent.children.length : index, 0, ...nodes);
+    parent.collapsed = false;
+  });
+  return sameMap(bySide(next), bySide(root)) ? root : next;
+}
+
+function bySide(root: MapNode): MapNode {
+  return { ...root, children: SIDES.flatMap((side) => root.children.filter((branch) => sideOf(branch) === side)) };
 }
 
 export function rename(root: MapNode, id: string, text: string): MapNode {

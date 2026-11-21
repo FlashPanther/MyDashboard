@@ -16,6 +16,7 @@ Règle : tout nœud-tâche existe dans Google Tasks ; toutes les tâches Google 
     intacte (c'est ce qui rendra l'annulation simple).
   - `layout.ts` : la place de chaque nœud, à droite et à gauche de la racine.
   - `view.ts` : le zoom et le cadrage.
+  - `drop.ts` : où irait un nœud glissé (futur parent, rang, côté).
   - `keymap.ts` : quelle touche donne quelle commande.
   - `editor.ts` : l'état de l'éditeur (carte, sélection, saisie en cours, historique) et toutes ses règles :
     nœud vide qui disparaît, étapes d'annulation, sélection après une suppression.
@@ -32,7 +33,7 @@ Reconstruction de l'éditeur (il existait à part, on le rebâtit ici avec les m
   replier et déplier une branche. La carte est gardée dans le navigateur.
 - [x] **2. Éditer au clavier** : créer, renommer, supprimer, se déplacer, annuler, avec les raccourcis des cartes
   mentales de Whimsical.
-- [ ] **3. Glisser les nœuds** : réordonner, changer de parent, passer de l'autre côté de la racine.
+- [x] **3. Glisser les nœuds** : réordonner, changer de parent, passer de l'autre côté de la racine.
 - [ ] **4. Sélection au cadre** : supprimer ou déplacer plusieurs nœuds ensemble.
 - [ ] **5. Menu de branche** : replier ou déplier toute une branche.
 

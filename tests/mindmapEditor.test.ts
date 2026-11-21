@@ -265,3 +265,14 @@ test('la carte ne dépasse pas la profondeur que sa relecture accepte', () => {
   for (let node = state.root; node.children.length; node = node.children[0]) depth++;
   assert.equal(depth, 100);
 });
+
+test('un déplacement qui ferait dépasser la profondeur relisible est ignoré', () => {
+  let state = start();
+  for (let level = 0; level < 100; level++) state = typed(state, ['child'], ['stop', 'x']);
+  const deepest = state.selected!;
+  state = typed(reduce(state, { type: 'select', id: 'root' }), ['child'], ['stop', 'feuille']);
+  const leaf = state.selected!;
+  const moved = reduce(state, { type: 'move', ids: [leaf], parentId: deepest, beforeId: null, side: 'right' });
+  assert.equal(moved.root, state.root);
+  assert.equal(moved.past.length, state.past.length);
+});

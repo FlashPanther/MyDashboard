@@ -10,9 +10,11 @@ import {
   remove,
   rename,
   sameMap,
+  move,
   toggleCollapsed,
   withinLimits,
   type MapNode,
+  type Side,
 } from './tree.ts';
 
 export type Snapshot = { root: MapNode; selected: string | null };
@@ -28,6 +30,7 @@ export type EditorAction = { draft?: string; newId?: string } & (
   | { type: 'blur'; id: string }
   | { type: 'toggle'; id: string }
   | { type: 'replace'; root: MapNode }
+  | { type: 'move'; ids: string[]; parentId: string; beforeId: string | null; side: Side }
 );
 
 type InsertCommand = 'child' | 'sibling' | 'siblingAbove' | 'parent';
@@ -69,6 +72,11 @@ export function reduce(state: EditorState, action: EditorAction): EditorState {
     }
     case 'replace':
       return commit(finishEditing(state, action.draft), action.root, action.root.id);
+    case 'move': {
+      const settled = finishEditing(state, action.draft);
+      const root = move(settled.root, action.ids, action.parentId, action.beforeId, action.side);
+      return withinLimits(root) ? commit(settled, root, settled.selected) : settled;
+    }
   }
 }
 

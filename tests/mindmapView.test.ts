@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fit, reveal, zoomAt } from '../lib/mindmap/view.ts';
+import { fit, reveal, toWorld, zoomAt } from '../lib/mindmap/view.ts';
 
 const box = (x: number, y: number, width: number, height: number) => ({ x, y, width, height });
 
@@ -46,4 +46,8 @@ test('un nœud hors champ est ramené juste à l’intérieur des marges', () =>
 
 test('le cadrage sur un nœud tient compte du zoom', () => {
   assert.deepEqual(reveal({ x: 0, y: 0, scale: 2 }, box(600, 100, 100, 40), 1000, 600), { x: -460, y: 0, scale: 2 });
+});
+
+test('un point de l’écran se lit dans la carte en défaisant décalage et zoom', () => {
+  assert.deepEqual(toWorld({ x: 100, y: 50, scale: 2 }, 300, 250), { x: 100, y: 100 });
 });
