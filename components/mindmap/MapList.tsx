@@ -33,6 +33,7 @@ export function MapList() {
   const [busy, setBusy] = useState(false);
   const [doomed, setDoomed] = useState<string | null>(null);
   const [removed, setRemoved] = useState<string[]>([]);
+  const [spared, setSpared] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const notice = failure || list.error;
 
@@ -55,9 +56,10 @@ export function MapList() {
   async function remove(id: string) {
     setBusy(true);
     setFailure('');
+    const draft = readStored(draftKey(id));
     const { status, body } = await writeJson(`/api/cartes/${id}`, 'DELETE');
     if (status === 200 || status === 404) {
-      writeStored(draftKey(id), null);
+      if (readStored(draftKey(id)) === draft) writeStored(draftKey(id), null);
       setRemoved((ids) => [...ids, id]);
       list.refresh();
     } else {
@@ -69,10 +71,12 @@ export function MapList() {
 
   async function importFile(file: File | undefined) {
     if (!file) return;
+    setBusy(true);
     let root: MapNode;
     try {
       root = parse(await file.text());
     } catch {
+      setBusy(false);
       return setFailure(`« ${file.name} » n'est pas une carte valide.`);
     }
     await create(root);
@@ -141,10 +145,20 @@ export function MapList() {
                     Supprimer <strong>{title}</strong> ?
                     {readStored(draftKey(map.id)) && ' Des modifications de ce navigateur, pas encore enregistrées, seront perdues.'}
                   </p>
-                  <button type="button" className="action" disabled={busy} onClick={() => remove(map.id)}>
+                  <button key="confirm" type="button" className="action" disabled={busy} onClick={() => remove(map.id)}>
                     Oui, supprimer
                   </button>
-                  <button type="button" className="action" disabled={busy} onClick={() => setDoomed(null)}>
+                  <button
+                    key="cancel"
+                    type="button"
+                    className="action"
+                    autoFocus
+                    disabled={busy}
+                    onClick={() => {
+                      setDoomed(null);
+                      setSpared(map.id);
+                    }}
+                  >
                     Annuler
                   </button>
                 </>
@@ -157,8 +171,10 @@ export function MapList() {
                     </time>
                   </Link>
                   <button
+                    key="delete"
                     type="button"
                     className="font-mono text-xs text-muted hover:text-ink"
+                    autoFocus={spared === map.id}
                     disabled={busy}
                     onClick={() => setDoomed(map.id)}
                   >

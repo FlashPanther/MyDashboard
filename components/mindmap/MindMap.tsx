@@ -32,7 +32,8 @@ const UNKEPT = ' Ce navigateur ne peut rien garder : exporte la carte avant de f
 export function MindMap({ id }: { id: string }) {
   const [opened, setOpened] = useState<Opened | null>(null);
   const [failure, setFailure] = useState('');
-  const [orphan, setOrphan] = useState<MapNode | null>(null);
+  const [orphan, setOrphan] = useState<{ text: string; root: MapNode } | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -49,7 +50,9 @@ export function MindMap({ id }: { id: string }) {
       .catch((error: Error) => {
         if (stale) return;
         const missing = error instanceof HttpError && error.status === 404;
-        if (missing) setOrphan(parseDraft(readStored(draftKey(id)))?.root ?? null);
+        const text = missing ? readStored(draftKey(id)) : null;
+        const draft = parseDraft(text);
+        if (text && draft) setOrphan({ text, root: draft.root });
         setFailure(missing ? 'Cette carte n’existe pas, ou plus, sur le serveur.' : error.message);
       });
     return () => {
@@ -57,11 +60,15 @@ export function MindMap({ id }: { id: string }) {
     };
   }, [id]);
 
-  async function restore(root: MapNode) {
-    const { status, body } = await writeJson('/api/cartes', 'POST', { root });
+  async function restore(kept: { text: string; root: MapNode }) {
+    setRestoring(true);
+    const { status, body } = await writeJson('/api/cartes', 'POST', { root: kept.root });
     const created = (body as { id?: string } | null)?.id;
-    if (status !== 200 || !created) return setFailure('La carte n’a pas pu être remise sur le serveur.');
-    writeStored(draftKey(id), null);
+    if (status !== 200 || !created) {
+      setRestoring(false);
+      return setFailure('La carte n’a pas pu être remise sur le serveur.');
+    }
+    if (readStored(draftKey(id)) === kept.text) writeStored(draftKey(id), null);
     router.replace(`/carte/${created}`);
   }
 
@@ -74,9 +81,9 @@ export function MindMap({ id }: { id: string }) {
           {orphan && (
             <>
               <span>
-                Ce navigateur en garde une version non enregistrée : <strong>{orphan.text || 'sans titre'}</strong>.
+                Ce navigateur en garde une version non enregistrée : <strong>{orphan.root.text || 'sans titre'}</strong>.
               </span>
-              <button type="button" className="action" onClick={() => restore(orphan)}>
+              <button type="button" className="action" disabled={restoring} onClick={() => restore(orphan)}>
                 La remettre sur le serveur
               </button>
             </>
