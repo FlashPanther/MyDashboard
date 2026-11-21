@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { parseLinks, type Links } from './links.ts';
+import { doom, parseLinks, type Links } from './links.ts';
 import { FORMAT_VERSION, parseDocument, type MapNode } from './tree.ts';
 
 const MAPS_DIR = path.join(process.cwd(), '.data', 'cartes');
@@ -126,13 +126,14 @@ export function saveMap(
   id: string,
   root: MapNode,
   revision: number,
-  { now = new Date(), dir = MAPS_DIR }: Options = {},
+  { now = new Date(), dir = MAPS_DIR, forget = [] }: Options & { forget?: readonly string[] } = {},
 ): Promise<SaveResult> {
   return inTurn(id, async () => {
     const current = await readMap(id, { dir });
     if (!current) return null;
     if (current.revision !== revision) return { saved: false, map: current };
-    const map = { ...current, root, revision: revision + 1, updatedAt: now.toISOString() };
+    const links = forget.length > 0 ? doom(current.links, root, forget) : current.links;
+    const map = { ...current, root, links, revision: revision + 1, updatedAt: now.toISOString() };
     await persist(dir, map);
     return { saved: true, map };
   });

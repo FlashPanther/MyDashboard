@@ -35,7 +35,7 @@ type Press = {
   last: Point;
 };
 type Frame = { from: Point; to: Point; ids: string[] };
-type Menu = { id: string; x: number; y: number; confirm?: boolean };
+type Menu = { id: string; x: number; y: number };
 
 export function MapCanvas({
   ref,
@@ -46,8 +46,8 @@ export function MapCanvas({
   editing,
   editingElement,
   send,
-  linked,
-  removeWithTask,
+  linkedIn,
+  removeWithTasks,
 }: {
   ref: Ref<CanvasHandle>;
   root: MapNode;
@@ -57,8 +57,8 @@ export function MapCanvas({
   editing: Editing | null;
   editingElement: RefObject<HTMLElement | null>;
   send: Send;
-  linked: ReadonlySet<string>;
-  removeWithTask: (id: string) => void;
+  linkedIn: (id: string) => string[];
+  removeWithTasks: (id: string) => void;
 }) {
   const [sizes, setSizes] = useState<ReadonlyMap<string, Size>>(new Map());
   const [view, setView] = useState<View | null>(null);
@@ -167,15 +167,9 @@ export function MapCanvas({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [gesturing, cancelGesture]);
 
-  function menuItems(id: string, confirm = false): MenuItem[] {
+  function menuItems(id: string): MenuItem[] {
     const node = find(root, id);
     if (!node) return [];
-    if (confirm) {
-      return [
-        { label: 'Oui, supprimer aussi la tâche Google', run: () => removeWithTask(id) },
-        { label: 'Annuler', run: () => undefined },
-      ];
-    }
     const items: MenuItem[] = [];
     if (id !== root.id) {
       items.push({
@@ -183,9 +177,16 @@ export function MapCanvas({
         run: () => send({ type: 'task', ids: [id] }),
       });
     }
-    if (linked.has(id)) {
-      // Un menu de confirmation remplace le premier : le menu se ferme à chaque choix, on le rouvre au même endroit.
-      items.push({ label: 'Supprimer, avec sa tâche Google…', run: () => setTimeout(() => setMenu((current) => current ?? { ...menu!, confirm: true })) });
+    const inBranch = linkedIn(id);
+    if (id !== root.id && inBranch.length > 0) {
+      const several = inBranch.length > 1;
+      items.push({
+        label: several ? `Supprimer, avec ses ${inBranch.length} tâches Google…` : 'Supprimer, avec sa tâche Google…',
+        then: [
+          { label: several ? `Oui, supprimer aussi les ${inBranch.length} tâches Google` : 'Oui, supprimer aussi la tâche Google', run: () => removeWithTasks(id) },
+          { label: 'Annuler' },
+        ],
+      });
     }
     if (node.children.length) {
       items.push(
@@ -319,8 +320,8 @@ export function MapCanvas({
           />
         )}
       </div>
-      {menu && menuItems(menu.id, menu.confirm).length > 0 && (
-        <ContextMenu key={menu.confirm ? 'confirm' : 'menu'} at={menu} items={menuItems(menu.id, menu.confirm)} onClose={closeMenu} />
+      {menu && menuItems(menu.id).length > 0 && (
+        <ContextMenu at={menu} items={menuItems(menu.id)} onClose={closeMenu} />
       )}
     </main>
   );

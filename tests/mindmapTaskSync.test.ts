@@ -550,45 +550,49 @@ test('une passe qui veut relire Google, arrivée pendant une passe qui ne lit pa
   assert.deepEqual((await editor)?.pulls, [{ id: 'une', done: true }]);
 });
 
-test('supprimer un nœud avec sa tâche Google : la tâche est supprimée chez Google une fois le nœud retiré, et le lien oublié', async () => {
+test('supprimer un nœud avec sa tâche Google : la tâche est supprimée chez Google et le lien oublié', async () => {
   const { dir, id, links } = await sending(map('une', 'deux'));
   const fake = fakeGoogle();
   const first = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
   assert.deepEqual(first?.linked, ['une', 'deux']);
-  await annotate(id, ({ links: current }) => ({ links: { ...current, une: { ...current.une, doomed: minute(0).getTime() } } }), { dir });
+  await saveMap(id, map('deux'), 1, { dir, forget: ['une'] });
   fake.calls.length = 0;
-  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
-  assert.deepEqual(fake.calls, []);
-  await saveMap(id, map('deux'), 1, { dir });
   const after = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
   assert.deepEqual(fake.calls, ['DELETE /tasks/v1/lists/L1/tasks/g1']);
   assert.deepEqual(Object.keys(await links()), ['deux']);
   assert.deepEqual(after?.linked, ['deux']);
 });
 
-test('une demande de suppression dont le nœud n’est pas retiré dans les deux minutes est abandonnée', async () => {
+test('sans ce choix, retirer un nœud ne supprime rien chez Google, même juste après une demande annulée', async () => {
   const { dir, id, links } = await sending(map('une'));
   const fake = fakeGoogle();
   await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
-  await annotate(id, ({ links: current }) => ({ links: { une: { ...current.une, doomed: minute(0).getTime() } } }), { dir });
-  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
-  assert.equal(typeof (await links()).une.doomed, 'number');
-  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(3) });
-  assert.equal('doomed' in (await links()).une, false);
-  await saveMap(id, map(), 1, { dir });
+  await saveMap(id, map('une'), 1, { dir, forget: ['une'] });
+  await saveMap(id, map(), 2, { dir });
   fake.calls.length = 0;
-  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(4) });
-  assert.deepEqual(fake.calls.filter((call) => call.startsWith('DELETE')), []);
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  assert.deepEqual(fake.calls, []);
   assert.equal((await links()).une.detached, true);
 });
 
-test('une tâche à supprimer déjà absente chez Google est simplement oubliée ; un refus de Google la garde pour plus tard', async () => {
-  const { dir, id, links } = await sending(map('une'));
+test('une tâche à supprimer déjà absente chez Google est oubliée ; un refus de Google la garde pour plus tard sans faire échouer la passe', async () => {
+  const { dir, id, links } = await sending(map('une', 'deux'));
   const fake = fakeGoogle();
   await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
-  await annotate(id, ({ links: current }) => ({ links: { une: { ...current.une, doomed: minute(0).getTime() } } }), { dir });
-  await saveMap(id, map(), 1, { dir });
-  fake.tasks.L1.length = 0;
+  await saveMap(id, map(), 1, { dir, forget: ['une', 'deux'] });
+  fake.tasks.L1.shift();
+  const refusing = (async (url: string, init?: RequestInit) => {
+    if (init?.method === 'DELETE' && url.endsWith('/g2')) throw new GoogleHttpError('refusé', 403);
+    return fake.google(url, init);
+  }) as Google;
+  const silenced = console.error;
+  console.error = () => {};
+  try {
+    assert.equal((await syncTasks(id, 'Cartes', refusing, { dir, now: minute(0) }))?.enabled, true);
+  } finally {
+    console.error = silenced;
+  }
+  assert.deepEqual(Object.keys(await links()), ['deux']);
   await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
   assert.deepEqual(await links(), {});
 });

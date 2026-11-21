@@ -13,7 +13,7 @@ import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed } from '@/lib/mindmap/keymap';
 import { draftKey, isClean, opening, parseDraft, readCopy, type Opened, type SyncStatus } from '@/lib/mindmap/sync';
-import { countDescendants, serialize, taskProgress, type MapNode, type RemoteChange } from '@/lib/mindmap/tree';
+import { branchIds, countDescendants, serialize, taskProgress, type MapNode, type RemoteChange } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
 import { fetcher, HttpError } from '@/lib/useEndpoint';
 
@@ -130,20 +130,18 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     },
     [send],
   );
-  const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
+  const { status, kept, settle, flush, forgetOnSave } = useMapSync(id, opened.sync, root, adopt);
   const pull = useCallback((changes: RemoteChange[]) => send({ type: 'remote', changes }), [send]);
-  const { sync: google, toggle: sendTasks, forget } = useTaskSync(id, status === 'saved', root, pull);
-  const linked = useMemo(() => new Set(google.linked), [google.linked]);
-  const [forgetFailed, setForgetFailed] = useState(false);
-  const removeWithTask = useCallback(
-    async (nodeId: string) => {
-      const marked = await forget(nodeId);
-      setForgetFailed(!marked);
-      if (!marked) return;
+  const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root, pull);
+  // Sur la carte entière : une tâche faite masquée dans la branche est retirée avec elle.
+  const linkedIn = useCallback((nodeId: string) => [...branchIds(root, [nodeId])].filter((each) => google.linked.includes(each)), [root, google.linked]);
+  const removeWithTasks = useCallback(
+    (nodeId: string) => {
+      forgetOnSave(linkedIn(nodeId));
       send({ type: 'select', id: nodeId });
       send({ type: 'command', command: 'delete' });
     },
-    [forget, send],
+    [forgetOnSave, linkedIn, send],
   );
   const leave = useCallback(() => {
     const draft = editingElement.current?.innerText;
@@ -213,11 +211,6 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
                 : 'Tâches envoyées à Google'}
           </ToolbarButton>
         )}
-        {forgetFailed && (
-          <p role="status" className="font-mono text-xs text-amber">
-            La tâche Google n’a pas pu être marquée pour suppression : le nœud est resté dans la carte.
-          </p>
-        )}
         {google.lost > 0 && (
           <p role="status" className="font-mono text-xs text-amber">
             {google.lost > 1 ? `${google.lost} tâches n’existent plus` : 'Une tâche n’existe plus'} chez Google : la carte les garde, sans les
@@ -251,8 +244,8 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         editing={state.editing}
         editingElement={editingElement}
         send={send}
-        linked={linked}
-        removeWithTask={removeWithTask}
+        linkedIn={linkedIn}
+        removeWithTasks={removeWithTasks}
       />
       <Shortcuts />
     </div>

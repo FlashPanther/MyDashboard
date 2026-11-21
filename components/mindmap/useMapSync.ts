@@ -22,6 +22,8 @@ export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: 
   const latest = useRef({ sync, root });
   const inFlight = useRef(false);
   const written = useRef<string | null>(null);
+  /** Nœuds retirés avec le choix de supprimer aussi leur tâche Google : l'intention part avec l'enregistrement. */
+  const forgotten = useRef(new Set<string>());
   useEffect(() => {
     latest.current = { sync, root };
   }, [sync, root]);
@@ -48,9 +50,11 @@ export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: 
       if (inFlight.current) return;
       inFlight.current = true;
       dispatch({ type: 'sent', root: next });
-      const { status, body } = await writeJson(`/api/cartes/${id}`, 'PUT', { revision, root: next }, keepalive);
+      const forget = [...forgotten.current];
+      const { status, body } = await writeJson(`/api/cartes/${id}`, 'PUT', { revision, root: next, forget }, keepalive);
       inFlight.current = false;
       const event = eventOf(status, body);
+      if (event.type === 'accepted') forget.forEach((nodeId) => forgotten.current.delete(nodeId));
       dispatch(event);
       keepDraft(syncStep({ ...latest.current.sync, sending: next }, event), latest.current.root);
     },
@@ -86,5 +90,7 @@ export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: 
     if (takeTheirs) adopt(sync.theirs.root);
   }
 
-  return { status: statusOf(sync, root), kept, settle, flush };
+  const forgetOnSave = useCallback((ids: readonly string[]) => ids.forEach((nodeId) => forgotten.current.add(nodeId)), []);
+
+  return { status: statusOf(sync, root), kept, settle, flush, forgetOnSave };
 }

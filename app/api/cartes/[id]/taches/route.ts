@@ -20,12 +20,8 @@ export async function PUT(request: Request, { params }: Context) {
   return (
     requireJson(request) ??
     handle(async () => {
-      const { enabled, forget } = (await request.json().catch(() => ({}))) as { enabled?: unknown; forget?: unknown };
+      const { enabled } = (await request.json().catch(() => ({}))) as { enabled?: unknown };
       const { id } = await params;
-      if (typeof forget === 'string') {
-        const marked = await annotate(id, ({ links }) => (links[forget] ? { links: { ...links, [forget]: { ...links[forget], doomed: Date.now() } } } : {}));
-        return marked ? { ok: true } : missing();
-      }
       if (typeof enabled !== 'boolean') return NextResponse.json({ error: 'Choix attendu' }, { status: 400 });
       if (!(await annotate(id, () => ({ sendTasks: enabled })))) return missing();
       return (await syncMapTasks(id)) ?? missing();

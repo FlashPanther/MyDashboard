@@ -72,8 +72,5 @@ export function useTaskSync(id: string, saved: boolean, root: MapNode, pull: (ch
     [id, apply],
   );
 
-  /** Demande au serveur de supprimer aussi chez Google la tâche de ce nœud, une fois le nœud retiré. */
-  const forget = useCallback(async (nodeId: string) => (await writeJson(`/api/cartes/${id}/taches`, 'PUT', { forget: nodeId })).status === 200, [id]);
-
-  return { sync, toggle, forget };
+  return { sync, toggle };
 }

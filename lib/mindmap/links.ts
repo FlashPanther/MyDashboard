@@ -10,8 +10,8 @@ export type Link = {
   detached?: true;
   /** La tâche n'existe plus chez Google : on ne la recrée pas et on n'y écrit plus. */
   lost?: true;
-  /** Quand (ms) on a demandé de supprimer aussi la tâche chez Google : faite une fois le nœud retiré de la carte. */
-  doomed?: number;
+  /** Le nœud a été retiré avec le choix de supprimer aussi sa tâche chez Google. */
+  doomed?: true;
   /** Le dernier état sur lequel la carte et Google étaient d'accord : un écart dit lequel des deux a changé. */
   title?: string;
   done?: boolean;
@@ -74,7 +74,7 @@ export function parseLinks(value: unknown): Links {
       listId,
       ...(detached === true ? { detached } : {}),
       ...(lost === true ? { lost } : {}),
-      ...(typeof doomed === 'number' ? { doomed } : {}),
+      ...(doomed === true ? { doomed } : {}),
       ...parseFields(raw),
       ...(typeof updated === 'string' ? { updated } : {}),
       ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}),
@@ -170,33 +170,34 @@ export function absorb(links: Links, remote: ReadonlyMap<string, Fields>, gone: 
   );
 }
 
-/** Les nœuds-tâches liés à une tâche Google qu'on peut encore suivre. */
-export function linkedTasks(root: MapNode, links: Links): string[] {
+/** Les nœuds-tâches reliés à une tâche Google qu'on suit encore, et le nombre de ceux dont la tâche a disparu. */
+export function taskStatus(root: MapNode, links: Links): { linked: string[]; lost: number } {
   const linked: string[] = [];
-  const visit = (node: MapNode) => {
-    const link = links[node.id];
-    if (node.task && link && !link.detached && !link.lost) linked.push(node.id);
-    node.children.forEach(visit);
-  };
-  visit(root);
-  return linked;
-}
-
-/** Les nœuds-tâches dont la tâche Google a disparu. */
-export function lostTasks(root: MapNode, links: Links): number {
   let lost = 0;
   const visit = (node: MapNode) => {
-    if (node.task && links[node.id]?.lost) lost += 1;
+    const link = node.task ? links[node.id] : undefined;
+    if (link?.lost) lost += 1;
+    else if (link && !link.detached) linked.push(node.id);
     node.children.forEach(visit);
   };
   visit(root);
-  return lost;
+  return { linked, lost };
 }
 
-/** Une demande de suppression dont le nœud n'a pas été retiré dans ce délai est abandonnée. */
-const DOOM_MS = 2 * 60_000;
+/** À l'enregistrement : les nœuds retirés avec le choix de supprimer aussi leur tâche Google sont marqués. */
+export function doom(links: Links, root: MapNode, ids: readonly string[]): Links {
+  const present = new Set<string>();
+  const visit = (node: MapNode) => {
+    present.add(node.id);
+    node.children.forEach(visit);
+  };
+  visit(root);
+  const next = { ...links };
+  for (const id of ids) if (next[id] && !present.has(id)) next[id] = { ...next[id], doomed: true };
+  return next;
+}
 
-export function settleLinks(root: MapNode, links: Links, now = Date.now()): Links {
+export function settleLinks(root: MapNode, links: Links): Links {
   const tasks = new Set<string>();
   const visit = (node: MapNode) => {
     if (node.task) tasks.add(node.id);
@@ -204,11 +205,10 @@ export function settleLinks(root: MapNode, links: Links, now = Date.now()): Link
   };
   visit(root);
   return Object.fromEntries(
-    Object.entries(links).map(([nodeId, { detached, doomed, ...link }]) => {
-      if (!tasks.has(nodeId)) return [nodeId, { ...link, detached: true as const, ...(doomed ? { doomed } : {}) }];
-      // Un nœud revenu dans la carte (annulation), ou jamais retiré, n'est plus à supprimer chez Google.
-      const keep = doomed && !detached && now - doomed < DOOM_MS;
-      return [nodeId, { ...link, ...(keep ? { doomed } : {}) }];
-    }),
+    Object.entries(links).map(([nodeId, { detached: _detached, doomed, ...link }]) => [
+      nodeId,
+      // Un nœud revenu dans la carte (annulation) n'est plus à supprimer chez Google.
+      tasks.has(nodeId) ? link : { ...link, detached: true as const, ...(doomed ? { doomed } : {}) },
+    ]),
   );
 }

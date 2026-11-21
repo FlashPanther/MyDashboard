@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { lostTasks, markerIn, parseLinks, absorb, reconcile, settleLinks, settleReconciled, taskTitle, tasksToCreate } from '../lib/mindmap/links.ts';
+import { doom, markerIn, taskStatus, parseLinks, absorb, reconcile, settleLinks, settleReconciled, taskTitle, tasksToCreate } from '../lib/mindmap/links.ts';
 import { newNode, type MapNode } from '../lib/mindmap/tree.ts';
 
 function map(): MapNode {
@@ -153,7 +153,7 @@ test('un lien détaché, perdu, ou sans état connu n’est jamais rapproché ; 
   assert.deepEqual(plan({ billets: { ...changed, detached: true } }), []);
   assert.deepEqual(plan({ billets: { ...changed, lost: true } }), []);
   assert.deepEqual(plan({ billets: link('g') }), []);
-  assert.equal(lostTasks(map(), { billets: { ...changed, lost: true }, cadeau: { ...changed, lost: true } }), 1);
+  assert.deepEqual(taskStatus(map(), { billets: { ...changed, lost: true }, passeports: link('h'), cadeau: { ...changed, lost: true } }), { linked: ['passeports'], lost: 1 });
   const none = new Set<string>();
   assert.deepEqual(absorb({ billets: { ...changed, lost: true } }, new Map([['g', {}]]), none), { billets: changed });
   assert.deepEqual(absorb({ billets: { ...changed, lost: true } }, new Map([['autre', {}]]), none), { billets: { ...changed, lost: true } });
@@ -184,4 +184,15 @@ test('sur un nœud détaché, un changement de Google annulé chez Google avant 
   assert.deepEqual(absorb({ billets: { ...base, incoming: { title: 'Autre' } } }, new Map([['g', { title: 'Billets', done: false }]]), new Set()), {
     billets: base,
   });
+});
+
+test('à l’enregistrement, seuls les nœuds réellement retirés sont marqués pour suppression chez Google', () => {
+  const links = { billets: link('g1'), passeports: link('g2') };
+  const root = map();
+  root.children[0].children.shift();
+  assert.deepEqual(doom(links, root, ['billets', 'passeports', 'inconnu']), { billets: { ...link('g1'), doomed: true }, passeports: link('g2') });
+});
+
+test('un nœud marqué pour suppression puis remis dans la carte ne l’est plus', () => {
+  assert.deepEqual(settleLinks(map(), { billets: { ...link('g1'), detached: true, doomed: true } }), { billets: link('g1') });
 });

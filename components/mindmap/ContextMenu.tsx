@@ -2,7 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-export type MenuItem = { label: string; run: () => void };
+/** `then` : au lieu d'agir, le choix remplace le menu par ces choix-là (une confirmation). */
+export type MenuItem = { label: string; run?: () => void; then?: MenuItem[] };
 
 export function ContextMenu({
   at,
@@ -15,6 +16,7 @@ export function ContextMenu({
 }) {
   const element = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState({ left: at.x, top: at.y });
+  const [shown, setShown] = useState(items);
 
   useLayoutEffect(() => {
     const { offsetWidth, offsetHeight } = element.current!;
@@ -23,7 +25,7 @@ export function ContextMenu({
       top: Math.max(8, Math.min(at.y, window.innerHeight - offsetHeight - 8)),
     });
     element.current!.querySelector('button')?.focus();
-  }, [at]);
+  }, [at, shown]);
 
   useEffect(() => {
     const onOutside = (event: Event) => {
@@ -54,13 +56,14 @@ export function ContextMenu({
         buttons[(current + (forward ? 1 : -1) + buttons.length) % buttons.length].focus();
       }}
     >
-      {items.map(({ label, run }) => (
+      {shown.map(({ label, run, then }) => (
         <button
           key={label}
           type="button"
           className="whitespace-nowrap px-3 py-1.5 text-left text-sm hover:bg-panel-soft focus:bg-panel-soft"
           onClick={() => {
-            run();
+            if (then) return setShown(then);
+            run?.();
             onClose();
           }}
         >
