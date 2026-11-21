@@ -58,12 +58,13 @@ Puis le lien avec Google Tasks :
   l'en-tête du tableau affiche « Google expiré : relier ». Le signal sera repris dans la page Carte à l'étape 9.
 - [ ] **8 bis. Une liaison qui tient** : cela dépend de Google Cloud, pas du code. Tant que l'application y est en état
   « Test », la liaison tombe après sept jours ; il faut la publier, puis relier de nouveau (voir le README).
-- [ ] **9. Créer** : après un enregistrement, les nœuds-tâches sans lien sont créés dans Google Tasks, dans la liste
-  nommée par `mindmap.taskList` de `dashboard.config.ts`, avec le chemin de la branche dans leur détail. Les liens
-  (nœud → tâche Google) sont gardés par le serveur, à côté de la carte : un enregistrement du navigateur ne peut pas
-  les effacer. Un nœud qui n'est plus une tâche garde son lien, marqué « détaché » : s'il revient, il retrouve sa
-  tâche au lieu d'en créer une seconde. Codé et testé avec un faux Google ; **reste à essayer contre le vrai Google**
-  avant de cocher.
+- [ ] **9. Créer** : quand l'envoi est activé pour une carte, ses nœuds-tâches sans lien sont créés dans Google Tasks
+  après un enregistrement, dans la liste nommée par `mindmap.taskList` de `dashboard.config.ts`, avec le chemin de la
+  branche dans leur détail. L'envoi est activé d'office pour une carte neuve et proposé par un bouton pour une carte
+  importée ou reprise. Chaque tâche porte une référence dans son détail : une tâche déjà créée est reconnue et reliée
+  au lieu d'être recréée. Les liens (nœud → tâche Google) sont gardés par le serveur, à côté de la carte. Un nœud qui
+  n'est plus une tâche garde son lien, marqué « détaché ». Codé et testé avec un faux Google ; **reste à essayer
+  contre le vrai Google** avant de cocher.
 - [ ] **10. Relire et cocher**, dans les deux sens.
 - [ ] **11. Détacher ou supprimer** : retirer un nœud détache la tâche ; la supprimer pour de bon est un second geste.
   Supprimer une carte détache toutes ses tâches : c'est le serveur qui le fait, derrière la suppression.
@@ -81,8 +82,9 @@ Puis le lien avec Google Tasks :
   dira « cochée ailleurs », la réponse de l'envoi des tâches portera ces changements, et l'éditeur les appliquera
   comme une modification ordinaire.
 - **Carte supprimée** : ses liens partent avec elle dans la corbeille, les tâches restent chez Google (étape 11).
-- **Carte importée deux fois** : chaque import recrée ses tâches chez Google, les liens ne voyageant pas dans le
-  fichier exporté. À traiter à l'étape 13, en reconnaissant une tâche existante avant de créer.
+- **Carte importée deux fois** : l'envoi y est éteint tant qu'on ne l'active pas. Les nœuds à identifiant unique
+  retrouvent leur tâche grâce à sa référence ; ceux d'une carte faite à la main (identifiants courts) seraient
+  recréés. À revoir à l'étape 13.
 
 ## Limites de Google Tasks à garder en tête
 

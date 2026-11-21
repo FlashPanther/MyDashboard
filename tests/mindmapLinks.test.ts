@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseLinks, settleLinks, tasksToCreate } from '../lib/mindmap/links.ts';
+import { markerIn, parseLinks, settleLinks, tasksToCreate } from '../lib/mindmap/links.ts';
 import { newNode, type MapNode } from '../lib/mindmap/tree.ts';
 
 function map(): MapNode {
@@ -17,22 +17,44 @@ function map(): MapNode {
 
 const link = (taskId: string) => ({ taskId, listId: 'liste' });
 
-test('chaque nœud-tâche sans lien est à créer, avec son chemin dans la carte et son état', () => {
-  assert.deepEqual(tasksToCreate(map(), {}), [
-    { nodeId: 'billets', title: 'Billets d’avion', notes: 'Carte : Voyage au Japon › Avant de partir', done: false },
-    { nodeId: 'passeports', title: 'Passeports', notes: 'Carte : Voyage au Japon › Avant de partir', done: true },
+const notes = (id: string) => `Carte : Voyage au Japon › Avant de partir\n\nRéf. carte : carte-1/${id}`;
+
+test('chaque nœud-tâche sans lien est à créer, avec son chemin, son état et une référence pour le retrouver', () => {
+  assert.deepEqual(tasksToCreate('carte-1', map(), {}), [
+    { nodeId: 'billets', marker: 'carte-1/billets', title: 'Billets d’avion', notes: notes('billets'), done: false },
+    { nodeId: 'passeports', marker: 'carte-1/passeports', title: 'Passeports', notes: notes('passeports'), done: true },
   ]);
+});
+
+test('la référence d’un nœud à identifiant unique ne dépend pas de la carte : une carte réimportée retrouve ses tâches', () => {
+  const root = newNode('Carte', 'root');
+  const id = '3f2b8c1e-5a4d-4e6f-9a7b-1c2d3e4f5a6b';
+  root.children.push({ ...newNode('Tâche', id), task: { done: false } });
+  assert.equal(tasksToCreate('carte-1', root, {})[0].marker, id);
+  assert.equal(tasksToCreate('carte-2', root, {})[0].marker, id);
+});
+
+test('la référence se relit dans le détail d’une tâche Google, même si du texte a été ajouté autour', () => {
+  const [task] = tasksToCreate('carte-1', map(), {});
+  assert.equal(markerIn(task.notes), 'carte-1/billets');
+  assert.equal(markerIn(`Note perso\n${task.notes}\nautre ligne`), 'carte-1/billets');
+  assert.equal(markerIn('Une tâche ordinaire'), null);
+  assert.equal(markerIn(undefined), null);
 });
 
 test('une tâche déjà liée n’est pas recréée, même détachée ; une idée n’est jamais envoyée', () => {
   const links = { billets: link('g1'), passeports: { ...link('g2'), detached: true as const } };
-  assert.deepEqual(tasksToCreate(map(), links), []);
+  assert.deepEqual(tasksToCreate('carte-1', map(), links), []);
 });
 
-test('une tâche sans texte attend, un titre trop long est coupé à la limite de Google', () => {
-  const root = newNode('Carte', 'root');
+test('une tâche sans texte attend ; un titre ou un chemin trop longs sont coupés sous les limites de Google', () => {
+  const root = newNode('r'.repeat(9000), 'root');
   root.children.push({ ...newNode('   ', 'vide'), task: { done: false } }, { ...newNode('x'.repeat(1500), 'long'), task: { done: false } });
-  assert.deepEqual(tasksToCreate(root, {}).map((task) => [task.nodeId, task.title.length]), [['long', 1024]]);
+  const [task, ...others] = tasksToCreate('carte-1', root, {});
+  assert.deepEqual(others, []);
+  assert.equal(task.title.length, 1024);
+  assert.equal(task.notes.length < 8192, true);
+  assert.equal(markerIn(task.notes), 'carte-1/long');
 });
 
 test('un lien dont le nœud a disparu ou n’est plus une tâche est marqué détaché, pas effacé', () => {
@@ -47,7 +69,7 @@ test('un lien dont le nœud a disparu ou n’est plus une tâche est marqué dé
 test('un nœud qui redevient une tâche retrouve sa tâche Google au lieu d’en créer une seconde', () => {
   const detached = { billets: { ...link('g1'), detached: true as const } };
   assert.deepEqual(settleLinks(map(), detached), { billets: link('g1') });
-  assert.deepEqual(tasksToCreate(map(), detached).map((task) => task.nodeId), ['passeports']);
+  assert.deepEqual(tasksToCreate('carte-1', map(), detached).map((task) => task.nodeId), ['passeports']);
 });
 
 test('vider le titre d’une tâche ne la détache pas', () => {

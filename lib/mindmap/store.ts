@@ -9,10 +9,19 @@ const TRASH = 'corbeille';
 const ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 export const MAX_MAPS = 200;
 
-export type StoredMap = { id: string; revision: number; updatedAt: string; root: MapNode; links: Links };
+export type StoredMap = {
+  id: string;
+  revision: number;
+  updatedAt: string;
+  root: MapNode;
+  links: Links;
+  /** Les tâches de cette carte sont envoyées à Google Tasks : choix explicite, éteint pour une carte importée. */
+  sendTasks: boolean;
+};
 export type MapSummary = { id: string; title: string; revision: number; updatedAt: string };
 export type SaveResult = { saved: boolean; map: StoredMap } | null;
 export type Options = { now?: Date; dir?: string };
+type Server = Pick<StoredMap, 'links' | 'sendTasks'>;
 
 export class UnreadableMapError extends Error {
   constructor() {
@@ -50,14 +59,14 @@ async function mapIds(dir: string): Promise<string[]> {
   return names.filter((name) => name.endsWith('.json')).map((name) => name.slice(0, -'.json'.length)).filter((id) => ID.test(id));
 }
 
-async function persist(dir: string, { id, revision, updatedAt, root, links }: StoredMap): Promise<void> {
+async function persist(dir: string, { id, revision, updatedAt, root, links, sendTasks }: StoredMap): Promise<void> {
   const file = path.join(dir, `${id}.json`);
   const draft = `${file}.${randomUUID()}.tmp`;
   await onDisk(async () => {
     await fs.mkdir(dir, { recursive: true });
     const handle = await fs.open(draft, 'w', 0o600);
     try {
-      await handle.writeFile(JSON.stringify({ version: FORMAT_VERSION, revision, updatedAt, root, links }, null, 2));
+      await handle.writeFile(JSON.stringify({ version: FORMAT_VERSION, revision, updatedAt, sendTasks, root, links }, null, 2));
       await handle.sync();
     } finally {
       await handle.close();
@@ -76,7 +85,14 @@ export async function readMap(id: string, { dir = MAPS_DIR }: Options = {}): Pro
   try {
     const data = JSON.parse(text);
     if (!Number.isInteger(data.revision) || data.revision < 1 || typeof data.updatedAt !== 'string') throw new Error();
-    return { id, revision: data.revision, updatedAt: data.updatedAt, root: parseDocument(data), links: parseLinks(data.links) };
+    return {
+      id,
+      revision: data.revision,
+      updatedAt: data.updatedAt,
+      root: parseDocument(data),
+      links: parseLinks(data.links),
+      sendTasks: data.sendTasks === true,
+    };
   } catch {
     throw new UnreadableMapError();
   }
@@ -94,10 +110,13 @@ export async function listMaps({ dir = MAPS_DIR }: Options = {}): Promise<MapSum
   return maps.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export function createMap(root: MapNode, { now = new Date(), dir = MAPS_DIR }: Options = {}): Promise<StoredMap | null> {
+export function createMap(
+  root: MapNode,
+  { now = new Date(), dir = MAPS_DIR, sendTasks = false }: Options & { sendTasks?: boolean } = {},
+): Promise<StoredMap | null> {
   return inTurn(dir, async () => {
     if ((await mapIds(dir)).length >= MAX_MAPS) return null;
-    const map = { id: randomUUID(), revision: 1, updatedAt: now.toISOString(), root, links: {} };
+    const map = { id: randomUUID(), revision: 1, updatedAt: now.toISOString(), root, links: {}, sendTasks };
     await persist(dir, map);
     return map;
   });
@@ -119,16 +138,16 @@ export function saveMap(
   });
 }
 
-/** Les liens vers Google Tasks appartiennent au serveur : ils changent sans toucher à la révision de la carte. */
-export function relink(
+/** Ce que le serveur possède (liens vers Google Tasks, envoi activé) change sans toucher à la révision de la carte. */
+export function annotate(
   id: string,
-  change: (map: StoredMap) => Links,
+  change: (map: StoredMap) => Partial<Server>,
   { dir = MAPS_DIR }: Options = {},
 ): Promise<StoredMap | null> {
   return inTurn(id, async () => {
     const current = await readMap(id, { dir });
     if (!current) return null;
-    const map = { ...current, links: change(current) };
+    const map = { ...current, ...change(current) };
     await persist(dir, map);
     return map;
   });

@@ -131,7 +131,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     [send],
   );
   const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
-  const google = useTaskSync(id, status === 'saved', root);
+  const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root);
   const leave = useCallback(() => {
     const draft = editingElement.current?.innerText;
     flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
@@ -191,12 +191,21 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
           {STATUS[status]}
           {!kept && status !== 'saved' && UNKEPT}
         </p>
-        {google === 'unlinked' && (
+        {(google.enabled || google.waiting > 0) && (
+          <ToolbarButton pressed={google.enabled} onPress={() => sendTasks(!google.enabled)}>
+            {!google.enabled
+              ? `Envoyer ${google.waiting} tâche${google.waiting > 1 ? 's' : ''} à Google`
+              : google.waiting > 0
+                ? `Envoi à Google… (${google.waiting} en attente)`
+                : 'Tâches envoyées à Google'}
+          </ToolbarButton>
+        )}
+        {google.state === 'unlinked' && (
           <a href="/api/auth/google" className="font-mono text-xs text-amber underline">
             Google n’est pas relié : les tâches restent dans la carte. Relier
           </a>
         )}
-        {google === 'failed' && (
+        {google.state === 'failed' && (
           <p role="status" className="font-mono text-xs text-amber">
             Tâches pas encore envoyées à Google : nouvel essai dans un instant.
           </p>

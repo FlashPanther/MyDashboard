@@ -42,6 +42,12 @@ export function taskListsRequest(pageToken?: string): GoogleCall {
   return { url: `${API}/users/@me/lists?${params}`, init: {} };
 }
 
+/** Toutes les tâches d'une liste, faites et masquées comprises : pour reconnaître celles déjà créées. */
+export function tasksInListRequest(listId: string, pageToken?: string): GoogleCall {
+  const params = new URLSearchParams({ maxResults: '100', showCompleted: 'true', showHidden: 'true', ...(pageToken ? { pageToken } : {}) });
+  return { url: `${tasksUrl(listId)}?${params}`, init: {} };
+}
+
 export function newTaskListRequest(title: string): GoogleCall {
   return { url: `${API}/users/@me/lists`, init: jsonInit('POST', { title }) };
 }
