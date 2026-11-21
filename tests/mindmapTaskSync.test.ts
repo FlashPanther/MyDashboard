@@ -513,3 +513,28 @@ test('ce qui change chez Google pendant qu’un nœud est détaché revient quan
   assert.deepEqual(back?.pulls, [{ id: 'une', done: true }]);
   assert.deepEqual(fake.patches, []);
 });
+
+test('une passe qui veut relire Google, arrivée pendant une passe qui ne lit pas, relit bien Google ensuite', async () => {
+  const { dir, id } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  fake.edit(0, { status: 'completed' });
+  await saveMap(id, edited(map('une'), { une: { text: 'Une, renommée' } }), 1, { dir });
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let first = true;
+  const slow = (async (url: string, init?: RequestInit) => {
+    if (first && init?.method === 'PATCH') {
+      first = false;
+      await held;
+    }
+    return fake.google(url, init);
+  }) as Google;
+  const quiet = syncTasks(id, 'Cartes', slow, { dir, now: minute(2), read: false });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const editor = syncTasks(id, 'Cartes', slow, { dir, now: minute(2) });
+  release();
+  await quiet;
+  assert.deepEqual((await editor)?.pulls, [{ id: 'une', done: true }]);
+});

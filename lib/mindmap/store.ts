@@ -18,7 +18,7 @@ export type StoredMap = {
   /** Les tâches de cette carte sont envoyées à Google Tasks : choix explicite, éteint pour une carte importée. */
   sendTasks: boolean;
 };
-export type MapSummary = { id: string; title: string; revision: number; updatedAt: string };
+export type MapSummary = { id: string; title: string; revision: number; updatedAt: string; sendTasks: boolean };
 export type SaveResult = { saved: boolean; map: StoredMap } | null;
 export type Options = { now?: Date; dir?: string };
 type Server = Pick<StoredMap, 'links' | 'sendTasks'>;
@@ -105,7 +105,7 @@ export async function listMaps({ dir = MAPS_DIR }: Options = {}): Promise<MapSum
       if (error instanceof UnreadableMapError) return null;
       throw error;
     });
-    if (map) maps.push({ id, title: map.root.text, revision: map.revision, updatedAt: map.updatedAt });
+    if (map) maps.push({ id, title: map.root.text, revision: map.revision, updatedAt: map.updatedAt, sendTasks: map.sendTasks });
   }
   return maps.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }

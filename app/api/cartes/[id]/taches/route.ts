@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import { config } from '@/dashboard.config';
 import { handle, requireJson } from '@/lib/api';
-import { googleFetch } from '@/lib/google/oauth';
 import { annotate } from '@/lib/mindmap/store';
-import { syncTasks } from '@/lib/mindmap/taskSync';
+import { syncMapTasks } from '@/lib/mindmap/background';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +12,7 @@ const missing = () => NextResponse.json({ error: 'Carte introuvable' }, { status
 export async function POST(request: Request, { params }: Context) {
   return (
     requireJson(request) ??
-    handle(async () => (await syncTasks((await params).id, config.mindmap.taskList, googleFetch)) ?? missing())
+    handle(async () => (await syncMapTasks((await params).id)) ?? missing())
   );
 }
 
@@ -26,7 +24,7 @@ export async function PUT(request: Request, { params }: Context) {
       if (typeof enabled !== 'boolean') return NextResponse.json({ error: 'Choix attendu' }, { status: 400 });
       const { id } = await params;
       if (!(await annotate(id, () => ({ sendTasks: enabled })))) return missing();
-      return (await syncTasks(id, config.mindmap.taskList, googleFetch)) ?? missing();
+      return (await syncMapTasks(id)) ?? missing();
     })
   );
 }
