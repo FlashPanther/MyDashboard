@@ -333,6 +333,22 @@ export function toggleDone(root: MapNode, ids: string[]): MapNode {
   });
 }
 
+/** Reprend dans la carte ce qui a changé ailleurs : un titre, un état de tâche. Un nœud disparu ou qui n'est plus une tâche est ignoré. */
+export function applyRemote(root: MapNode, changes: { id: string; title?: string; done?: boolean }[]): MapNode {
+  const wanted = changes.filter(({ id, title, done }) => {
+    const node = find(root, id);
+    return node?.task && ((title !== undefined && title !== node.text) || (done !== undefined && done !== node.task.done));
+  });
+  if (wanted.length === 0) return root;
+  return change(root, (draft) => {
+    for (const { id, title, done } of wanted) {
+      const node = find(draft, id)!;
+      if (title !== undefined) node.text = title;
+      if (done !== undefined) node.task = { ...node.task, done };
+    }
+  });
+}
+
 export function neighbour(root: MapNode, id: string, direction: Direction): string | null {
   const visible = visibleNodes(root);
   const current = visible.find((entry) => entry.node.id === id);

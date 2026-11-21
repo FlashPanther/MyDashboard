@@ -67,8 +67,11 @@ Puis le lien avec Google Tasks :
   n'est plus une tâche garde son lien, marqué « détaché ». Essayé contre le vrai Google le 21 novembre 2026.
 - [ ] **10. De la carte vers Google** : cocher, décocher ou renommer un nœud lié met sa tâche Google à jour. Une tâche
   supprimée chez Google est notée perdue : la carte garde son nœud et n'y écrit plus. Codé et testé avec un Google en
-  mémoire ; **reste à essayer contre le vrai Google** avant de cocher.
-- [ ] **10 bis. De Google vers la carte** : une tâche cochée dans Google Tasks ou Google Agenda se coche dans la carte.
+  mémoire ; **reste à constater contre le vrai Google** avant de cocher.
+- [ ] **10 bis. De Google vers la carte** : une tâche cochée ou renommée dans Google Tasks ou Google Agenda se coche ou
+  se renomme dans la carte ouverte, au plus une minute plus tard. Champ par champ : changé d'un seul côté, l'autre
+  suit ; changé des deux côtés, la carte l'emporte. Codé et testé avec un Google en mémoire ; **reste à constater
+  contre le vrai Google** avant de cocher.
 - [ ] **10 ter. Le serveur envoie de lui-même** derrière chaque enregistrement, sans dépendre d'un onglet ouvert.
 - [ ] **11. Détacher ou supprimer** : retirer un nœud détache la tâche ; la supprimer pour de bon est un second geste.
   Supprimer une carte détache toutes ses tâches : c'est le serveur qui le fait, derrière la suppression.
@@ -82,9 +85,9 @@ Puis le lien avec Google Tasks :
 - **Qui déclenche l'envoi vers Google** : aujourd'hui l'éditeur, une seconde et demie après l'enregistrement, et à
   l'ouverture d'une carte. Une carte importée et jamais ouverte n'est donc pas envoyée. À l'étape 10, le serveur
   devra le faire lui-même derrière chaque enregistrement.
-- **Comment le serveur parle à l'éditeur** : l'état coché vit dans la carte, que seul l'éditeur écrit. Quand Google
-  dira « cochée ailleurs », la réponse de l'envoi des tâches portera ces changements, et l'éditeur les appliquera
-  comme une modification ordinaire.
+- **Comment le serveur parle à l'éditeur** : l'état coché vit dans la carte, que seul l'éditeur écrit. Ce que Google a
+  changé est rendu par l'envoi des tâches (`pulls`) et gardé dans le lien (`incoming`) tant que l'éditeur ne l'a pas
+  repris ; l'éditeur l'applique comme une modification ordinaire, annulable.
 - **Carte supprimée** : ses liens partent avec elle dans la corbeille, les tâches restent chez Google (étape 11).
 - **Carte importée deux fois** : l'envoi y est éteint tant qu'on ne l'active pas. Les nœuds à identifiant unique
   retrouvent leur tâche grâce à sa référence ; ceux d'une carte faite à la main (identifiants courts) seraient

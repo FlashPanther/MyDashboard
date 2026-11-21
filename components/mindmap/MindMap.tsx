@@ -131,7 +131,8 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     [send],
   );
   const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
-  const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root);
+  const pull = useCallback((changes: { id: string; title?: string; done?: boolean }[]) => send({ type: 'remote', changes }), [send]);
+  const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root, pull);
   const leave = useCallback(() => {
     const draft = editingElement.current?.innerText;
     flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
