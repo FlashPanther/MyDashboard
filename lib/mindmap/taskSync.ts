@@ -5,7 +5,7 @@ import {
   lostTasks,
   markerIn,
   reconcile,
-  recoverLost,
+  absorb,
   settleLinks,
   settleReconciled,
   taskTitle,
@@ -110,8 +110,9 @@ function fieldsOf(task: GoogleTask): Fields {
 /** Crée ce qui manque, lit Google de temps en temps, puis pousse ce que la carte a changé et rend ce que Google a changé. */
 async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, google: Google, options: Options): Promise<Exchanged> {
   const now = options.now?.getTime() ?? Date.now();
-  const followed = Object.values(map.links).some((link) => !link.detached);
+  const followed = Object.keys(map.links).length > 0;
   const remote = new Map<string, Fields>();
+  const gone = new Set<string>();
   if (batch.length > 0 || (followed && now - (readAt.get(map.id) ?? 0) >= READ_EVERY_MS)) {
     // Créer demande toute la liste, pour reconnaître les tâches déjà créées ; sinon, seul ce qui a changé suffit.
     const known = Object.values(map.links)[0]?.listId;
@@ -123,13 +124,13 @@ async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, goo
     const latest = existing.reduce((max, task) => (task.updated && task.updated > max ? task.updated : max), cursors.get(map.id) ?? '');
     if (latest) cursors.set(map.id, latest);
     const alive = existing.filter((task) => !task.deleted);
+    for (const task of existing) if (task.deleted) gone.add(task.id);
     for (const task of alive) remote.set(task.id, fieldsOf(task));
     await send(map, batch, listId, alive, google, options);
   }
   const current = (await readMap(map.id, options)) ?? map;
-  const plan = reconcile(current.root, settleLinks(current.root, current.links), remote);
-  const seen = new Set(remote.keys());
-  await annotate(map.id, ({ links }) => ({ links: recoverLost(settleReconciled(links, plan), seen) }), options);
+  const plan = reconcile(current.root, settleLinks(current.root, absorb(current.links, remote, gone)), remote);
+  await annotate(map.id, ({ links }) => ({ links: settleReconciled(absorb(links, remote, gone), plan) }), options);
   const pushes: TaskUpdate[] = plan
     .filter(({ push }) => Object.keys(push).length > 0)
     .map(({ nodeId, taskId, listId, push }) => ({ nodeId, taskId, listId, ...push }));

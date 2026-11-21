@@ -469,3 +469,47 @@ test('un titre retouché chez Google avec des espaces en trop revient une fois, 
   assert.deepEqual(settled?.pulls, []);
   assert.deepEqual(fake.patches, []);
 });
+
+test('repris dans la carte puis changé de nouveau chez Google avant d’être entériné : c’est le changement de Google qui gagne', async () => {
+  const { dir, id } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  fake.edit(0, { status: 'completed' });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  await saveMap(id, edited(map('une'), { une: { done: true } }), 1, { dir });
+  fake.edit(0, { status: 'needsAction' });
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
+  assert.deepEqual(fake.patches, []);
+  assert.deepEqual(result?.pulls, [{ id: 'une', done: false }]);
+});
+
+test('une tâche supprimée chez Google alors qu’un changement en attendait la reprise est notée perdue, rien n’est renvoyé', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  fake.edit(0, { status: 'completed' });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
+  fake.remove(0);
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(3) });
+  assert.deepEqual(result?.pulls, []);
+  assert.equal(result?.lost, 1);
+  assert.equal('incoming' in (await links()).une, false);
+});
+
+test('ce qui change chez Google pendant qu’un nœud est détaché revient quand il redevient une tâche', async () => {
+  const { dir, id } = await sending(map('une'));
+  const fake = fakeGoogle();
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  const idea = map('une');
+  delete idea.children[0].task;
+  await saveMap(id, idea, 1, { dir });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
+  fake.edit(0, { status: 'completed' });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(3) });
+  await saveMap(id, map('une'), 2, { dir });
+  const back = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(4) });
+  assert.deepEqual(back?.pulls, [{ id: 'une', done: true }]);
+  assert.deepEqual(fake.patches, []);
+});

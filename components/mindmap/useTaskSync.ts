@@ -14,13 +14,13 @@ export function useTaskSync(id: string, saved: boolean, root: MapNode, pull: (ch
   const [round, setRound] = useState(0);
   const failures = useRef(0);
 
-  const apply = useCallback(({ status, body }: { status: number; body: unknown }) => {
+  const apply = useCallback(({ status, body }: { status: number; body: unknown }, withPulls = true) => {
     const answer = (body ?? {}) as { enabled?: boolean; waiting?: number; lost?: number; pulls?: RemoteChange[]; notConnected?: boolean };
     if (status === 200) {
       failures.current = 0;
       const next = { state: 'ok' as const, enabled: answer.enabled === true, waiting: answer.waiting ?? 0, lost: answer.lost ?? 0 };
       setSync(next);
-      if (answer.pulls?.length) pull(answer.pulls);
+      if (withPulls && answer.pulls?.length) pull(answer.pulls);
       if (next.enabled && next.waiting > 0) setRound((count) => count + 1);
     } else {
       failures.current += 1;
@@ -53,7 +53,8 @@ export function useTaskSync(id: string, saved: boolean, root: MapNode, pull: (ch
   const toggle = useCallback(
     async (enabled: boolean) => {
       setSync((current) => ({ ...current, enabled }));
-      apply(await writeJson(`/api/cartes/${id}/taches`, 'PUT', { enabled }));
+      // La carte a pu changer pendant la requête : ce qui vient de Google reviendra au passage suivant, sur la carte à jour.
+      apply(await writeJson(`/api/cartes/${id}/taches`, 'PUT', { enabled }), false);
     },
     [id, apply],
   );

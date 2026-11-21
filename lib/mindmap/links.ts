@@ -111,9 +111,12 @@ export function reconcile(root: MapNode, links: Links, remote: ReadonlyMap<strin
       const theirs = { ...link.incoming, ...remote.get(link.taskId) };
       const entry: Reconciled = { nodeId: node.id, taskId: link.taskId, listId: link.listId, push: {}, pull: {}, agreed: {} };
       for (const field of FIELDS) {
-        const [carte, base, google] = [mine[field], link[field], theirs[field] ?? link[field]];
+        const carte = mine[field];
+        // La carte qui montre ce que Google avait envoyé n'a rien changé elle-même : c'est Google qui décide encore.
+        const base = link.incoming?.[field] !== undefined && carte === link.incoming[field] ? carte : link[field];
+        const google = theirs[field] ?? link[field];
         if (carte === google) {
-          if (carte !== base) Object.assign(entry.agreed, { [field]: carte });
+          if (carte !== link[field]) Object.assign(entry.agreed, { [field]: carte });
         } else if (carte === base) Object.assign(entry.pull, { [field]: google });
         else Object.assign(entry.push, { [field]: carte });
       }
@@ -136,10 +139,27 @@ export function settleReconciled(links: Links, plan: Reconciled[]): Links {
   return next;
 }
 
-/** Une tâche notée disparue mais revue chez Google redevient suivie. */
-export function recoverLost(links: Links, seen: ReadonlySet<string>): Links {
+/**
+ * Ce que la lecture de Google apprend aux liens, avant tout rapprochement : une tâche supprimée est perdue (et ce qui en
+ * était arrivé ne vaut plus), une tâche revue redevient suivie, et ce qui change sur un nœud détaché attend son retour.
+ */
+export function absorb(links: Links, remote: ReadonlyMap<string, Fields>, gone: ReadonlySet<string>): Links {
   return Object.fromEntries(
-    Object.entries(links).map(([nodeId, { lost, ...link }]) => [nodeId, lost && !seen.has(link.taskId) ? { ...link, lost } : link]),
+    Object.entries(links).map(([nodeId, link]): [string, Link] => {
+      if (gone.has(link.taskId)) {
+        const { incoming: _incoming, ...rest } = link;
+        return [nodeId, { ...rest, lost: true }];
+      }
+      const fields = remote.get(link.taskId);
+      if (!fields) return [nodeId, link];
+      const { lost: _lost, ...alive } = link;
+      if (!alive.detached) return [nodeId, alive];
+      const pending: Fields = { ...alive.incoming };
+      for (const field of FIELDS) {
+        if (fields[field] !== undefined && fields[field] !== alive[field]) Object.assign(pending, { [field]: fields[field] });
+      }
+      return [nodeId, { ...alive, ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}) }];
+    }),
   );
 }
 
