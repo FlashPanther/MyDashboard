@@ -1,8 +1,6 @@
-import { NextResponse } from 'next/server';
-import { handle, requireJson } from '@/lib/api';
+import { handle } from '@/lib/api';
 import { allPages } from '@/lib/google/allPages';
 import { googleFetch } from '@/lib/google/oauth';
-import { newTaskRequest, TASK_TITLE_MAX } from '@/lib/google/taskWrites';
 import { parseTags } from '@/lib/tags';
 
 export const dynamic = 'force-dynamic';
@@ -95,20 +93,5 @@ export async function GET() {
       lists: lists.map(({ id, title }) => ({ id, title })),
       fetchedAt: new Date().toISOString(),
     };
-  });
-}
-
-/** Cree une tache dans la liste demandee, ou celle par defaut. */
-export async function POST(request: Request) {
-  const refused = requireJson(request);
-  if (refused) return refused;
-  const body = await request.json().catch(() => ({}));
-  const title = typeof body.title === 'string' ? body.title.trim().slice(0, TASK_TITLE_MAX) : '';
-  if (!title) return NextResponse.json({ error: 'Titre vide' }, { status: 400 });
-
-  return handle(async () => {
-    const { url, init } = newTaskRequest(title, body.listId);
-    const task = await googleFetch<{ id: string }>(url, init);
-    return { id: task.id };
   });
 }

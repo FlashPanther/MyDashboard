@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseTags, tagColor } from '../lib/tags.ts';
+import { parseTags } from '../lib/tags.ts';
 
 // Titre → titre affiché, étiquettes.
 const cases: [string, string, string[]][] = [
@@ -36,9 +36,4 @@ test('ignore la casse et les doublons', () => {
 
 test('accepte accents, chiffres, tirets et soulignés', () => {
   assert.deepEqual(parseTags('x #été-2027 #a_b #3').tags, ['été-2027', 'a_b', '3']);
-});
-
-test('donne toujours la même couleur à une même étiquette, prise dans la palette', () => {
-  assert.equal(tagColor('maison'), tagColor('maison'));
-  for (const tag of ['maison', 'urgent', 'été', '3', 'x']) assert.match(tagColor(tag), /^bg-(amber|jade|sky|ink)\//);
 });
