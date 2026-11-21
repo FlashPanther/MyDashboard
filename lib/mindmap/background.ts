@@ -4,7 +4,7 @@ import { syncTasks } from './taskSync';
 import { syncAllMaps } from './taskRounds';
 
 const ROUND_MS = 5 * 60_000;
-const globalState = globalThis as typeof globalThis & { __carteTasksRounds?: ReturnType<typeof setInterval> };
+const globalState = globalThis as typeof globalThis & { __carteTasksRounds?: boolean };
 
 /** La synchronisation d'une carte avec la liste et le client Google du tableau. */
 export function syncMapTasks(id: string, options: { read?: boolean } = {}) {
@@ -19,6 +19,7 @@ export function syncSoon(id: string) {
 /** Toutes les cinq minutes, ce qui n'a pas pu partir vers Google repart. Seulement en production : une copie locale des cartes n'écrit pas dans le vrai compte. */
 export function startTaskRounds(): void {
   if (process.env.NODE_ENV !== 'production' || globalState.__carteTasksRounds) return;
+  globalState.__carteTasksRounds = true;
   let failing = false;
   const round = async () => {
     const failures = await syncAllMaps(config.mindmap.taskList, googleFetch).catch((error) => [(error as Error).message]);
@@ -27,5 +28,7 @@ export function startTaskRounds(): void {
     if (failures.length === 0 && failing) console.info('Cartes : envoi vers Google rétabli');
     failing = failures.length > 0;
   };
-  globalState.__carteTasksRounds = setInterval(() => void round(), ROUND_MS);
+  // Le tour suivant n'est programmé qu'une fois celui-ci fini : un appel à Google qui traîne n'empile pas les tours.
+  const next = () => setTimeout(() => void round().finally(next), ROUND_MS);
+  next();
 }

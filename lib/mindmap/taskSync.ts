@@ -35,7 +35,8 @@ type Exchanged = { waiting: number; pulls: Pull[] };
 /** `read: false` : ne lire Google que s'il faut créer ; pour les passes sans éditeur, qui n'ont personne à qui rendre ce qui a changé. */
 export type SyncOptions = Options & { read?: boolean };
 const running = new Map<string, Promise<SyncResult | null>>();
-const again = new Set<string>();
+/** Par carte, une passe demandée pendant la passe en cours, et si l'un des demandeurs voulait qu'on relise Google. */
+const again = new Map<string, { read: boolean }>();
 let sending: Promise<unknown> = Promise.resolve();
 
 async function listNamed(title: string, google: Google): Promise<string> {
@@ -173,16 +174,19 @@ async function sync(id: string, listTitle: string, google: Google, options: Sync
 export function syncTasks(id: string, listTitle: string, google: Google, options: SyncOptions = {}): Promise<SyncResult | null> {
   const current = running.get(id);
   if (current) {
-    again.add(id);
+    again.set(id, { read: Boolean(again.get(id)?.read) || options.read !== false });
     return current;
   }
   const run = (async () => {
     let result: SyncResult | null;
-    do {
+    let current: SyncOptions = options;
+    for (;;) {
+      result = await sync(id, listTitle, google, current);
+      const next = again.get(id);
+      if (!next) return result;
       again.delete(id);
-      result = await sync(id, listTitle, google, options);
-    } while (again.has(id));
-    return result;
+      current = { ...options, read: next.read };
+    }
   })().finally(() => {
     running.delete(id);
     again.delete(id);
