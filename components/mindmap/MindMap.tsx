@@ -1,45 +1,77 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { MapCanvas, type CanvasHandle } from '@/components/mindmap/MapCanvas';
 import { Shortcuts } from '@/components/mindmap/Shortcuts';
+import { useMapSync } from '@/components/mindmap/useMapSync';
 import type { Send } from '@/components/mindmap/types';
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed } from '@/lib/mindmap/keymap';
-import { countDescendants, newNode, parse, serialize, taskProgress, type MapNode } from '@/lib/mindmap/tree';
+import { draftKey, isClean, opening, parseDraft, readCopy, type Opened, type SyncStatus } from '@/lib/mindmap/sync';
+import { countDescendants, serialize, taskProgress, type MapNode } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
+import { fetcher, HttpError } from '@/lib/useEndpoint';
 
-const STORAGE_KEY = 'carte.document';
 const HIDE_DONE_KEY = 'carte.masquerFaites';
 
-function blankMap(): MapNode {
-  return newNode('Idée centrale');
+const STATUS: Record<SyncStatus, string> = {
+  saved: 'Enregistrée',
+  saving: 'Enregistrement…',
+  offline: 'Serveur injoignable : nouvel essai en cours, la carte attend dans ce navigateur.',
+  conflict: 'Cette carte a été modifiée sur un autre appareil.',
+  gone: 'Cette carte a été supprimée sur le serveur : exporte-la pour la garder.',
+  refused: 'Le serveur refuse l’enregistrement : recharge la page, ou exporte la carte pour la garder.',
+};
+
+const UNKEPT = ' Ce navigateur ne peut rien garder : exporte la carte avant de fermer la page.';
+
+export function MindMap({ id }: { id: string }) {
+  const [opened, setOpened] = useState<Opened | null>(null);
+  const [failure, setFailure] = useState('');
+
+  useEffect(() => {
+    let stale = false;
+    fetcher(`/api/cartes/${id}`)
+      .then((body) => {
+        if (stale) return;
+        const server = readCopy(body);
+        if (!server) return setFailure('Carte illisible');
+        const result = opening(server, parseDraft(readStored(draftKey(id))));
+        if (isClean(result.sync, result.root)) writeStored(draftKey(id), null);
+        setOpened(result);
+      })
+      .catch((error: Error) => {
+        if (stale) return;
+        const missing = error instanceof HttpError && error.status === 404;
+        setFailure(missing ? 'Cette carte n’existe pas, ou plus.' : error.message);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [id]);
+
+  if (opened) return <Editor id={id} opened={opened} />;
+  return (
+    <Preparing>
+      {failure ? (
+        <span>
+          {failure}{' '}
+          <Link href="/carte" className="underline">
+            Retour aux cartes
+          </Link>
+        </span>
+      ) : (
+        'Préparation de la carte…'
+      )}
+    </Preparing>
+  );
 }
 
-function storedMap(): MapNode {
-  try {
-    const stored = readStored(STORAGE_KEY);
-    return stored ? parse(stored) : blankMap();
-  } catch {
-    return blankMap();
-  }
-}
-
-export function MindMap() {
-  const [stored, setStored] = useState<MapNode | null>(null);
-
-  useEffect(() => setStored(storedMap()), []);
-
-  return stored ? <Editor initial={stored} /> : <Preparing>Préparation de la carte…</Preparing>;
-}
-
-function Editor({ initial }: { initial: MapNode }) {
-  const [state, dispatch] = useReducer(reduce, initial, (map) => initialState(map, readStored(HIDE_DONE_KEY) === '1'));
-  const [opened, setOpened] = useState(0);
-  const [notice, setNotice] = useState('');
-  const fileInput = useRef<HTMLInputElement>(null);
+function Editor({ id, opened }: { id: string; opened: Opened }) {
+  const [state, dispatch] = useReducer(reduce, opened.root, (map) => initialState(map, readStored(HIDE_DONE_KEY) === '1'));
+  const [refits, setRefits] = useState(0);
   const editingElement = useRef<HTMLElement | null>(null);
   const canvas = useRef<CanvasHandle>(null);
 
@@ -60,13 +92,20 @@ function Editor({ initial }: { initial: MapNode }) {
 
   useEffect(() => writeStored(HIDE_DONE_KEY, hideDone ? '1' : '0'), [hideDone]);
 
-  useEffect(() => {
-    const saved = serialize(root);
-    writeStored(STORAGE_KEY, saved);
-    if (readStored(STORAGE_KEY) !== saved) {
-      setNotice("Enregistrement impossible dans ce navigateur : exporte la carte pour la garder.");
-    }
-  }, [root]);
+  const adopt = useCallback(
+    (theirs: MapNode) => {
+      send({ type: 'replace', root: theirs });
+      setRefits((count) => count + 1);
+    },
+    [send],
+  );
+  const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
+  const leave = useCallback(() => {
+    const draft = editingElement.current?.innerText;
+    flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
+  }, [flush]);
+  // En nettoyage d'effet ordinaire, React a déjà détaché le champ de saisie : le texte en cours serait perdu.
+  useLayoutEffect(() => leave, [leave]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -80,8 +119,7 @@ function Editor({ initial }: { initial: MapNode }) {
     };
     // À la fermeture, rien ne garantit un rendu React : la saisie en cours est validée et écrite sur-le-champ.
     const onLeave = () => {
-      const draft = editingElement.current?.innerText;
-      writeStored(STORAGE_KEY, serialize(reduce(latest.current, { type: 'command', command: 'stop', draft }).root));
+      leave();
       send({ type: 'command', command: 'stop' });
     };
     window.addEventListener('keydown', onKey);
@@ -90,22 +128,7 @@ function Editor({ initial }: { initial: MapNode }) {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('pagehide', onLeave);
     };
-  }, [mode, send]);
-
-  function open(next: MapNode) {
-    setNotice('');
-    send({ type: 'replace', root: next });
-    setOpened((count) => count + 1);
-  }
-
-  async function importFile(file: File | undefined) {
-    if (!file) return;
-    try {
-      open(parse(await file.text()));
-    } catch {
-      setNotice(`« ${file.name} » n'est pas une carte valide.`);
-    }
-  }
+  }, [mode, send, leave]);
 
   function exportFile(map: MapNode) {
     const name = map.text.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'carte';
@@ -119,12 +142,10 @@ function Editor({ initial }: { initial: MapNode }) {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule bg-panel px-4 py-2">
-        <Link href="/" className="font-mono text-xs text-muted hover:text-ink">
-          ← Tableau
+        <Link href="/carte" className="font-mono text-xs text-muted hover:text-ink">
+          ← Cartes
         </Link>
         <h1 className="font-display text-xl font-extrabold uppercase tracking-[0.16em] text-ink">Carte</h1>
-        <ToolbarButton onPress={() => open(blankMap())}>Nouvelle carte</ToolbarButton>
-        <ToolbarButton onPress={() => fileInput.current?.click()}>Importer</ToolbarButton>
         <ToolbarButton onPress={() => exportFile(state.root)}>Exporter</ToolbarButton>
         {(hideDone || progress.size > 0) && (
           <ToolbarButton
@@ -134,24 +155,19 @@ function Editor({ initial }: { initial: MapNode }) {
             {hideDone ? `Tâches faites masquées (${hidden} nœud${hidden > 1 ? 's' : ''})` : 'Masquer les tâches faites'}
           </ToolbarButton>
         )}
-        <input
-          ref={fileInput}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={(event) => {
-            importFile(event.target.files?.[0]);
-            event.target.value = '';
-          }}
-        />
-        {notice && (
-          <p role="status" className="font-mono text-xs text-amber">
-            {notice}
-          </p>
+        <p role="status" className={`font-mono text-xs ${kept && (status === 'saved' || status === 'saving') ? 'text-muted' : 'text-amber'}`}>
+          {STATUS[status]}
+          {!kept && status !== 'saved' && UNKEPT}
+        </p>
+        {status === 'conflict' && (
+          <>
+            <ToolbarButton onPress={() => settle(false)}>Garder ma version</ToolbarButton>
+            <ToolbarButton onPress={() => settle(true)}>Prendre l’autre version</ToolbarButton>
+          </>
         )}
       </header>
       <MapCanvas
-        key={opened}
+        key={refits}
         ref={canvas}
         root={shown}
         progress={progress}

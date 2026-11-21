@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { MindMap } from '@/components/mindmap/MindMap';
+import { MapList } from '@/components/mindmap/MapList';
 
-export const metadata: Metadata = { title: 'Carte' };
+export const metadata: Metadata = { title: 'Cartes' };
 
-export default function CartePage() {
-  return <MindMap />;
+export default function CartesPage() {
+  return <MapList />;
 }
