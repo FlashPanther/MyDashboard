@@ -40,7 +40,7 @@ function fakeGoogle(lists: { id: string; title: string }[] = [{ id: 'L1', title:
   const deleted: Record<string, (Stored & { deleted: true })[]> = {};
   let clock = 0;
   const reads: (string | null)[] = [];
-  const faults = { loseAnswerOf: 0, refuseFrom: Infinity, missingList: '', refuseUpdateOf: '' };
+  const faults = { loseAnswerOf: 0, refuseFrom: Infinity, missingList: '', refuseUpdateOf: '', refuseMoveOf: '' };
   let posts = 0;
   const google = (async (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET';
@@ -53,6 +53,21 @@ function fakeGoogle(lists: { id: string; title: string }[] = [{ id: 'L1', title:
     }
     const listId = pathname.split('/')[4];
     if (listId === faults.missingList) throw new GoogleHttpError('liste disparue', 404);
+    if (pathname.endsWith('/move')) {
+      const list = tasks[listId] ?? [];
+      const index = list.findIndex((task) => task.id === pathname.split('/')[6]);
+      if (index < 0) throw new GoogleHttpError('tâche introuvable', 404);
+      if (faults.refuseMoveOf === list[index].id) throw new GoogleHttpError('tâche récurrente', 400);
+      const [task] = list.splice(index, 1);
+      const to = new URL(url).searchParams.get('destinationTasklist')!;
+      (tasks[to] ??= []).push(Object.assign(task, { updated: LATER }));
+      return task;
+    }
+    if (method === 'GET' && pathname.split('/').length > 6) {
+      const found = (tasks[listId] ?? []).find((task) => task.id === pathname.split('/')[6]);
+      if (!found) throw new GoogleHttpError('tâche introuvable', 404);
+      return found;
+    }
     if (method === 'GET') {
       const since = new URL(url).searchParams.get('updatedMin');
       reads.push(since);
@@ -653,7 +668,7 @@ test('si une autre carte est illisible, la suppression chez Google attend : on n
   assert.deepEqual(fake.titles(), []);
 });
 
-test('une tâche existante reprise dans la carte reste dans sa liste : elle est suivie, rien n’est créé, ses changements reviennent', async () => {
+test('une tâche existante reprise dans la carte est rangée dans la liste des cartes : rien n’est créé, ses changements reviennent', async () => {
   const { dir, id, links } = await sending(map('une'));
   const fake = fakeGoogle([
     { id: 'L1', title: 'Cartes' },
@@ -664,10 +679,11 @@ test('une tâche existante reprise dans la carte reste dans sa liste : elle est 
   await saveMap(id, adopting(map('une')), 1, { dir });
   fake.calls.length = 0;
   await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
-  assert.deepEqual((await links()).livres, { taskId: 'p1', listId: 'L9', title: 'Rendre les livres', done: false, adopted: true });
-  assert.deepEqual(fake.calls.filter((call) => call.startsWith('POST')), []);
-  assert.deepEqual(fake.titles('L1'), ['une']);
-  Object.assign(fake.tasks.L9[0], { status: 'completed', updated: '2026-11-21T14:00:00.000Z' });
+  assert.deepEqual((await links()).livres, { taskId: 'p1', listId: 'L1', title: 'Rendre les livres', done: false, adopted: true, updated: LATER });
+  assert.deepEqual(fake.calls.filter((call) => call.startsWith('POST') && !call.endsWith('/move')), []);
+  assert.deepEqual(fake.titles('L1'), ['une', 'Rendre les livres']);
+  assert.deepEqual(fake.titles('L9'), []);
+  Object.assign(fake.tasks.L1[1], { status: 'completed', updated: '2026-11-21T14:00:00.000Z' });
   const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
   assert.deepEqual(result?.pulls, [{ id: 'livres', done: true }]);
 });
@@ -682,8 +698,8 @@ test('une tâche déjà suivie, ici ou par une autre carte, n’est pas reprise 
   await syncTasks(second.id, 'Cartes', fake.google, { dir, now: minute(0) });
   assert.equal((await readMap(first.id, { dir }))!.links.livres?.taskId, 'p1');
   assert.equal((await readMap(second.id, { dir }))!.links.livres, undefined);
-  assert.deepEqual(fake.titles('L9'), ['Rendre les livres']);
-  assert.deepEqual(fake.titles('L1'), ['une', 'deux']);
+  assert.deepEqual(fake.titles('L9'), []);
+  assert.deepEqual(fake.titles('L1').sort(), ['Rendre les livres', 'deux', 'une']);
 });
 
 test('un nœud repris survit au brouillon, à l’annulation et à l’export : il est relié dès qu’il arrive au serveur, jamais créé', async () => {
@@ -694,7 +710,7 @@ test('un nœud repris survit au brouillon, à l’annulation et à l’export : 
   await saveMap(id, parse(serialize(adopting(map('une')))), 1, { dir });
   await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
   assert.equal((await links()).livres.taskId, 'p1');
-  assert.deepEqual(fake.titles('L1'), ['une']);
+  assert.deepEqual(fake.titles('L1'), ['une', 'Rendre les livres']);
 });
 
 test('une liste supprimée chez Google rend « disparues » les tâches reprises qui y étaient, et la carte ne propose pas de les supprimer', async () => {
@@ -705,6 +721,7 @@ test('une liste supprimée chez Google rend « disparues » les tâches reprises
   ]);
   await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
   (fake.tasks.L9 ??= []).push({ id: 'p1', title: 'Rendre les livres', updated: UPDATED });
+  fake.faults.refuseMoveOf = 'p1';
   await saveMap(id, adopting(map('une')), 1, { dir });
   assert.deepEqual((await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) }))?.linked, ['une']);
   fake.faults.missingList = 'L9';
@@ -724,8 +741,8 @@ test('un nœud repris, redevenu idée puis de nouveau tâche, garde son origine 
   assert.deepEqual(again.children.at(-1)?.from, { taskId: 'p1', listId: 'L9' });
   const { id } = (await createMap(again, { dir, sendTasks: true }))!;
   const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
-  assert.deepEqual(fake.titles('L1'), ['une']);
-  assert.deepEqual(fake.titles('L9'), ['Rendre les livres']);
+  assert.deepEqual(fake.titles('L1'), ['Rendre les livres', 'une']);
+  assert.deepEqual(fake.titles('L9'), []);
   assert.equal(result?.blocked, 1);
 });
 
@@ -735,4 +752,42 @@ test('une carte dont l’envoi est éteint ne relie pas ses tâches reprises, et
   const result = await syncTasks(id, 'Cartes', fakeGoogle().google, { dir, now: minute(0) });
   assert.equal(result?.waiting, 1);
   assert.deepEqual((await readMap(id, { dir }))!.links, {});
+});
+
+test('une tâche que Google refuse de déplacer reste dans sa liste, toujours suivie, et le déplacement n’est plus retenté', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle([{ id: 'L1', title: 'Cartes' }, { id: 'L9', title: 'Perso' }]);
+  (fake.tasks.L9 ??= []).push({ id: 'p1', title: 'Rendre les livres', updated: UPDATED });
+  fake.faults.refuseMoveOf = 'p1';
+  await saveMap(id, adopting(map('une')), 1, { dir });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  assert.deepEqual((await links()).livres, { taskId: 'p1', listId: 'L9', title: 'Rendre les livres', done: false, adopted: true, stay: true });
+  fake.calls.length = 0;
+  Object.assign(fake.tasks.L9[0], { status: 'completed', updated: '2026-11-21T14:00:00.000Z' });
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.deepEqual(result?.pulls, [{ id: 'livres', done: true }]);
+  assert.deepEqual(fake.calls.filter((call) => call.endsWith('/move')), []);
+});
+
+test('une sous-tâche arrivée dans la liste des cartes avec sa tâche parente y est retrouvée, pas notée disparue', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle([{ id: 'L1', title: 'Cartes' }, { id: 'L9', title: 'Perso' }]);
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  (fake.tasks.L1 ??= []).push({ id: 'p1', title: 'Rendre les livres', updated: UPDATED });
+  await saveMap(id, adopting(map('une')), 1, { dir });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  const link = (await links()).livres;
+  assert.equal(link.listId, 'L1');
+  assert.equal(link.lost, undefined);
+});
+
+test('une fois les tâches reprises rangées, la liste des cartes n’est plus recherchée à chaque passe', async () => {
+  const { dir, id } = await sending(map('une'));
+  const fake = fakeGoogle([{ id: 'L1', title: 'Cartes' }, { id: 'L9', title: 'Perso' }]);
+  (fake.tasks.L9 ??= []).push({ id: 'p1', title: 'Rendre les livres', updated: UPDATED });
+  await saveMap(id, adopting(map('une')), 1, { dir });
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  fake.calls.length = 0;
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.deepEqual(fake.calls.filter((call) => call.endsWith('/users/@me/lists') || call.endsWith('/move')), []);
 });

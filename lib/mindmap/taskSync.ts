@@ -1,5 +1,14 @@
 import { allPages } from '../google/allPages.ts';
-import { taskDeleteRequest, newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest, taskUpdateRequest } from '../google/taskWrites.ts';
+import {
+  newTaskListRequest,
+  newTaskRequest,
+  taskChangeRequest,
+  taskDeleteRequest,
+  taskListsRequest,
+  taskRequest,
+  tasksInListRequest,
+  taskUpdateRequest,
+} from '../google/taskWrites.ts';
 import { GoogleHttpError } from '../google/errors.ts';
 import {
   taskStatus,
@@ -40,6 +49,8 @@ const running = new Map<string, Promise<SyncResult | null>>();
 /** Par carte, une passe demandée pendant la passe en cours, et si l'un des demandeurs voulait qu'on relise Google. */
 const again = new Map<string, { read: boolean }>();
 let sending: Promise<unknown> = Promise.resolve();
+/** La liste des cartes, par titre : une fois les tâches reprises rangées, plus besoin de la rechercher. */
+const homes = new Map<string, string>();
 
 async function listNamed(title: string, google: Google): Promise<string> {
   const lists = await allPages<{ id: string; title: string }>((pageToken) => {
@@ -171,6 +182,40 @@ async function purge(map: StoredMap, google: Google, options: Options): Promise<
   return (await readMap(map.id, options)) ?? map;
 }
 
+/**
+ * Range dans la liste des cartes les tâches reprises d'autres listes. Une tâche que Google refuse de déplacer reste où elle
+ * est ; une tâche introuvable dans sa liste a pu y arriver avec sa tâche parente.
+ */
+async function gather(mapId: string, listTitle: string, google: Google, options: Options): Promise<void> {
+  const current = await readMap(mapId, options);
+  const away = Object.entries(current?.links ?? {}).filter(([, link]) => link.adopted && !link.stay && !link.detached && !link.lost && !link.doomed);
+  if (away.length === 0 || away.every(([, link]) => link.listId === homes.get(listTitle))) return;
+  const home = await listNamed(listTitle, google);
+  homes.set(listTitle, home);
+  const items = away
+    .filter(([, link]) => link.listId !== home)
+    .slice(0, MAX_PER_PASS)
+    .map(([nodeId, { taskId, listId }]) => ({ nodeId, taskId, listId }));
+  await eachTask(
+    mapId,
+    items,
+    async ({ taskId, listId }) => {
+      const arrived = (task: GoogleTask): Partial<Link> => ({ listId: home, taskId: task.id, ...(task.updated ? { updated: task.updated } : {}) });
+      try {
+        const { url, init } = taskChangeRequest(taskId, { listId, moveTo: home });
+        return arrived(await google<GoogleTask>(url, init));
+      } catch (error) {
+        if (error instanceof GoogleHttpError && (error.status === 400 || error.status === 403)) return { stay: true };
+        if (!(error instanceof GoogleHttpError) || error.status !== 404) throw error;
+        const { url, init } = taskRequest(home, taskId);
+        return arrived(await google<GoogleTask>(url, init).catch(() => Promise.reject(error)));
+      }
+    },
+    { lost: true },
+    options,
+  );
+}
+
 function since(cursor: string | undefined): string | undefined {
   return cursor && new Date(Date.parse(cursor) - CURSOR_MARGIN_MS).toISOString();
 }
@@ -196,7 +241,7 @@ async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, goo
         else remote.set(task.id, fieldsOf(task));
       }
     };
-    // Une tâche reprise reste dans sa liste : chaque liste où la carte a des tâches est relue, seulement pour ce qui a changé.
+    // Une tâche reprise peut être restée dans sa liste : chaque liste où la carte a des tâches est relue, seulement pour ce qui a changé.
     const lists = new Set(Object.values(map.links).map((link) => link.listId));
     let home: { listId: string; existing: GoogleTask[] } | null = null;
     if (batch.length > 0) {
@@ -228,6 +273,7 @@ async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, goo
     .filter(({ push }) => Object.keys(push).length > 0)
     .map(({ nodeId, taskId, listId, push }) => ({ nodeId, taskId, listId, ...push }));
   await update(map.id, pushes.slice(0, MAX_PER_PASS), google, options);
+  await gather(map.id, listTitle, google, options);
   return {
     waiting: Math.max(0, pushes.length - MAX_PER_PASS),
     pulls: plan.filter(({ pull }) => Object.keys(pull).length > 0).map(({ nodeId, pull }) => ({ id: nodeId, ...pull })),

@@ -46,6 +46,10 @@ export function taskListsRequest(pageToken?: string): GoogleCall {
   return { url: `${API}/users/@me/lists?${params}`, init: {} };
 }
 
+export function taskRequest(listId: string, taskId: string): GoogleCall {
+  return { url: taskUrl(listId, taskId), init: {} };
+}
+
 export function taskDeleteRequest(listId: string, taskId: string): GoogleCall {
   return { url: taskUrl(listId, taskId), init: { method: 'DELETE' } };
 }
