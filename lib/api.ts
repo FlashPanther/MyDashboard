@@ -17,9 +17,10 @@ export function requireJson(request: Request) {
 }
 
 /** Enveloppe une route : toute erreur devient une reponse JSON lisible par le widget. */
-export async function handle<T>(fn: () => Promise<T>) {
+export async function handle<T>(fn: () => Promise<T | Response>) {
   try {
-    return NextResponse.json(await fn());
+    const result = await fn();
+    return result instanceof Response ? result : NextResponse.json(result);
   } catch (error) {
     if (error instanceof NotConnectedError) {
       return NextResponse.json<ApiError>({ error: error.message, notConnected: true }, { status: 401 });

@@ -44,7 +44,11 @@ Puis le lien avec Google Tasks :
 - [x] **6 bis. L'avancement par branche** : chaque nœud qui contient des tâches affiche « faites / total ».
 - [x] **6 ter. Masquer les tâches faites** : un interrupteur dans la barre. Une tâche faite disparaît avec ce qu'elle
   contient, sauf si sa branche garde une tâche à faire.
-- [ ] **7. La carte enregistrée par le serveur**, sur son volume : même carte sur tous les appareils.
+- [x] **7. Des cartes gardées par le serveur** : plusieurs cartes, chacune dans un fichier de `.data/cartes/` sur le
+  volume, lues et écrites par `/api/cartes`. Une carte supprimée part dans `.data/cartes/corbeille/`.
+  Le verrou d'écriture est en mémoire : une seule instance du tableau à la fois, comme pour les jetons Google.
+- [ ] **7 bis. L'éditeur branché sur le serveur** : liste des cartes, une adresse par carte, enregistrement au fil de
+  l'eau, reprise de la carte gardée dans le navigateur.
 - [ ] **8. Une connexion Google qui tient**, et un signal clair quand elle est à refaire.
 - [ ] **9. Créer** : marquer un nœud comme tâche la crée dans Google Tasks, avec le chemin de la branche dans son
   détail.
