@@ -61,6 +61,8 @@ l'extension et les deux onglets est allumé.
    « Google expiré : relier ». Pour une liaison qui dure, passe l'application en
    « En production » (*Audience > Publier l'application*), puis relie Google une nouvelle
    fois : un jeton obtenu pendant l'état « Test » garde sa limite de sept jours.
+   Même publiée, une liaison peut tomber (mot de passe changé, accès retiré dans ton compte
+   Google, six mois sans usage) : le même bouton sert à la refaire.
 4. **Identifiants > Créer > ID client OAuth > Application Web**. Ajoute l'URI de
    redirection autorisée :
    `http://localhost:3737/api/auth/google/callback`

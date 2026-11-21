@@ -1,4 +1,4 @@
-import { readTokens, writeTokens, type StoredTokens } from './tokens';
+import { readTokens, updateTokens, writeTokens, type StoredTokens } from './tokens';
 
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
@@ -139,18 +139,20 @@ async function renew(stored: StoredTokens): Promise<string> {
   const json = await res.json();
   if (!res.ok) {
     if (json.error === 'invalid_grant') {
-      await writeTokens({ refresh_token: stored.refresh_token, scope: stored.scope, refused_at: Date.now() });
+      await updateSame(stored, () => ({ refresh_token: stored.refresh_token, scope: stored.scope, refused_at: Date.now() }));
       throw new NotConnectedError(EXPIRED);
     }
     throw new Error(`Renouvellement du jeton refusé : ${json.error_description ?? res.status}`);
   }
 
-  await writeTokens({
-    ...stored,
-    access_token: json.access_token,
-    expires_at: Date.now() + json.expires_in * 1000,
-  });
-  return json.access_token as string;
+  const renewed = { access_token: json.access_token as string, expires_at: Date.now() + json.expires_in * 1000 };
+  await updateSame(stored, (current) => ({ ...current, ...renewed }));
+  return renewed.access_token;
+}
+
+/** N'applique `change` que si la liaison est restee la meme : une reponse tardive ne doit pas defaire une liaison refaite entre-temps. */
+function updateSame(stored: StoredTokens, change: (current: StoredTokens) => StoredTokens): Promise<void> {
+  return updateTokens((current) => (current?.refresh_token === stored.refresh_token ? change(current) : null));
 }
 
 /** fetch() vers une API Google, avec le jeton et la gestion d'erreur en place. */
@@ -175,8 +177,9 @@ export async function googleFetch<T>(url: string, init: RequestInit = {}): Promi
     }
     if (res.status === 401) {
       // Jeton revoque avant son echeance : le prochain appel tentera un renouvellement, qui dira si la liaison tient.
-      const stored = await readTokens();
-      if (stored?.access_token === token) await writeTokens({ ...stored, access_token: undefined, expires_at: undefined });
+      await updateTokens((current) =>
+        current?.access_token === token ? { ...current, access_token: undefined, expires_at: undefined } : null,
+      );
     }
     throw new NotConnectedError("Accès refusé par Google : vérifie les autorisations demandées");
   }
