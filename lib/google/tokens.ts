@@ -9,6 +9,8 @@ export type StoredTokens = {
   /** Epoch ms. */
   expires_at?: number;
   scope?: string;
+  /** Epoch ms du refus de Google (invalid_grant) : la liaison est a refaire. */
+  refused_at?: number;
 };
 
 export async function readTokens(): Promise<StoredTokens | null> {
@@ -21,7 +23,10 @@ export async function readTokens(): Promise<StoredTokens | null> {
 
 export async function writeTokens(tokens: StoredTokens): Promise<void> {
   await fs.mkdir(path.dirname(TOKEN_FILE), { recursive: true });
-  await fs.writeFile(TOKEN_FILE, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+  // Plusieurs routes lisent ce fichier pendant qu'une autre le renouvelle : jamais de fichier a moitie ecrit.
+  const draft = `${TOKEN_FILE}.${process.pid}.tmp`;
+  await fs.writeFile(draft, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+  await fs.rename(draft, TOKEN_FILE);
 }
 
 export async function clearTokens(): Promise<void> {

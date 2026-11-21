@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { config } from '@/dashboard.config';
 import { longDate } from '@/lib/time';
+import type { Connection } from '@/lib/google/connection';
 import { useEndpoint } from '@/lib/useEndpoint';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { PresenceToggle } from '@/components/PresenceToggle';
@@ -26,7 +27,7 @@ export function Header({
   officeEvent: CalendarEvent | null;
 }) {
   const [clock, setClock] = useState<Date | null>(null);
-  const status = useEndpoint<{ configured: boolean; connected: boolean; expired?: boolean }>('/api/auth/status', 60);
+  const status = useEndpoint<{ configured: boolean } & Connection>('/api/auth/status', 60);
 
   useEffect(() => {
     setClock(new Date());

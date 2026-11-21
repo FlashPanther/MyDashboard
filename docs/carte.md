@@ -54,7 +54,10 @@ Puis le lien avec Google Tasks :
   pas répondu, et une carte modifiée sur un autre appareil demande de choisir une version. La carte que le navigateur
   gardait avant se reprend d'un clic.
 - [x] **7 ter. Supprimer une carte** depuis la liste, après confirmation ; elle part dans la corbeille du serveur.
-- [ ] **8. Une connexion Google qui tient**, et un signal clair quand elle est à refaire.
+- [x] **8. Un signal clair quand la liaison Google est à refaire** : un jeton refusé par Google est noté comme tel,
+  l'en-tête du tableau affiche « Google expiré : relier ». Le signal sera repris dans la page Carte à l'étape 9.
+- [ ] **8 bis. Une liaison qui tient** : cela dépend de Google Cloud, pas du code. Tant que l'application y est en état
+  « Test », la liaison tombe après sept jours ; il faut la publier, puis relier de nouveau (voir le README).
 - [ ] **9. Créer** : marquer un nœud comme tâche la crée dans Google Tasks, avec le chemin de la branche dans son
   détail.
 - [ ] **10. Relire et cocher**, dans les deux sens.
