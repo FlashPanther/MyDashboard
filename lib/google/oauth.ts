@@ -1,4 +1,4 @@
-import { readTokens, writeTokens, type StoredTokens } from './tokens';
+import { readTokens, updateTokens, writeTokens, type StoredTokens } from './tokens';
 
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
@@ -31,6 +31,7 @@ export class ApiDisabledError extends Error {
 }
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const EXPIRED = 'Autorisation Google expirée';
 
 /** Levee quand aucun compte Google n'est encore relie. */
 export class NotConnectedError extends Error {
@@ -105,15 +106,25 @@ export async function exchangeCode(code: string): Promise<StoredTokens> {
   return tokens;
 }
 
+let renewing: Promise<string> | null = null;
+
 /** Renvoie un access_token valide, en le renouvelant si besoin. */
 export async function getAccessToken(): Promise<string> {
   const stored = await readTokens();
   if (!stored?.refresh_token) throw new NotConnectedError();
+  if (stored.refused_at) throw new NotConnectedError(EXPIRED);
 
   if (stored.access_token && stored.expires_at && stored.expires_at - Date.now() > 60_000) {
     return stored.access_token;
   }
+  // Tous les panneaux se reveillent ensemble : un seul renouvellement pour tous.
+  renewing ??= renew(stored).finally(() => {
+    renewing = null;
+  });
+  return renewing;
+}
 
+async function renew(stored: StoredTokens): Promise<string> {
   const { clientId, clientSecret } = credentials();
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
@@ -127,16 +138,21 @@ export async function getAccessToken(): Promise<string> {
   });
   const json = await res.json();
   if (!res.ok) {
-    if (json.error === 'invalid_grant') throw new NotConnectedError('Autorisation Google expirée');
+    if (json.error === 'invalid_grant') {
+      await updateSame(stored, () => ({ refresh_token: stored.refresh_token, scope: stored.scope, refused_at: Date.now() }));
+      throw new NotConnectedError(EXPIRED);
+    }
     throw new Error(`Renouvellement du jeton refusé : ${json.error_description ?? res.status}`);
   }
 
-  await writeTokens({
-    ...stored,
-    access_token: json.access_token,
-    expires_at: Date.now() + json.expires_in * 1000,
-  });
-  return json.access_token as string;
+  const renewed = { access_token: json.access_token as string, expires_at: Date.now() + json.expires_in * 1000 };
+  await updateSame(stored, (current) => ({ ...current, ...renewed }));
+  return renewed.access_token;
+}
+
+/** N'applique `change` que si la liaison est restee la meme : une reponse tardive ne doit pas defaire une liaison refaite entre-temps. */
+function updateSame(stored: StoredTokens, change: (current: StoredTokens) => StoredTokens): Promise<void> {
+  return updateTokens((current) => (current?.refresh_token === stored.refresh_token ? change(current) : null));
 }
 
 /** fetch() vers une API Google, avec le jeton et la gestion d'erreur en place. */
@@ -158,6 +174,12 @@ export async function googleFetch<T>(url: string, init: RequestInit = {}): Promi
     if (reason === 'SERVICE_DISABLED' || /has not been used|is disabled/i.test(body?.error?.message ?? '')) {
       const meta = body?.error?.details?.[0]?.metadata ?? {};
       throw new ApiDisabledError(body?.error?.message, meta.service ?? null, meta.activationUrl ?? null);
+    }
+    if (res.status === 401) {
+      // Jeton revoque avant son echeance : le prochain appel tentera un renouvellement, qui dira si la liaison tient.
+      await updateTokens((current) =>
+        current?.access_token === token ? { ...current, access_token: undefined, expires_at: undefined } : null,
+      );
     }
     throw new NotConnectedError("Accès refusé par Google : vérifie les autorisations demandées");
   }
