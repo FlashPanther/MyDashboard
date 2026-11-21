@@ -132,7 +132,19 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
   );
   const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
   const pull = useCallback((changes: RemoteChange[]) => send({ type: 'remote', changes }), [send]);
-  const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root, pull);
+  const { sync: google, toggle: sendTasks, forget } = useTaskSync(id, status === 'saved', root, pull);
+  const linked = useMemo(() => new Set(google.linked), [google.linked]);
+  const [forgetFailed, setForgetFailed] = useState(false);
+  const removeWithTask = useCallback(
+    async (nodeId: string) => {
+      const marked = await forget(nodeId);
+      setForgetFailed(!marked);
+      if (!marked) return;
+      send({ type: 'select', id: nodeId });
+      send({ type: 'command', command: 'delete' });
+    },
+    [forget, send],
+  );
   const leave = useCallback(() => {
     const draft = editingElement.current?.innerText;
     flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
@@ -201,6 +213,11 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
                 : 'Tâches envoyées à Google'}
           </ToolbarButton>
         )}
+        {forgetFailed && (
+          <p role="status" className="font-mono text-xs text-amber">
+            La tâche Google n’a pas pu être marquée pour suppression : le nœud est resté dans la carte.
+          </p>
+        )}
         {google.lost > 0 && (
           <p role="status" className="font-mono text-xs text-amber">
             {google.lost > 1 ? `${google.lost} tâches n’existent plus` : 'Une tâche n’existe plus'} chez Google : la carte les garde, sans les
@@ -234,6 +251,8 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         editing={state.editing}
         editingElement={editingElement}
         send={send}
+        linked={linked}
+        removeWithTask={removeWithTask}
       />
       <Shortcuts />
     </div>

@@ -74,8 +74,10 @@ Puis le lien avec Google Tasks :
   contre le vrai Google** avant de cocher.
 - [ ] **10 ter. Le serveur envoie de lui-même** : juste après chaque enregistrement, même si l'onglet se ferme, et toutes
   les cinq minutes ce qui n'a pas pu partir. Codé et testé avec un Google en mémoire ; **reste à constater en ligne**.
-- [ ] **11. Détacher ou supprimer** : retirer un nœud détache la tâche ; la supprimer pour de bon est un second geste.
-  Supprimer une carte détache toutes ses tâches : c'est le serveur qui le fait, derrière la suppression.
+- [ ] **11. Détacher ou supprimer** : retirer un nœud détache sa tâche, qui reste chez Google. Le clic droit propose
+  « Supprimer, avec sa tâche Google… », avec confirmation : le nœud est retiré et sa tâche supprimée chez Google, par
+  le serveur, une fois le retrait enregistré. Supprimer une carte détache ses tâches, qui restent chez Google. Codé et
+  testé avec un Google en mémoire ; **reste à constater en ligne**.
 - [ ] **12. Le menu latéral** des tâches Google qui ne sont dans aucune carte.
 - [ ] **13. Reprendre les tâches existantes** et réduire le nombre de listes.
 - [ ] **14. Alléger le tableau** : retirer l'ancien onglet « Carte », les panneaux de tâches devenus inutiles et les

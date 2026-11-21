@@ -35,7 +35,7 @@ type Press = {
   last: Point;
 };
 type Frame = { from: Point; to: Point; ids: string[] };
-type Menu = { id: string; x: number; y: number };
+type Menu = { id: string; x: number; y: number; confirm?: boolean };
 
 export function MapCanvas({
   ref,
@@ -46,6 +46,8 @@ export function MapCanvas({
   editing,
   editingElement,
   send,
+  linked,
+  removeWithTask,
 }: {
   ref: Ref<CanvasHandle>;
   root: MapNode;
@@ -55,6 +57,8 @@ export function MapCanvas({
   editing: Editing | null;
   editingElement: RefObject<HTMLElement | null>;
   send: Send;
+  linked: ReadonlySet<string>;
+  removeWithTask: (id: string) => void;
 }) {
   const [sizes, setSizes] = useState<ReadonlyMap<string, Size>>(new Map());
   const [view, setView] = useState<View | null>(null);
@@ -163,15 +167,25 @@ export function MapCanvas({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [gesturing, cancelGesture]);
 
-  function menuItems(id: string): MenuItem[] {
+  function menuItems(id: string, confirm = false): MenuItem[] {
     const node = find(root, id);
     if (!node) return [];
+    if (confirm) {
+      return [
+        { label: 'Oui, supprimer aussi la tâche Google', run: () => removeWithTask(id) },
+        { label: 'Annuler', run: () => undefined },
+      ];
+    }
     const items: MenuItem[] = [];
     if (id !== root.id) {
       items.push({
         label: node.task ? 'Redevenir une idée' : 'Transformer en tâche',
         run: () => send({ type: 'task', ids: [id] }),
       });
+    }
+    if (linked.has(id)) {
+      // Un menu de confirmation remplace le premier : le menu se ferme à chaque choix, on le rouvre au même endroit.
+      items.push({ label: 'Supprimer, avec sa tâche Google…', run: () => setTimeout(() => setMenu((current) => current ?? { ...menu!, confirm: true })) });
     }
     if (node.children.length) {
       items.push(
@@ -305,8 +319,8 @@ export function MapCanvas({
           />
         )}
       </div>
-      {menu && menuItems(menu.id).length > 0 && (
-        <ContextMenu at={menu} items={menuItems(menu.id)} onClose={closeMenu} />
+      {menu && menuItems(menu.id, menu.confirm).length > 0 && (
+        <ContextMenu key={menu.confirm ? 'confirm' : 'menu'} at={menu} items={menuItems(menu.id, menu.confirm)} onClose={closeMenu} />
       )}
     </main>
   );

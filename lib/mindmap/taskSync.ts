@@ -1,7 +1,8 @@
 import { allPages } from '../google/allPages.ts';
-import { newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest, taskUpdateRequest } from '../google/taskWrites.ts';
+import { taskDeleteRequest, newTaskListRequest, newTaskRequest, taskListsRequest, tasksInListRequest, taskUpdateRequest } from '../google/taskWrites.ts';
 import { GoogleHttpError } from '../google/errors.ts';
 import {
+  linkedTasks,
   lostTasks,
   markerIn,
   reconcile,
@@ -21,7 +22,7 @@ import type { RemoteChange } from './tree.ts';
 export type Google = <T>(url: string, init?: RequestInit) => Promise<T>;
 /** Ce que Google a changé et que l'éditeur doit reprendre dans la carte. */
 export type Pull = RemoteChange;
-export type SyncResult = { enabled: boolean; waiting: number; lost: number; pulls: Pull[] };
+export type SyncResult = { enabled: boolean; waiting: number; lost: number; pulls: Pull[]; linked: string[] };
 type GoogleTask = { id: string; title?: string; notes?: string; status?: string; updated?: string; deleted?: boolean };
 
 const MAX_PER_PASS = 50;
@@ -145,6 +146,30 @@ async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, goo
   };
 }
 
+/** Supprime chez Google les tâches dont le nœud a été retiré avec ce choix ; une tâche déjà absente est simplement oubliée. */
+async function purge(id: string, google: Google, options: Options): Promise<void> {
+  const map = await readMap(id, options);
+  const doomed = Object.entries(map?.links ?? {}).filter(([, link]) => link.doomed && link.detached);
+  let failure: unknown;
+  for (const [nodeId, { taskId, listId }] of doomed) {
+    try {
+      const { url, init } = taskDeleteRequest(listId, taskId);
+      await google(url, init);
+    } catch (error) {
+      if (!(error instanceof GoogleHttpError) || error.status !== 404) {
+        failure ??= error;
+        continue;
+      }
+    }
+    await annotate(id, ({ links }) => {
+      if (links[nodeId]?.taskId !== taskId || !links[nodeId].detached) return {};
+      const { [nodeId]: _gone, ...rest } = links;
+      return { links: rest };
+    }, options);
+  }
+  if (failure) throw failure;
+}
+
 async function sync(id: string, listTitle: string, google: Google, options: SyncOptions): Promise<SyncResult | null> {
   const map = await readMap(id, options);
   if (!map) return null;
@@ -159,10 +184,12 @@ async function sync(id: string, listTitle: string, google: Google, options: Sync
       exchanged = await turn;
     }
   } finally {
-    await annotate(id, (latest) => ({ links: settleLinks(latest.root, latest.links) }), options);
+    await annotate(id, (latest) => ({ links: settleLinks(latest.root, latest.links, options.now?.getTime()) }), options);
   }
+  await purge(id, google, options);
   const latest = await readMap(id, options);
   return {
+    linked: latest ? linkedTasks(latest.root, latest.links) : [],
     enabled: map.sendTasks,
     waiting: create.length - batch.length + exchanged.waiting,
     lost: latest ? lostTasks(latest.root, latest.links) : 0,

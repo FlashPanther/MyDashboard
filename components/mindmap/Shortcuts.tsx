@@ -13,7 +13,7 @@ const SHORTCUTS: [string, string][] = [
   ['Alt T', 'Transformer en tâche, ou redevenir une idée'],
   ['Alt C, clic sur la case', 'Cocher, décocher la tâche : chaque branche affiche ses tâches faites sur le total'],
   ['Glisser un nœud', 'Le déplacer avec sa branche : le lien en pointillés montre son futur parent'],
-  ['Clic droit sur un nœud', 'Le transformer en tâche, replier ou déplier toute sa branche'],
+  ['Clic droit sur un nœud', 'Le transformer en tâche, le supprimer avec sa tâche Google, replier ou déplier sa branche'],
   ['Glisser sur le fond', 'Tracer un cadre pour sélectionner plusieurs nœuds, puis les supprimer ou les glisser ensemble'],
   ['Ctrl Z, Ctrl Maj Z', 'Annuler, rétablir'],
   ['= - 0 1', 'Zoom avant, arrière, 100 %, tout voir'],
