@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { TASK_TITLE_MAX } from '../google/taskWrites.ts';
-import type { MapNode } from './tree.ts';
+import { find, type MapNode } from './tree.ts';
 
 export type Fields = { title?: string; done?: boolean };
 export type Link = {
@@ -180,7 +180,8 @@ export function taskStatus(root: MapNode, links: Links): { linked: string[]; los
   const visit = (node: MapNode) => {
     const link = node.task ? links[node.id] : undefined;
     if (link?.lost) lost += 1;
-    else if (link && !link.detached) linked.push(node.id);
+    // Une tâche reprise vient d'une liste de l'utilisateur : on ne propose pas de la supprimer depuis la carte.
+    else if (link && !link.detached && !link.adopted) linked.push(node.id);
     node.children.forEach(visit);
   };
   visit(root);
@@ -188,13 +189,18 @@ export function taskStatus(root: MapNode, links: Links): { linked: string[]; los
 }
 
 /** À l'enregistrement : les nœuds retirés avec le choix de supprimer aussi leur tâche Google sont marqués. */
-export function doom(links: Links, root: MapNode, ids: readonly string[]): Links {
-  const present = new Set<string>();
+function allIds(root: MapNode): Set<string> {
+  const ids = new Set<string>();
   const visit = (node: MapNode) => {
-    present.add(node.id);
+    ids.add(node.id);
     node.children.forEach(visit);
   };
   visit(root);
+  return ids;
+}
+
+export function doom(links: Links, root: MapNode, ids: readonly string[]): Links {
+  const present = allIds(root);
   const next = { ...links };
   for (const id of ids) if (next[id] && !present.has(id)) next[id] = { ...next[id], doomed: true };
   return next;
@@ -205,16 +211,10 @@ export type Adoption = { nodeId: string; taskId: string; listId: string; title: 
 
 /** À l'enregistrement : relie les nœuds ajoutés pour une tâche existante, si le nœud est là et la tâche pas déjà suivie ici. */
 export function adoptLinks(links: Links, root: MapNode, adoptions: readonly Adoption[]): Links {
-  const present = new Set<string>();
-  const visit = (node: MapNode) => {
-    if (node.task) present.add(node.id);
-    node.children.forEach(visit);
-  };
-  visit(root);
   const followed = new Set(Object.values(links).filter((link) => !link.detached).map((link) => link.taskId));
   const next = { ...links };
   for (const { nodeId, taskId, listId, title } of adoptions) {
-    if (!present.has(nodeId) || next[nodeId] || followed.has(taskId)) continue;
+    if (!find(root, nodeId)?.task || next[nodeId] || followed.has(taskId)) continue;
     next[nodeId] = { taskId, listId, title: taskTitle(title), done: false, adopted: true };
     followed.add(taskId);
   }

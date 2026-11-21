@@ -98,8 +98,8 @@ export async function readMap(id: string, { dir = MAPS_DIR }: Options = {}): Pro
   }
 }
 
-/** Les tâches suivies (lien non détaché) par les autres cartes ; `null` si l'une d'elles est illisible et qu'on ne peut donc pas le savoir. */
-export async function tasksFollowedElsewhere(mapId: string, { dir = MAPS_DIR }: Options = {}): Promise<Set<string> | null> {
+/** Les tâches suivies (lien non détaché) par les cartes autres que `mapId` (toutes si `null`) ; `null` si l'une d'elles est illisible. */
+export async function tasksFollowedElsewhere(mapId: string | null, { dir = MAPS_DIR }: Options = {}): Promise<Set<string> | null> {
   const followed = new Set<string>();
   for (const id of await mapIds(dir)) {
     if (id === mapId) continue;
@@ -108,16 +108,6 @@ export async function tasksFollowedElsewhere(mapId: string, { dir = MAPS_DIR }: 
     for (const link of Object.values(map?.links ?? {})) if (!link.detached) followed.add(link.taskId);
   }
   return followed;
-}
-
-/** Toutes les tâches Google suivies par une carte (lien non détaché) : celles qui ne sont dans aucune carte sont « libres ». */
-export async function followedTasks({ dir = MAPS_DIR }: Options = {}): Promise<string[]> {
-  const followed = new Set<string>();
-  for (const id of await mapIds(dir)) {
-    const map = await readMap(id, { dir }).catch(() => null);
-    for (const link of Object.values(map?.links ?? {})) if (!link.detached) followed.add(link.taskId);
-  }
-  return [...followed];
 }
 
 export async function listMaps({ dir = MAPS_DIR }: Options = {}): Promise<MapSummary[]> {

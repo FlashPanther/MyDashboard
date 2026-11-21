@@ -209,10 +209,12 @@ async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, goo
     for (const listId of lists) {
       const key = `${map.id}:${listId}`;
       const tasks = await tasksIn(listId, google, since(cursors.get(key))).catch((error) => {
-        if (error instanceof GoogleHttpError && error.status === 404) return [];
-        throw error;
+        if (!(error instanceof GoogleHttpError) || error.status !== 404) throw error;
+        // Liste supprimée chez Google : ses tâches ont disparu avec elle, la carte le signale.
+        for (const link of Object.values(map.links)) if (link.listId === listId) gone.add(link.taskId);
+        return null;
       });
-      record(key, tasks);
+      if (tasks) record(key, tasks);
     }
     readAt.set(map.id, now);
     if (home) await send(map, batch, home.listId, home.existing.filter((task) => !task.deleted), google, options);

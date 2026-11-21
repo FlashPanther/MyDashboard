@@ -3,7 +3,6 @@ import {
   addChild,
   addParent,
   addSibling,
-  addTaskChild,
   applyRemote,
   find,
   foldBranch,
@@ -139,7 +138,7 @@ function step(state: EditorState, action: EditorAction): EditorState {
     }
     case 'adopt': {
       const settled = finishEditing(state, action.draft);
-      const root = addTaskChild(settled.root, action.parentId, action.id, action.text);
+      const root = addChild(settled.root, action.parentId, action.id, { text: action.text, task: { done: false } });
       return withinLimits(root) ? commit(settled, root, action.id) : settled;
     }
     case 'hideDone':

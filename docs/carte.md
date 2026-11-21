@@ -94,6 +94,9 @@ Puis le lien avec Google Tasks :
   changé est lu à l'ouverture de la carte. L'éditeur ouvert redemande toutes les minutes, et 1,5 s après chaque
   enregistrement : ce second appel fait en partie doublon avec l'envoi du serveur, mais c'est lui qui rapporte à la
   carte ce que Google a changé. Une carte importée n'envoie rien tant que son envoi n'est pas activé.
+- **Tâche reprise d'une autre liste** : elle reste dans sa liste ; la carte relit chaque liste où elle a des tâches. Une
+  liste supprimée chez Google rend ses tâches « disparues » dans la carte. La carte ne propose pas de supprimer chez
+  Google une tâche reprise. À trancher avant l'étape 13 : garder N listes, ou déplacer les tâches reprises dans « Cartes ».
 - **Une seule instance du tableau** : les verrous d'envoi vivent dans la mémoire du processus. À plusieurs instances,
   il faudrait une tâche planifiée Coolify ou un verrou dans un fichier.
 - **Comment le serveur parle à l'éditeur** : l'état coché vit dans la carte, que seul l'éditeur écrit. Ce que Google a

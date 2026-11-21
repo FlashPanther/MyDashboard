@@ -185,21 +185,11 @@ function stripBranchMarks(node: MapNode): void {
   node.children.forEach(stripBranchMarks);
 }
 
-export function addChild(root: MapNode, parentId: string, id: string): MapNode {
-  if (!find(root, parentId)) return root;
-  return change(root, (draft) => {
-    const parent = find(draft, parentId)!;
-    parent.children.push(newNode('', id));
-    parent.collapsed = false;
-  });
-}
-
-/** Ajoute sous `parentId` un nœud-tâche déjà nommé : une tâche existante reprise dans la carte. */
-export function addTaskChild(root: MapNode, parentId: string, id: string, text: string): MapNode {
+export function addChild(root: MapNode, parentId: string, id: string, content: Partial<Pick<MapNode, 'text' | 'task'>> = {}): MapNode {
   if (!find(root, parentId) || find(root, id)) return root;
   return change(root, (draft) => {
     const parent = find(draft, parentId)!;
-    parent.children.push({ ...newNode(text, id), task: { done: false } });
+    parent.children.push({ ...newNode('', id), ...content });
     parent.collapsed = false;
   });
 }
