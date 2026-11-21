@@ -7,10 +7,10 @@ const RETRY_MS = 30_000;
 const RETRY_MAX_MS = 300_000;
 const POLL_MS = 60_000;
 
-export type TaskSync = { state: 'ok' | 'unlinked' | 'failed'; enabled: boolean; waiting: number; lost: number; linked: string[] };
+export type TaskSync = { state: 'ok' | 'unlinked' | 'failed'; enabled: boolean; waiting: number; lost: number; blocked: number; linked: string[] };
 
 export function useTaskSync(id: string, saved: boolean, root: MapNode, pull: (changes: RemoteChange[]) => void) {
-  const [sync, setSync] = useState<TaskSync>({ state: 'ok', enabled: false, waiting: 0, lost: 0, linked: [] });
+  const [sync, setSync] = useState<TaskSync>({ state: 'ok', enabled: false, waiting: 0, lost: 0, blocked: 0, linked: [] });
   const [round, setRound] = useState(0);
   const failures = useRef(0);
 
@@ -19,6 +19,7 @@ export function useTaskSync(id: string, saved: boolean, root: MapNode, pull: (ch
       enabled?: boolean;
       waiting?: number;
       lost?: number;
+      blocked?: number;
       linked?: string[];
       pulls?: RemoteChange[];
       notConnected?: boolean;
@@ -30,6 +31,7 @@ export function useTaskSync(id: string, saved: boolean, root: MapNode, pull: (ch
         enabled: answer.enabled === true,
         waiting: answer.waiting ?? 0,
         lost: answer.lost ?? 0,
+        blocked: answer.blocked ?? 0,
         linked: answer.linked ?? [],
       };
       setSync(next);

@@ -7,7 +7,7 @@ import {
   reconcile,
   absorb,
   adoptLinks,
-  hasUnlinkedAdoption,
+  unlinkedAdoptions,
   settleLinks,
   settleReconciled,
   taskTitle,
@@ -23,7 +23,7 @@ import { find, type RemoteChange } from './tree.ts';
 export type Google = <T>(url: string, init?: RequestInit) => Promise<T>;
 /** Ce que Google a changé et que l'éditeur doit reprendre dans la carte. */
 export type Pull = RemoteChange;
-export type SyncResult = { enabled: boolean; waiting: number; lost: number; pulls: Pull[]; linked: string[] };
+export type SyncResult = { enabled: boolean; waiting: number; lost: number; blocked: number; pulls: Pull[]; linked: string[] };
 type GoogleTask = { id: string; title?: string; notes?: string; status?: string; updated?: string; deleted?: boolean };
 
 const MAX_PER_PASS = 50;
@@ -236,7 +236,7 @@ async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, goo
 
 /** Relie les nœuds repris d'une tâche existante ; si une autre carte est illisible, on attend de savoir qui la suit déjà. */
 async function relinkAdopted(map: StoredMap, options: Options): Promise<StoredMap> {
-  if (!hasUnlinkedAdoption(map.root, map.links)) return map;
+  if (!map.sendTasks || unlinkedAdoptions(map.root, map.links) === 0) return map;
   const elsewhere = await tasksFollowedElsewhere(map.id, options);
   if (!elsewhere) return map;
   return (await annotate(map.id, ({ root, links }) => ({ links: adoptLinks(links, root, elsewhere) }), options)) ?? map;
@@ -245,7 +245,10 @@ async function relinkAdopted(map: StoredMap, options: Options): Promise<StoredMa
 async function sync(id: string, listTitle: string, google: Google, options: SyncOptions): Promise<SyncResult | null> {
   const read = await readMap(id, options);
   if (!read) return null;
-  const map = await relinkAdopted(read, options);
+  // Sous le verrou des envois : deux cartes ne relient pas la même tâche, et une suppression ne croise pas une reprise.
+  const relinking = sending.then(() => relinkAdopted(read, options));
+  sending = relinking.catch(() => undefined);
+  const map = await relinking;
   const create = tasksToCreate(id, map.root, map.links);
   const batch = map.sendTasks ? create.slice(0, MAX_PER_PASS) : [];
   let exchanged: Exchanged = { waiting: 0, pulls: [] };
@@ -268,8 +271,10 @@ async function sync(id: string, listTitle: string, google: Google, options: Sync
   return {
     linked: status.linked,
     enabled: map.sendTasks,
-    waiting: create.length - batch.length + exchanged.waiting,
+    // Envoi éteint : les tâches reprises comptent aussi parmi celles qui attendent, pour proposer l'activation.
+    waiting: create.length - batch.length + exchanged.waiting + (map.sendTasks ? 0 : unlinkedAdoptions(map.root, map.links)),
     lost: status.lost,
+    blocked: latest ? unlinkedAdoptions(latest.root, latest.links) : 0,
     pulls: exchanged.pulls,
   };
 }

@@ -138,7 +138,7 @@ function step(state: EditorState, action: EditorAction): EditorState {
     }
     case 'adopt': {
       const settled = finishEditing(state, action.draft);
-      const root = addChild(settled.root, action.parentId, action.id, { text: action.text, task: { done: false, from: action.from } });
+      const root = addChild(settled.root, action.parentId, action.id, { text: action.text, task: { done: false }, from: action.from });
       return withinLimits(root) ? commit(settled, root, action.id) : settled;
     }
     case 'hideDone':

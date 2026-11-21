@@ -510,7 +510,7 @@ test('reprendre une tâche existante ajoute un nœud-tâche nommé sous le paren
   const parent = state.root.children[0].id;
   const adopted = reduce(state, { type: 'adopt', parentId: parent, id: 'livres', text: 'Rendre les livres', from: { taskId: 'p1', listId: 'L9' } });
   const node = find(adopted.root, 'livres')!;
-  assert.deepEqual([node.text, node.task], ['Rendre les livres', { done: false, from: { taskId: 'p1', listId: 'L9' } }]);
+  assert.deepEqual([node.text, node.task, node.from], ['Rendre les livres', { done: false }, { taskId: 'p1', listId: 'L9' }]);
   assert.equal(adopted.selected, 'livres');
   assert.equal(find(run(adopted, 'undo').root, 'livres'), null);
   assert.equal(reduce(adopted, { type: 'adopt', parentId: parent, id: 'livres', text: 'Encore', from: { taskId: 'p1', listId: 'L9' } }).root, adopted.root);

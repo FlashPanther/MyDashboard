@@ -7,20 +7,20 @@ import { test } from 'node:test';
 import { GoogleHttpError } from '../lib/google/errors.ts';
 import { annotate, createMap, readMap, saveMap } from '../lib/mindmap/store.ts';
 import { syncTasks, type Google, type SyncResult } from '../lib/mindmap/taskSync.ts';
-import { newNode, parse, serialize, type MapNode } from '../lib/mindmap/tree.ts';
+import { newNode, parse, serialize, toggleTask, type MapNode } from '../lib/mindmap/tree.ts';
 
 const folder = () => fs.mkdtemp(path.join(os.tmpdir(), 'cartes-'));
 const UPDATED = '2026-11-21T10:00:00.000Z';
 const LATER = '2026-11-21T11:00:00.000Z';
 const counts = (result: SyncResult | null) => {
-  const { linked: _linked, ...rest } = result!;
+  const { linked: _linked, blocked: _blocked, ...rest } = result!;
   return rest;
 };
 const hash = (id: string) => createHash('sha256').update(id).digest('hex').slice(0, 16);
 
 function adopting(root: MapNode): MapNode {
   const next = structuredClone(root);
-  next.children.push({ ...newNode('Rendre les livres', 'livres'), task: { done: false, from: { taskId: 'p1', listId: 'L9' } } });
+  next.children.push({ ...newNode('Rendre les livres', 'livres'), task: { done: false }, from: { taskId: 'p1', listId: 'L9' } });
   return next;
 }
 
@@ -711,4 +711,28 @@ test('une liste supprimée chez Google rend « disparues » les tâches reprises
   const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
   assert.equal(result?.lost, 1);
   assert.equal((await links()).livres.lost, true);
+});
+
+test('un nœud repris, redevenu idée puis de nouveau tâche, garde son origine : il n’est jamais créé chez Google', async () => {
+  const dir = await folder();
+  const root = adopting(map('une'));
+  const blocker = (await createMap(adopting(map()), { dir, sendTasks: true }))!;
+  const fake = fakeGoogle([{ id: 'L1', title: 'Cartes' }, { id: 'L9', title: 'Perso' }]);
+  (fake.tasks.L9 ??= []).push({ id: 'p1', title: 'Rendre les livres', updated: UPDATED });
+  await syncTasks(blocker.id, 'Cartes', fake.google, { dir, now: minute(0) });
+  const again = toggleTask(toggleTask(root, ['livres']), ['livres']);
+  assert.deepEqual(again.children.at(-1)?.from, { taskId: 'p1', listId: 'L9' });
+  const { id } = (await createMap(again, { dir, sendTasks: true }))!;
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  assert.deepEqual(fake.titles('L1'), ['une']);
+  assert.deepEqual(fake.titles('L9'), ['Rendre les livres']);
+  assert.equal(result?.blocked, 1);
+});
+
+test('une carte dont l’envoi est éteint ne relie pas ses tâches reprises, et propose de les envoyer', async () => {
+  const dir = await folder();
+  const { id } = (await createMap(adopting(map()), { dir }))!;
+  const result = await syncTasks(id, 'Cartes', fakeGoogle().google, { dir, now: minute(0) });
+  assert.equal(result?.waiting, 1);
+  assert.deepEqual((await readMap(id, { dir }))!.links, {});
 });

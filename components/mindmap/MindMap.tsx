@@ -226,6 +226,11 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
                 : 'Tâches envoyées à Google'}
           </ToolbarButton>
         )}
+        {google.blocked > 0 && (
+          <p role="status" className="font-mono text-xs text-amber">
+            {google.blocked > 1 ? `${google.blocked} tâches reprises sont` : 'Une tâche reprise est'} déjà suivie(s) par une autre carte : rien n’en part d’ici.
+          </p>
+        )}
         {google.lost > 0 && (
           <p role="status" className="font-mono text-xs text-amber">
             {google.lost > 1 ? `${google.lost} tâches n’existent plus` : 'Une tâche n’existe plus'} chez Google : la carte les garde, sans les
