@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fit, zoomAt } from '../lib/mindmap/view.ts';
+import { fit, reveal, zoomAt } from '../lib/mindmap/view.ts';
 
 const box = (x: number, y: number, width: number, height: number) => ({ x, y, width, height });
 
@@ -31,4 +31,19 @@ test('le zoom garde immobile le point sous le curseur', () => {
 test('le zoom reste dans ses bornes', () => {
   assert.equal(zoomAt({ x: 0, y: 0, scale: 2.5 }, 4, 0, 0).scale, 3);
   assert.equal(zoomAt({ x: 0, y: 0, scale: 0.3 }, 0.1, 0, 0).scale, 0.2);
+});
+
+test('un nœud déjà visible ne déplace pas la vue', () => {
+  const view = { x: 0, y: 0, scale: 1 };
+  assert.equal(reveal(view, box(200, 200, 100, 40), 1000, 600), view);
+});
+
+test('un nœud hors champ est ramené juste à l’intérieur des marges', () => {
+  const view = { x: 0, y: 0, scale: 1 };
+  assert.deepEqual(reveal(view, box(1200, 700, 100, 40), 1000, 600), { x: -360, y: -200, scale: 1 });
+  assert.deepEqual(reveal(view, box(-300, -100, 100, 40), 1000, 600), { x: 360, y: 160, scale: 1 });
+});
+
+test('le cadrage sur un nœud tient compte du zoom', () => {
+  assert.deepEqual(reveal({ x: 0, y: 0, scale: 2 }, box(600, 100, 100, 40), 1000, 600), { x: -460, y: 0, scale: 2 });
 });
