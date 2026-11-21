@@ -1,37 +1,66 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { writeJson } from '@/components/mindmap/writeJson';
-import { draftKey, eventOf, sendDelay, serializeDraft, statusOf, syncStep, toSend, type SyncState } from '@/lib/mindmap/sync';
+import {
+  draftKey,
+  eventOf,
+  isClean,
+  sendDelay,
+  serializeDraft,
+  statusOf,
+  syncStep,
+  toSend,
+  type SyncState,
+} from '@/lib/mindmap/sync';
 import type { MapNode } from '@/lib/mindmap/tree';
-import { writeStored } from '@/lib/storage';
+import { readStored, writeStored } from '@/lib/storage';
 
 const DRAFT_MS = 250;
 
-function keepDraft(id: string, sync: SyncState, root: MapNode) {
-  writeStored(draftKey(id), root === sync.base.root ? null : serializeDraft(sync.base.revision, root));
-}
-
 export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: (root: MapNode) => void) {
   const [sync, dispatch] = useReducer(syncStep, opened);
+  const [kept, setKept] = useState(true);
   const latest = useRef({ sync, root });
+  const inFlight = useRef(false);
+  const written = useRef<string | null>(null);
   useEffect(() => {
     latest.current = { sync, root };
   }, [sync, root]);
 
-  const transmit = useCallback(
-    async (next: MapNode, revision: number, keepalive = false) => {
-      dispatch({ type: 'sent', root: next });
-      const { status, body } = await writeJson(`/api/cartes/${id}`, 'PUT', { revision, root: next }, keepalive);
-      const event = eventOf(status, body);
-      dispatch(event);
-      if (event.type === 'accepted' && latest.current.root === next) writeStored(draftKey(id), null);
+  const keepDraft = useCallback(
+    (state: SyncState, current: MapNode) => {
+      const key = draftKey(id);
+      if (isClean(state, current)) {
+        // Un autre onglet a pu y écrire le sien : on n'efface que le brouillon qu'on a soi-même posé.
+        if (written.current !== null && readStored(key) === written.current) writeStored(key, null);
+        written.current = null;
+        return;
+      }
+      const text = serializeDraft(state.base.revision, current);
+      writeStored(key, text);
+      written.current = text;
+      setKept(readStored(key) === text);
     },
     [id],
   );
 
+  const transmit = useCallback(
+    async (next: MapNode, revision: number, keepalive = false) => {
+      if (inFlight.current) return;
+      inFlight.current = true;
+      dispatch({ type: 'sent', root: next });
+      const { status, body } = await writeJson(`/api/cartes/${id}`, 'PUT', { revision, root: next }, keepalive);
+      inFlight.current = false;
+      const event = eventOf(status, body);
+      dispatch(event);
+      keepDraft(syncStep({ ...latest.current.sync, sending: next }, event), latest.current.root);
+    },
+    [id, keepDraft],
+  );
+
   useEffect(() => {
-    const timer = setTimeout(() => keepDraft(id, sync, root), DRAFT_MS);
+    const timer = setTimeout(() => keepDraft(sync, root), DRAFT_MS);
     return () => clearTimeout(timer);
-  }, [id, root, sync]);
+  }, [root, sync, keepDraft]);
 
   useEffect(() => {
     const next = toSend(sync, root);
@@ -44,11 +73,11 @@ export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: 
     (final: MapNode) => {
       const current = latest.current.sync;
       latest.current = { sync: current, root: final };
-      keepDraft(id, current, final);
+      keepDraft(current, final);
       // Au-delà de 64 Kio, le navigateur refuse un envoi qui survit à la page : le brouillon prend le relais.
       if (toSend(current, final)) void transmit(final, current.base.revision, true);
     },
-    [id, transmit],
+    [keepDraft, transmit],
   );
 
   function settle(takeTheirs: boolean) {
@@ -57,5 +86,5 @@ export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: 
     if (takeTheirs) adopt(sync.theirs.root);
   }
 
-  return { status: statusOf(sync, root), settle, flush };
+  return { status: statusOf(sync, root), kept, settle, flush };
 }

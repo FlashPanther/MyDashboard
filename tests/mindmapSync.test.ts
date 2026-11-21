@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   eventOf,
+  isClean,
   opening,
   parseDraft,
   sendDelay,
@@ -121,4 +122,25 @@ test('un refus dont la version du serveur est déjà la mienne n’est pas un co
   const echoed = syncStep(sending, { type: 'conflict', theirs: { revision: 5, root: structuredClone(mine) } });
   assert.equal(statusOf(echoed, mine), 'saved');
   assert.deepEqual(echoed.base, { revision: 5, root: mine });
+});
+
+test('annuler pendant un envoi n’est pas « enregistré » : la carte d’avant repart dès l’accusé de réception', () => {
+  const sending = syncStep(clean(), { type: 'sent', root: mine });
+  assert.equal(isClean(sending, server.root), false);
+  assert.equal(statusOf(sending, server.root), 'saving');
+  const accepted = syncStep(sending, { type: 'accepted', revision: 5 });
+  assert.equal(toSend(accepted, server.root), server.root);
+});
+
+test('après une réponse perdue, revenir à la dernière carte connue la renvoie quand même', () => {
+  const lost = syncStep(syncStep(clean(), { type: 'sent', root: mine }), eventOf(0, null));
+  assert.equal(isClean(lost, server.root), false);
+  assert.equal(toSend(lost, server.root), server.root);
+  const back = syncStep(syncStep(lost, { type: 'sent', root: server.root }), eventOf(200, { revision: 6 }));
+  assert.equal(isClean(back, server.root), true);
+});
+
+test('pendant un conflit, revenir à la carte d’avant ne passe pas pour enregistré', () => {
+  assert.equal(isClean(refused(), server.root), false);
+  assert.equal(statusOf(refused(), server.root), 'conflict');
 });

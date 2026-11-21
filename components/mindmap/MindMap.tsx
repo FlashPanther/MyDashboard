@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { MapCanvas, type CanvasHandle } from '@/components/mindmap/MapCanvas';
 import { Shortcuts } from '@/components/mindmap/Shortcuts';
 import { useMapSync } from '@/components/mindmap/useMapSync';
@@ -9,27 +9,64 @@ import type { Send } from '@/components/mindmap/types';
 import { Preparing } from '@/components/Preparing';
 import { initialState, modeOf, reduce, shownRoot } from '@/lib/mindmap/editor';
 import { commandFor, isZoom, swallowed } from '@/lib/mindmap/keymap';
-import { draftKey, opening, parseDraft, type Copy, type Opened, type SyncStatus } from '@/lib/mindmap/sync';
+import { draftKey, isClean, opening, parseDraft, readCopy, type Opened, type SyncStatus } from '@/lib/mindmap/sync';
 import { countDescendants, serialize, taskProgress, type MapNode } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
+import { fetcher, HttpError } from '@/lib/useEndpoint';
 
 const HIDE_DONE_KEY = 'carte.masquerFaites';
 
 const STATUS: Record<SyncStatus, string> = {
   saved: 'Enregistrée',
   saving: 'Enregistrement…',
-  offline: 'Serveur injoignable : la carte est gardée dans ce navigateur, nouvel essai en cours.',
+  offline: 'Serveur injoignable : nouvel essai en cours, la carte attend dans ce navigateur.',
   conflict: 'Cette carte a été modifiée sur un autre appareil.',
   gone: 'Cette carte a été supprimée sur le serveur : exporte-la pour la garder.',
   refused: 'Le serveur refuse l’enregistrement : recharge la page, ou exporte la carte pour la garder.',
 };
 
-export function MindMap({ id, server }: { id: string; server: Copy }) {
+const UNKEPT = ' Ce navigateur ne peut rien garder : exporte la carte avant de fermer la page.';
+
+export function MindMap({ id }: { id: string }) {
   const [opened, setOpened] = useState<Opened | null>(null);
+  const [failure, setFailure] = useState('');
 
-  useEffect(() => setOpened(opening(server, parseDraft(readStored(draftKey(id))))), [id, server]);
+  useEffect(() => {
+    let stale = false;
+    fetcher(`/api/cartes/${id}`)
+      .then((body) => {
+        if (stale) return;
+        const server = readCopy(body);
+        if (!server) return setFailure('Carte illisible');
+        const result = opening(server, parseDraft(readStored(draftKey(id))));
+        if (isClean(result.sync, result.root)) writeStored(draftKey(id), null);
+        setOpened(result);
+      })
+      .catch((error: Error) => {
+        if (stale) return;
+        const missing = error instanceof HttpError && error.status === 404;
+        setFailure(missing ? 'Cette carte n’existe pas, ou plus.' : error.message);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [id]);
 
-  return opened ? <Editor id={id} opened={opened} /> : <Preparing>Préparation de la carte…</Preparing>;
+  if (opened) return <Editor id={id} opened={opened} />;
+  return (
+    <Preparing>
+      {failure ? (
+        <span>
+          {failure}{' '}
+          <Link href="/carte" className="underline">
+            Retour aux cartes
+          </Link>
+        </span>
+      ) : (
+        'Préparation de la carte…'
+      )}
+    </Preparing>
+  );
 }
 
 function Editor({ id, opened }: { id: string; opened: Opened }) {
@@ -62,12 +99,13 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     },
     [send],
   );
-  const { status, settle, flush } = useMapSync(id, opened.sync, root, adopt);
+  const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
   const leave = useCallback(() => {
     const draft = editingElement.current?.innerText;
     flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
   }, [flush]);
-  useEffect(() => leave, [leave]);
+  // En nettoyage d'effet ordinaire, React a déjà détaché le champ de saisie : le texte en cours serait perdu.
+  useLayoutEffect(() => leave, [leave]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -117,8 +155,9 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
             {hideDone ? `Tâches faites masquées (${hidden} nœud${hidden > 1 ? 's' : ''})` : 'Masquer les tâches faites'}
           </ToolbarButton>
         )}
-        <p role="status" className={`font-mono text-xs ${status === 'saved' || status === 'saving' ? 'text-muted' : 'text-amber'}`}>
+        <p role="status" className={`font-mono text-xs ${kept && (status === 'saved' || status === 'saving') ? 'text-muted' : 'text-amber'}`}>
           {STATUS[status]}
+          {!kept && status !== 'saved' && UNKEPT}
         </p>
         {status === 'conflict' && (
           <>

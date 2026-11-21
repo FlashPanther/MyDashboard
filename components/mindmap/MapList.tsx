@@ -12,12 +12,13 @@ import { relative } from '@/lib/time';
 import { useEndpoint } from '@/lib/useEndpoint';
 
 const BROWSER_MAP_KEY = 'carte.document';
+const BLANK_TITLE = 'Idée centrale';
 
 function browserMap(): MapNode | null {
   try {
     const stored = readStored(BROWSER_MAP_KEY);
     const map = stored ? parse(stored) : null;
-    return map && map.children.length > 0 ? map : null;
+    return map && (map.children.length > 0 || map.text !== BLANK_TITLE) ? map : null;
   } catch {
     return null;
   }
@@ -69,7 +70,7 @@ export function MapList() {
           ← Tableau
         </Link>
         <h1 className="font-display text-xl font-extrabold uppercase tracking-[0.16em] text-ink">Cartes</h1>
-        <button type="button" className="action" disabled={busy} onClick={() => create(newNode('Idée centrale'))}>
+        <button type="button" className="action" disabled={busy} onClick={() => create(newNode(BLANK_TITLE))}>
           Nouvelle carte
         </button>
         <button type="button" className="action" disabled={busy} onClick={() => fileInput.current?.click()}>

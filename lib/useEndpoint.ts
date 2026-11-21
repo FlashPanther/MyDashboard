@@ -17,7 +17,7 @@ export type EndpointState<T> = {
   refresh: () => void;
 };
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(
     message: string,
     readonly notConnected: boolean,
@@ -25,12 +25,13 @@ class HttpError extends Error {
     readonly apiDisabled = false,
     readonly service: string | null = null,
     readonly activationUrl: string | null = null,
+    readonly status = 0,
   ) {
     super(message);
   }
 }
 
-async function fetcher(url: string) {
+export async function fetcher(url: string) {
   const res = await fetch(url);
   const body = await res.json().catch(() => ({ error: `Réponse illisible (${res.status})` }));
   if (!res.ok)
@@ -41,6 +42,7 @@ async function fetcher(url: string) {
       Boolean(body.apiDisabled),
       body.service ?? null,
       body.activationUrl ?? null,
+      res.status,
     );
   return body;
 }
