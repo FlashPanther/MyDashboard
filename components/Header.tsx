@@ -26,7 +26,7 @@ export function Header({
   officeEvent: CalendarEvent | null;
 }) {
   const [clock, setClock] = useState<Date | null>(null);
-  const status = useEndpoint<{ configured: boolean; connected: boolean }>('/api/auth/status', 60);
+  const status = useEndpoint<{ configured: boolean; connected: boolean; expired?: boolean }>('/api/auth/status', 60);
 
   useEffect(() => {
     setClock(new Date());
@@ -70,7 +70,7 @@ export function Header({
             href="/api/auth/google"
             className="border border-amber px-2.5 py-1 font-display text-[11px] font-bold uppercase tracking-[0.18em] text-amber transition-colors hover:bg-amber hover:text-ground"
           >
-            Relier Google
+            {status.data.expired ? 'Google expiré : relier' : 'Relier Google'}
           </a>
         )}
         <span className="tnum font-mono text-3xl leading-none text-ink">{time}</span>

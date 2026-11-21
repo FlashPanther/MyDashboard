@@ -56,7 +56,11 @@ l'extension et les deux onglets est allumé.
 2. **API et services > Bibliothèque** : active *Google Calendar API*, *Google Tasks API*
    et *Gmail API*.
 3. **Écran de consentement OAuth** : type « Externe », ajoute ton adresse comme
-   utilisateur de test. L'application peut rester en mode test indéfiniment.
+   utilisateur de test. Tant que l'application reste en état « Test », Google annule la
+   liaison **sept jours** après chaque connexion : le tableau l'affiche alors par
+   « Google expiré : relier ». Pour une liaison qui dure, passe l'application en
+   « En production » (*Audience > Publier l'application*), puis relie Google une nouvelle
+   fois : un jeton obtenu pendant l'état « Test » garde sa limite de sept jours.
 4. **Identifiants > Créer > ID client OAuth > Application Web**. Ajoute l'URI de
    redirection autorisée :
    `http://localhost:3737/api/auth/google/callback`
