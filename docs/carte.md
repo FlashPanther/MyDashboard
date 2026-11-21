@@ -83,7 +83,10 @@ Puis le lien avec Google Tasks :
   Google ouvertes qui ne sont dans aucune carte ; « Ajouter » la place sous le nœud sélectionné. La tâche reste dans sa
   liste Google : la carte suit chaque liste où elle a des tâches. Codé et testé avec un Google en mémoire ; **reste à
   constater en ligne**.
-- [ ] **13. Reprendre les tâches existantes** et réduire le nombre de listes.
+- [ ] **13. Reprendre les tâches existantes** : « Reprendre mes tâches Google », dans la liste des cartes, crée une carte
+  avec une branche par liste et un nœud par tâche libre ; chaque tâche reste dans sa liste. Il reste à la réorganiser
+  dans tes cartes (glisser les nœuds), puis, si tu le décides, à réduire les listes. Codé et testé avec des tâches
+  simulées ; **reste à constater en ligne**.
 - [ ] **14. Alléger le tableau** : retirer l'ancien onglet « Carte », les panneaux de tâches devenus inutiles et les
   étiquettes dans les titres.
 
