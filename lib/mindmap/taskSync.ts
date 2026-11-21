@@ -29,7 +29,7 @@ const READ_EVERY_MS = 20_000;
 /** Marge prise sur la dernière date vue : une modification enregistrée chez Google pendant la lecture n'est pas manquée. */
 const CURSOR_MARGIN_MS = 5_000;
 const readAt = new Map<string, number>();
-/** Par carte, la plus récente modification vue chez Google : la lecture suivante ne demande que ce qui a changé depuis. */
+/** Par carte et par liste, la plus récente modification vue chez Google : la lecture suivante ne demande que ce qui a changé depuis. */
 const cursors = new Map<string, string>();
 type Exchanged = { waiting: number; pulls: Pull[] };
 /** `read: false` : ne lire Google que s'il faut créer ; pour les passes sans éditeur, qui n'ont personne à qui rendre ce qui a changé. */
@@ -186,19 +186,36 @@ async function exchange(map: StoredMap, batch: NewTask[], listTitle: string, goo
   const gone = new Set<string>();
   const due = followed && options.read !== false && now - (readAt.get(map.id) ?? 0) >= READ_EVERY_MS;
   if (batch.length > 0 || due) {
-    // Créer demande toute la liste, pour reconnaître les tâches déjà créées ; sinon, seul ce qui a changé suffit.
-    const known = Object.values(map.links)[0]?.listId;
-    const delta = batch.length === 0 && known ? since(cursors.get(map.id)) : undefined;
-    const { listId, existing } = delta
-      ? { listId: known!, existing: await tasksIn(known!, google, delta) }
-      : await destination(known, listTitle, google);
+    const record = (key: string, tasks: GoogleTask[]) => {
+      const latest = tasks.reduce((max, task) => (task.updated && task.updated > max ? task.updated : max), cursors.get(key) ?? '');
+      if (latest) cursors.set(key, latest);
+      for (const task of tasks) {
+        if (task.deleted) gone.add(task.id);
+        else remote.set(task.id, fieldsOf(task));
+      }
+    };
+    // Une tâche reprise reste dans sa liste : chaque liste où la carte a des tâches est relue, seulement pour ce qui a changé.
+    const lists = new Set(Object.values(map.links).map((link) => link.listId));
+    let home: { listId: string; existing: GoogleTask[] } | null = null;
+    if (batch.length > 0) {
+      // Créer demande toute la liste d'arrivée, pour reconnaître les tâches déjà créées.
+      const known = Object.values(map.links).find((link) => !link.adopted)?.listId;
+      home = await destination(known, listTitle, google);
+      record(`${map.id}:${home.listId}`, home.existing);
+      lists.delete(home.listId);
+      // La liste retenue a disparu chez Google : inutile de la relire tout de suite.
+      if (known && known !== home.listId) lists.delete(known);
+    }
+    for (const listId of lists) {
+      const key = `${map.id}:${listId}`;
+      const tasks = await tasksIn(listId, google, since(cursors.get(key))).catch((error) => {
+        if (error instanceof GoogleHttpError && error.status === 404) return [];
+        throw error;
+      });
+      record(key, tasks);
+    }
     readAt.set(map.id, now);
-    const latest = existing.reduce((max, task) => (task.updated && task.updated > max ? task.updated : max), cursors.get(map.id) ?? '');
-    if (latest) cursors.set(map.id, latest);
-    const alive = existing.filter((task) => !task.deleted);
-    for (const task of existing) if (task.deleted) gone.add(task.id);
-    for (const task of alive) remote.set(task.id, fieldsOf(task));
-    await send(map, batch, listId, alive, google, options);
+    if (home) await send(map, batch, home.listId, home.existing.filter((task) => !task.deleted), google, options);
   }
   const current = (await readMap(map.id, options)) ?? map;
   const plan = reconcile(current.root, settleLinks(current.root, absorb(current.links, remote, gone)), remote);

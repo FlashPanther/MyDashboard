@@ -504,3 +504,14 @@ test('un changement venu de Google ne touche pas le nœud en cours de saisie, et
   assert.equal(untouched.editing?.id, id);
   assert.equal(reduce(marked, { type: 'remote', changes: [{ id, done: false }] }).past.length, marked.past.length);
 });
+
+test('reprendre une tâche existante ajoute un nœud-tâche nommé sous le parent, sélectionné, en une étape d’annulation', () => {
+  const state = sample();
+  const parent = state.root.children[0].id;
+  const adopted = reduce(state, { type: 'adopt', parentId: parent, id: 'livres', text: 'Rendre les livres' });
+  const node = find(adopted.root, 'livres')!;
+  assert.deepEqual([node.text, node.task], ['Rendre les livres', { done: false }]);
+  assert.equal(adopted.selected, 'livres');
+  assert.equal(find(run(adopted, 'undo').root, 'livres'), null);
+  assert.equal(reduce(adopted, { type: 'adopt', parentId: parent, id: 'livres', text: 'Encore' }).root, adopted.root);
+});

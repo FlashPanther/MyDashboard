@@ -12,6 +12,8 @@ export type Link = {
   lost?: true;
   /** Le nœud a été retiré avec le choix de supprimer aussi sa tâche chez Google. */
   doomed?: true;
+  /** Tâche existante reprise dans la carte : elle reste dans sa liste, la carte n'y crée rien. */
+  adopted?: true;
   /** Le dernier état sur lequel la carte et Google étaient d'accord : un écart dit lequel des deux a changé. */
   title?: string;
   done?: boolean;
@@ -66,7 +68,7 @@ export function parseLinks(value: unknown): Links {
   const links: Links = {};
   if (typeof value !== 'object' || value === null) return links;
   for (const [nodeId, raw] of Object.entries(value)) {
-    const { taskId, listId, detached, lost, doomed, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
+    const { taskId, listId, detached, lost, doomed, adopted, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
     const pending = parseFields(incoming);
     if (typeof taskId !== 'string' || !taskId || typeof listId !== 'string' || !listId) continue;
     links[nodeId] = {
@@ -75,6 +77,7 @@ export function parseLinks(value: unknown): Links {
       ...(detached === true ? { detached } : {}),
       ...(lost === true ? { lost } : {}),
       ...(doomed === true ? { doomed } : {}),
+      ...(adopted === true ? { adopted } : {}),
       ...parseFields(raw),
       ...(typeof updated === 'string' ? { updated } : {}),
       ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}),
@@ -194,6 +197,27 @@ export function doom(links: Links, root: MapNode, ids: readonly string[]): Links
   visit(root);
   const next = { ...links };
   for (const id of ids) if (next[id] && !present.has(id)) next[id] = { ...next[id], doomed: true };
+  return next;
+}
+
+/** Une tâche Google existante à relier à un nœud ajouté pour elle. */
+export type Adoption = { nodeId: string; taskId: string; listId: string; title: string };
+
+/** À l'enregistrement : relie les nœuds ajoutés pour une tâche existante, si le nœud est là et la tâche pas déjà suivie ici. */
+export function adoptLinks(links: Links, root: MapNode, adoptions: readonly Adoption[]): Links {
+  const present = new Set<string>();
+  const visit = (node: MapNode) => {
+    if (node.task) present.add(node.id);
+    node.children.forEach(visit);
+  };
+  visit(root);
+  const followed = new Set(Object.values(links).filter((link) => !link.detached).map((link) => link.taskId));
+  const next = { ...links };
+  for (const { nodeId, taskId, listId, title } of adoptions) {
+    if (!present.has(nodeId) || next[nodeId] || followed.has(taskId)) continue;
+    next[nodeId] = { taskId, listId, title: taskTitle(title), done: false, adopted: true };
+    followed.add(taskId);
+  }
   return next;
 }
 

@@ -194,6 +194,16 @@ export function addChild(root: MapNode, parentId: string, id: string): MapNode {
   });
 }
 
+/** Ajoute sous `parentId` un nœud-tâche déjà nommé : une tâche existante reprise dans la carte. */
+export function addTaskChild(root: MapNode, parentId: string, id: string, text: string): MapNode {
+  if (!find(root, parentId) || find(root, id)) return root;
+  return change(root, (draft) => {
+    const parent = find(draft, parentId)!;
+    parent.children.push({ ...newNode(text, id), task: { done: false } });
+    parent.collapsed = false;
+  });
+}
+
 export function addSibling(root: MapNode, siblingId: string, id: string, where: 'above' | 'below'): MapNode {
   if (!locate(root, siblingId)) return root;
   return change(root, (draft) => {

@@ -12,6 +12,7 @@ import {
   type SyncState,
 } from '@/lib/mindmap/sync';
 import type { MapNode } from '@/lib/mindmap/tree';
+import type { Adoption } from '@/lib/mindmap/links';
 import { readStored, writeStored } from '@/lib/storage';
 
 const DRAFT_MS = 250;
@@ -24,6 +25,8 @@ export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: 
   const written = useRef<string | null>(null);
   /** Nœuds retirés avec le choix de supprimer aussi leur tâche Google : l'intention part avec l'enregistrement. */
   const forgotten = useRef(new Set<string>());
+  /** Nœuds ajoutés pour une tâche Google existante : le lien part avec l'enregistrement. */
+  const adopted = useRef(new Map<string, Adoption>());
   useEffect(() => {
     latest.current = { sync, root };
   }, [sync, root]);
@@ -51,10 +54,14 @@ export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: 
       inFlight.current = true;
       dispatch({ type: 'sent', root: next });
       const forget = [...forgotten.current];
-      const { status, body } = await writeJson(`/api/cartes/${id}`, 'PUT', { revision, root: next, forget }, keepalive);
+      const adopt = [...adopted.current.values()];
+      const { status, body } = await writeJson(`/api/cartes/${id}`, 'PUT', { revision, root: next, forget, adopt }, keepalive);
       inFlight.current = false;
       const event = eventOf(status, body);
-      if (event.type === 'accepted') forget.forEach((nodeId) => forgotten.current.delete(nodeId));
+      if (event.type === 'accepted') {
+        forget.forEach((nodeId) => forgotten.current.delete(nodeId));
+        adopt.forEach(({ nodeId }) => adopted.current.delete(nodeId));
+      }
       dispatch(event);
       keepDraft(syncStep({ ...latest.current.sync, sending: next }, event), latest.current.root);
     },
@@ -103,7 +110,8 @@ export function useMapSync(id: string, opened: SyncState, root: MapNode, adopt: 
     if (takeTheirs) adopt(sync.theirs.root);
   }
 
+  const adoptOnSave = useCallback((adoption: Adoption) => adopted.current.set(adoption.nodeId, adoption), []);
   const forgetOnSave = useCallback((ids: readonly string[]) => ids.forEach((nodeId) => forgotten.current.add(nodeId)), []);
 
-  return { status: statusOf(sync, root), kept, settle, flush, forgetOnSave };
+  return { status: statusOf(sync, root), kept, settle, flush, forgetOnSave, adoptOnSave };
 }

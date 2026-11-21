@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { doom, parseLinks, type Links } from './links.ts';
+import { adoptLinks, doom, parseLinks, type Adoption, type Links } from './links.ts';
 import { FORMAT_VERSION, parseDocument, type MapNode } from './tree.ts';
 
 const MAPS_DIR = path.join(process.cwd(), '.data', 'cartes');
@@ -110,6 +110,16 @@ export async function tasksFollowedElsewhere(mapId: string, { dir = MAPS_DIR }: 
   return followed;
 }
 
+/** Toutes les tâches Google suivies par une carte (lien non détaché) : celles qui ne sont dans aucune carte sont « libres ». */
+export async function followedTasks({ dir = MAPS_DIR }: Options = {}): Promise<string[]> {
+  const followed = new Set<string>();
+  for (const id of await mapIds(dir)) {
+    const map = await readMap(id, { dir }).catch(() => null);
+    for (const link of Object.values(map?.links ?? {})) if (!link.detached) followed.add(link.taskId);
+  }
+  return [...followed];
+}
+
 export async function listMaps({ dir = MAPS_DIR }: Options = {}): Promise<MapSummary[]> {
   const maps: MapSummary[] = [];
   for (const id of await mapIds(dir)) {
@@ -138,13 +148,13 @@ export function saveMap(
   id: string,
   root: MapNode,
   revision: number,
-  { now = new Date(), dir = MAPS_DIR, forget = [] }: Options & { forget?: readonly string[] } = {},
+  { now = new Date(), dir = MAPS_DIR, forget = [], adopt = [] }: Options & { forget?: readonly string[]; adopt?: readonly Adoption[] } = {},
 ): Promise<SaveResult> {
   return inTurn(id, async () => {
     const current = await readMap(id, { dir });
     if (!current) return null;
     if (current.revision !== revision) return { saved: false, map: current };
-    const links = forget.length > 0 ? doom(current.links, root, forget) : current.links;
+    const links = adoptLinks(forget.length > 0 ? doom(current.links, root, forget) : current.links, root, adopt);
     const map = { ...current, root, links, revision: revision + 1, updatedAt: now.toISOString() };
     await persist(dir, map);
     return { saved: true, map };

@@ -79,7 +79,10 @@ Puis le lien avec Google Tasks :
   est retiré, et l'enregistrement qui le retire demande au serveur de supprimer ses tâches chez Google. Annuler après
   coup remet le nœud et crée une tâche neuve. Supprimer une carte détache ses tâches, qui restent chez Google. Codé et
   testé avec un Google en mémoire ; **reste à constater en ligne**.
-- [ ] **12. Le menu latéral** des tâches Google qui ne sont dans aucune carte.
+- [ ] **12. Les tâches libres** : un panneau, ouvert depuis l'en-tête d'une carte qui envoie ses tâches, liste les tâches
+  Google ouvertes qui ne sont dans aucune carte ; « Ajouter » la place sous le nœud sélectionné. La tâche reste dans sa
+  liste Google : la carte suit chaque liste où elle a des tâches. Codé et testé avec un Google en mémoire ; **reste à
+  constater en ligne**.
 - [ ] **13. Reprendre les tâches existantes** et réduire le nombre de listes.
 - [ ] **14. Alléger le tableau** : retirer l'ancien onglet « Carte », les panneaux de tâches devenus inutiles et les
   étiquettes dans les titres.

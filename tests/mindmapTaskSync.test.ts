@@ -46,7 +46,7 @@ function fakeGoogle(lists: { id: string; title: string }[] = [{ id: 'L1', title:
       return { id: 'liste-neuve' };
     }
     const listId = pathname.split('/')[4];
-    if (listId === faults.missingList) throw new Error('liste disparue');
+    if (listId === faults.missingList) throw new GoogleHttpError('liste disparue', 404);
     if (method === 'GET') {
       const since = new URL(url).searchParams.get('updatedMin');
       reads.push(since);
@@ -645,4 +645,39 @@ test('si une autre carte est illisible, la suppression chez Google attend : on n
   await fs.rm(path.join(dir, '11111111-1111-4111-8111-111111111111.json'));
   await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
   assert.deepEqual(fake.titles(), []);
+});
+
+test('une tâche existante reprise dans la carte reste dans sa liste : elle est suivie, rien n’est créé, ses changements reviennent', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  const fake = fakeGoogle([
+    { id: 'L1', title: 'Cartes' },
+    { id: 'L9', title: 'Perso' },
+  ]);
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(0) });
+  (fake.tasks.L9 ??= []).push({ id: 'p1', title: 'Rendre les livres', updated: UPDATED });
+  const withAdopted = map('une');
+  withAdopted.children.push({ ...newNode('Rendre les livres', 'livres'), task: { done: false } });
+  await saveMap(id, withAdopted, 1, { dir, adopt: [{ nodeId: 'livres', taskId: 'p1', listId: 'L9', title: 'Rendre les livres' }] });
+  assert.deepEqual((await links()).livres, { taskId: 'p1', listId: 'L9', title: 'Rendre les livres', done: false, adopted: true });
+  fake.calls.length = 0;
+  await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(1) });
+  assert.deepEqual(fake.calls.filter((call) => call.startsWith('POST')), []);
+  assert.deepEqual(fake.titles('L1'), ['une']);
+  Object.assign(fake.tasks.L9[0], { status: 'completed', updated: '2026-11-21T14:00:00.000Z' });
+  const result = await syncTasks(id, 'Cartes', fake.google, { dir, now: minute(2) });
+  assert.deepEqual(result?.pulls, [{ id: 'livres', done: true }]);
+});
+
+test('une tâche déjà suivie par la carte, ou un nœud absent, n’est pas reprise', async () => {
+  const { dir, id, links } = await sending(map('une'));
+  await syncTasks(id, 'Cartes', fakeGoogle().google, { dir, now: minute(0) });
+  await saveMap(id, map('une'), 1, {
+    dir,
+    adopt: [
+      { nodeId: 'absent', taskId: 'p1', listId: 'L9', title: 'Absent' },
+      { nodeId: 'une', taskId: 'p2', listId: 'L9', title: 'Une' },
+    ],
+  });
+  assert.deepEqual(Object.keys(await links()), ['une']);
+  assert.equal((await links()).une.taskId, 'g1');
 });

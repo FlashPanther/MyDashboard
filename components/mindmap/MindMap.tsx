@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { MapCanvas, type CanvasHandle } from '@/components/mindmap/MapCanvas';
 import { Shortcuts } from '@/components/mindmap/Shortcuts';
+import { TaskShelf } from '@/components/mindmap/TaskShelf';
+import type { TaskItem } from '@/app/api/tasks/route';
 import { useMapSync } from '@/components/mindmap/useMapSync';
 import { useTaskSync } from '@/components/mindmap/useTaskSync';
 import { writeJson } from '@/components/mindmap/writeJson';
@@ -130,9 +132,18 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     },
     [send],
   );
-  const { status, kept, settle, flush, forgetOnSave } = useMapSync(id, opened.sync, root, adopt);
+  const { status, kept, settle, flush, forgetOnSave, adoptOnSave } = useMapSync(id, opened.sync, root, adopt);
+  const [shelf, setShelf] = useState(false);
   const pull = useCallback((changes: RemoteChange[]) => send({ type: 'remote', changes }), [send]);
   const { sync: google, toggle: sendTasks } = useTaskSync(id, status === 'saved', root, pull);
+  const addTask = useCallback(
+    (task: TaskItem) => {
+      const nodeId = crypto.randomUUID();
+      adoptOnSave({ nodeId, taskId: task.id, listId: task.listId, title: task.title });
+      send({ type: 'adopt', parentId: latest.current.selected ?? root.id, id: nodeId, text: task.title });
+    },
+    [adoptOnSave, send, root.id],
+  );
   // Sur la carte entière : une tâche faite masquée dans la branche est retirée avec elle.
   const linkedIn = useCallback((nodeId: string) => [...branchIds(root, [nodeId])].filter((each) => google.linked.includes(each)), [root, google.linked]);
   const removeWithTasks = useCallback(
@@ -202,6 +213,11 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
           {STATUS[status]}
           {!kept && status !== 'saved' && UNKEPT}
         </p>
+        {google.enabled && (
+          <ToolbarButton pressed={shelf} onPress={() => setShelf(!shelf)}>
+            Tâches libres
+          </ToolbarButton>
+        )}
         {(google.enabled || google.waiting > 0) && (
           <ToolbarButton pressed={google.enabled} onPress={() => sendTasks(!google.enabled)}>
             {!google.enabled
@@ -247,6 +263,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         linkedIn={linkedIn}
         removeWithTasks={removeWithTasks}
       />
+      {shelf && google.enabled && <TaskShelf onAdd={addTask} onClose={() => setShelf(false)} />}
       <Shortcuts />
     </div>
   );
