@@ -11,7 +11,7 @@ const SHORTCUTS: [string, string][] = [
   ['Échap', 'Finir la saisie, désélectionner'],
   ['Suppr', 'Supprimer la branche'],
   ['Alt T', 'Transformer en tâche, ou redevenir une idée'],
-  ['Alt C, clic sur la case', 'Cocher, décocher la tâche'],
+  ['Alt C, clic sur la case', 'Cocher, décocher la tâche : chaque branche affiche ses tâches faites sur le total'],
   ['Glisser un nœud', 'Le déplacer avec sa branche : le lien en pointillés montre son futur parent'],
   ['Clic droit sur un nœud', 'Le transformer en tâche, replier ou déplier toute sa branche'],
   ['Glisser sur le fond', 'Tracer un cadre pour sélectionner plusieurs nœuds, puis les supprimer ou les glisser ensemble'],

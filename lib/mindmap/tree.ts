@@ -79,6 +79,24 @@ export function countDescendants(node: MapNode): number {
   return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
 }
 
+export type Progress = { done: number; total: number };
+
+export function taskProgress(root: MapNode): Map<string, Progress> {
+  const byBranch = new Map<string, Progress>();
+  const count = (node: MapNode): Progress => {
+    const within = { done: 0, total: 0 };
+    for (const child of node.children) {
+      const below = count(child);
+      within.done += below.done + (child.task?.done ? 1 : 0);
+      within.total += below.total + (child.task ? 1 : 0);
+    }
+    if (within.total > 0) byBranch.set(node.id, within);
+    return within;
+  };
+  count(root);
+  return byBranch;
+}
+
 export function visibleNodes(root: MapNode): VisibleNode[] {
   const result: VisibleNode[] = [];
   const visit = (node: MapNode, parentId: string | null, depth: number, colour: number, side: Side): void => {

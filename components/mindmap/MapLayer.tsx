@@ -1,13 +1,15 @@
-import { memo, useLayoutEffect, type CSSProperties, type RefObject } from 'react';
+import { memo, useLayoutEffect, useMemo, type CSSProperties, type RefObject } from 'react';
 import { branchColour, FADED, LINK, nodeClass, nodeStyle } from '@/components/mindmap/nodeStyle';
 import { keepFocus } from '@/components/mindmap/keepFocus';
 import { TaskBox } from '@/components/mindmap/TaskBox';
 import type { Send } from '@/components/mindmap/types';
 import type { Editing } from '@/lib/mindmap/editor';
 import { linkPath, type Box } from '@/lib/mindmap/layout';
-import { branchesOn, countDescendants, SIDES, type MapNode, type Side, type VisibleNode } from '@/lib/mindmap/tree';
+import { branchesOn, countDescendants, SIDES, taskProgress, type MapNode, type Progress, type Side, type VisibleNode } from '@/lib/mindmap/tree';
 
 type Observe = (element: HTMLElement | null) => (() => void) | undefined;
+
+const PILL = 'rounded-full border border-rule px-1.5 font-mono';
 
 export const MapLayer = memo(function MapLayer({
   root,
@@ -32,6 +34,7 @@ export const MapLayer = memo(function MapLayer({
   observe: Observe;
   send: Send;
 }) {
+  const progress = useMemo(() => taskProgress(root), [root]);
   return (
     <>
       <svg aria-hidden="true" className="pointer-events-none absolute left-0 top-0 h-px w-px overflow-visible">
@@ -85,6 +88,20 @@ export const MapLayer = memo(function MapLayer({
           />
         ) : null,
       )}
+
+      {visible.map(({ node, depth, side }) => {
+        const within = progress.get(node.id);
+        return within ? (
+          <ProgressBadge
+            key={node.id}
+            id={node.id}
+            progress={within}
+            box={boxes.get(node.id)!}
+            anchor={depth === 0 ? 'centre' : side}
+            faded={lifted.has(node.id)}
+          />
+        ) : null;
+      })}
 
       {visible.flatMap(({ node, depth, colour, side }) => {
         if (node.children.length === 0) return [];
@@ -144,6 +161,41 @@ function EditedNode({
   );
 }
 
+function ProgressBadge({
+  id,
+  progress: { done, total },
+  box,
+  anchor,
+  faded,
+}: {
+  id: string;
+  progress: Progress;
+  box: Box;
+  anchor: Side | 'centre';
+  faded: boolean;
+}) {
+  const place = {
+    left: { left: box.x, transform: 'translate(0, -50%)' },
+    centre: { left: box.x + box.width / 2, transform: 'translate(-50%, -50%)' },
+    right: { left: box.x + box.width, transform: 'translate(-100%, -50%)' },
+  }[anchor];
+  const label = `Tâches faites dans cette branche : ${done} sur ${total}`;
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      data-id={id}
+      className={`absolute cursor-pointer select-none bg-panel ${PILL} text-[10px] leading-[14px] ${
+        done === total ? 'text-sky' : 'text-muted'
+      }${faded ? FADED : ''}`}
+      style={{ ...place, top: box.y }}
+    >
+      {done}/{total}
+    </span>
+  );
+}
+
 function FoldToggle({
   node,
   box,
@@ -161,7 +213,7 @@ function FoldToggle({
 }) {
   const gap = node.collapsed ? 6 : 3;
   const shape = node.collapsed
-    ? 'h-5 min-w-5 rounded-full border border-rule px-1.5 font-mono text-xs leading-[18px] text-muted hover:border-ink hover:text-ink'
+    ? `${PILL} h-5 min-w-5 text-xs leading-[18px] text-muted hover:border-ink hover:text-ink`
     : 'h-3 w-3 rounded-full border-2 border-[color:var(--branch,var(--color-ink))] hover:bg-[color:var(--branch,var(--color-ink))]';
   return (
     <button
