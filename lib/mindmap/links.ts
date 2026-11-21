@@ -12,8 +12,10 @@ export type Link = {
   lost?: true;
   /** Le nœud a été retiré avec le choix de supprimer aussi sa tâche chez Google. */
   doomed?: true;
-  /** Tâche existante reprise dans la carte : elle reste dans sa liste, la carte n'y crée rien. */
+  /** Tâche existante reprise dans la carte : la carte ne la crée pas, elle la range dans sa propre liste. */
   adopted?: true;
+  /** Google refuse de déplacer cette tâche (récurrente, assignée) : elle reste dans sa liste. */
+  stay?: true;
   /** Le dernier état sur lequel la carte et Google étaient d'accord : un écart dit lequel des deux a changé. */
   title?: string;
   done?: boolean;
@@ -68,7 +70,7 @@ export function parseLinks(value: unknown): Links {
   const links: Links = {};
   if (typeof value !== 'object' || value === null) return links;
   for (const [nodeId, raw] of Object.entries(value)) {
-    const { taskId, listId, detached, lost, doomed, adopted, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
+    const { taskId, listId, detached, lost, doomed, adopted, stay, updated, incoming } = (raw ?? {}) as Record<string, unknown>;
     const pending = parseFields(incoming);
     if (typeof taskId !== 'string' || !taskId || typeof listId !== 'string' || !listId) continue;
     links[nodeId] = {
@@ -78,6 +80,7 @@ export function parseLinks(value: unknown): Links {
       ...(lost === true ? { lost } : {}),
       ...(doomed === true ? { doomed } : {}),
       ...(adopted === true ? { adopted } : {}),
+      ...(stay === true ? { stay } : {}),
       ...parseFields(raw),
       ...(typeof updated === 'string' ? { updated } : {}),
       ...(Object.keys(pending).length > 0 ? { incoming: pending } : {}),

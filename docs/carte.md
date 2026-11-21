@@ -84,8 +84,9 @@ Puis le lien avec Google Tasks :
   liste Google : la carte suit chaque liste où elle a des tâches. Codé et testé avec un Google en mémoire ; **reste à
   constater en ligne**.
 - [ ] **13. Reprendre les tâches existantes** : « Reprendre mes tâches Google », dans la liste des cartes, crée une carte
-  avec une branche par liste et un nœud par tâche libre ; chaque tâche reste dans sa liste. Il reste à la réorganiser
-  dans tes cartes (glisser les nœuds), puis, si tu le décides, à réduire les listes. Codé et testé avec des tâches
+  avec une branche par liste et un nœud par tâche libre. Décision de Thomas (21 novembre) : toute tâche reprise, par ce
+  bouton ou par le panneau « Tâches libres », est rangée dans la liste « Cartes » ; les autres listes se vident au fil des
+  reprises. Une tâche que Google refuse de déplacer (récurrente, assignée) reste dans sa liste. Codé et testé avec des tâches
   simulées ; **reste à constater en ligne**. L'échéance et le détail des tâches ne passent pas dans la carte, qui n'a pas
   de dates ; ils restent dans Google.
 - [x] **14. Alléger le tableau** : l'ancien onglet « Carte » est retiré ; le panneau des tâches ne montre plus que ce

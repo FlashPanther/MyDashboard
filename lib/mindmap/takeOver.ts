@@ -6,7 +6,7 @@ export type OpenTask = Pick<TaskItem, 'id' | 'title' | 'list' | 'listId'>;
 
 /**
  * Une carte qui reprend les tâches Google libres : une branche par liste, un nœud-tâche par tâche. Chaque nœud porte son
- * origine : le serveur le relie à sa tâche, qui reste dans sa liste, sans jamais rien créer chez Google.
+ * origine : le serveur le relie à sa tâche, sans jamais rien créer chez Google, puis la range dans la liste des cartes.
  */
 export function takeOverMap(tasks: readonly OpenTask[], followed: ReadonlySet<string>, newId: () => string = () => crypto.randomUUID()): MapNode | null {
   const free = tasks.filter((task) => !followed.has(task.id) && task.title.trim());
