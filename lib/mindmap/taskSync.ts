@@ -49,7 +49,6 @@ const running = new Map<string, Promise<SyncResult | null>>();
 /** Par carte, une passe demandée pendant la passe en cours, et si l'un des demandeurs voulait qu'on relise Google. */
 const again = new Map<string, { read: boolean }>();
 let sending: Promise<unknown> = Promise.resolve();
-/** La liste des cartes, par titre : une fois les tâches reprises rangées, plus besoin de la rechercher. */
 const homes = new Map<string, string>();
 
 async function listNamed(title: string, google: Google): Promise<string> {
@@ -182,14 +181,21 @@ async function purge(map: StoredMap, google: Google, options: Options): Promise<
   return (await readMap(map.id, options)) ?? map;
 }
 
+function arrivedIn(listId: string, task: GoogleTask): Partial<Link> {
+  return { listId, taskId: task.id, ...(task.updated ? { updated: task.updated } : {}) };
+}
+
 /**
- * Range dans la liste des cartes les tâches reprises d'autres listes. Une tâche que Google refuse de déplacer reste où elle
- * est ; une tâche introuvable dans sa liste a pu y arriver avec sa tâche parente.
+ * Range dans la liste des cartes les tâches reprises d'autres listes. Google refuse de déplacer une tâche récurrente : elle
+ * reste où elle est. Une sous-tâche introuvable dans sa liste a pu partir avec sa tâche parente.
  */
 async function gather(mapId: string, listTitle: string, google: Google, options: Options): Promise<void> {
   const current = await readMap(mapId, options);
-  const away = Object.entries(current?.links ?? {}).filter(([, link]) => link.adopted && !link.stay && !link.detached && !link.lost && !link.doomed);
-  if (away.length === 0 || away.every(([, link]) => link.listId === homes.get(listTitle))) return;
+  if (!current) return;
+  const away = Object.entries(current.links).filter(
+    ([nodeId, link]) => link.adopted && !link.stay && !link.detached && !link.lost && !link.doomed && find(current.root, nodeId)?.task,
+  );
+  if (away.every(([, link]) => link.listId === homes.get(listTitle))) return;
   const home = await listNamed(listTitle, google);
   homes.set(listTitle, home);
   const items = away
@@ -200,16 +206,16 @@ async function gather(mapId: string, listTitle: string, google: Google, options:
     mapId,
     items,
     async ({ taskId, listId }) => {
-      const arrived = (task: GoogleTask): Partial<Link> => ({ listId: home, taskId: task.id, ...(task.updated ? { updated: task.updated } : {}) });
       try {
         const { url, init } = taskChangeRequest(taskId, { listId, moveTo: home });
-        return arrived(await google<GoogleTask>(url, init));
+        return arrivedIn(home, await google<GoogleTask>(url, init));
       } catch (error) {
-        if (error instanceof GoogleHttpError && (error.status === 400 || error.status === 403)) return { stay: true };
-        if (!(error instanceof GoogleHttpError) || error.status !== 404) throw error;
-        const { url, init } = taskRequest(home, taskId);
-        return arrived(await google<GoogleTask>(url, init).catch(() => Promise.reject(error)));
+        if (!(error instanceof GoogleHttpError)) throw error;
+        if (error.status === 400) return { stay: true };
+        if (error.status !== 404) throw error;
       }
+      const { url, init } = taskRequest(home, taskId);
+      return arrivedIn(home, await google<GoogleTask>(url, init));
     },
     { lost: true },
     options,
