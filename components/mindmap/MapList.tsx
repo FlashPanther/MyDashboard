@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { writeJson } from '@/components/mindmap/writeJson';
 import { Preparing } from '@/components/Preparing';
 import type { MapSummary } from '@/lib/mindmap/store';
+import { draftKey } from '@/lib/mindmap/sync';
 import { newNode, parse, type MapNode } from '@/lib/mindmap/tree';
 import { readStored, writeStored } from '@/lib/storage';
 import { relative } from '@/lib/time';
@@ -30,6 +31,7 @@ export function MapList() {
   const [local, setLocal] = useState<MapNode | null>(null);
   const [failure, setFailure] = useState('');
   const [busy, setBusy] = useState(false);
+  const [doomed, setDoomed] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const notice = failure || list.error;
 
@@ -47,6 +49,17 @@ export function MapList() {
     setFailure(error ?? 'Création impossible');
     setBusy(false);
     return false;
+  }
+
+  async function remove(id: string) {
+    setBusy(true);
+    setFailure('');
+    const { status, body } = await writeJson(`/api/cartes/${id}`, 'DELETE');
+    if (status === 200 || status === 404) writeStored(draftKey(id), null);
+    else setFailure((body as { error?: string } | null)?.error ?? 'Suppression impossible');
+    setDoomed(null);
+    setBusy(false);
+    list.refresh();
   }
 
   async function importFile(file: File | undefined) {
@@ -113,16 +126,43 @@ export function MapList() {
       {maps && maps.length === 0 && <p className="text-sm text-muted">Aucune carte sur le serveur pour l’instant.</p>}
 
       <ul className="flex flex-col gap-2">
-        {maps?.map((map) => (
-          <li key={map.id}>
-            <Link href={`/carte/${map.id}`} className="panel flex items-baseline justify-between gap-4 px-4 py-3 hover:border-ink">
-              <span className="min-w-0 truncate font-display font-bold text-ink">{map.title || 'Sans titre'}</span>
-              <time dateTime={map.updatedAt} className="shrink-0 font-mono text-xs text-muted">
-                {relative(map.updatedAt)}
-              </time>
-            </Link>
-          </li>
-        ))}
+        {maps?.map((map) => {
+          const title = map.title || 'Sans titre';
+          return (
+            <li key={map.id} className="panel flex items-center gap-3 pr-3 hover:border-ink">
+              {doomed === map.id ? (
+                <>
+                  <p className="min-w-0 flex-1 truncate px-4 py-3 text-sm">
+                    Supprimer <strong>{title}</strong> ?
+                  </p>
+                  <button type="button" className="action" disabled={busy} onClick={() => remove(map.id)}>
+                    Oui, supprimer
+                  </button>
+                  <button type="button" className="action" disabled={busy} onClick={() => setDoomed(null)}>
+                    Annuler
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link href={`/carte/${map.id}`} className="flex min-w-0 flex-1 items-baseline justify-between gap-4 py-3 pl-4">
+                    <span className="min-w-0 truncate font-display font-bold text-ink">{title}</span>
+                    <time dateTime={map.updatedAt} className="shrink-0 font-mono text-xs text-muted">
+                      {relative(map.updatedAt)}
+                    </time>
+                  </Link>
+                  <button
+                    type="button"
+                    className="font-mono text-xs text-muted hover:text-ink"
+                    disabled={busy}
+                    onClick={() => setDoomed(map.id)}
+                  >
+                    Supprimer
+                  </button>
+                </>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </main>
   );
