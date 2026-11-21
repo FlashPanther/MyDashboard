@@ -1,7 +1,8 @@
 import { branchesOn, visibleChildren, type MapNode } from './tree.ts';
 
 export type Size = { width: number; height: number };
-export type Box = Size & { x: number; y: number };
+export type Point = { x: number; y: number };
+export type Box = Size & Point;
 type Gaps = { x: number; y: number };
 
 type Measure = { size: Size; childrenHeight: number; height: number };
@@ -55,6 +56,16 @@ export function carried(boxes: Map<string, Box>, ids: Iterable<string>, anchorId
     result.set(id, { ...box, x: (mirrored ? axis - box.x - box.width : box.x) + dx, y: box.y + dy });
   }
   return result;
+}
+
+export function boxesIn(boxes: Map<string, Box>, from: Point, to: Point): string[] {
+  const left = Math.min(from.x, to.x);
+  const right = Math.max(from.x, to.x);
+  const top = Math.min(from.y, to.y);
+  const bottom = Math.max(from.y, to.y);
+  return [...boxes]
+    .filter(([, box]) => box.x <= right && box.x + box.width >= left && box.y <= bottom && box.y + box.height >= top)
+    .map(([id]) => id);
 }
 
 export function linkPath(parent: Box, child: Box): string {

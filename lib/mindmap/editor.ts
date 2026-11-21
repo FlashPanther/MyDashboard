@@ -11,7 +11,9 @@ import {
   rename,
   sameMap,
   move,
+  removeAll,
   toggleCollapsed,
+  visibleNodes,
   withinLimits,
   type MapNode,
   type Side,
@@ -21,7 +23,7 @@ export type Snapshot = { root: MapNode; selected: string | null };
 
 export type Editing = { id: string; initial: string | null; before: Snapshot };
 
-export type EditorState = Snapshot & { editing: Editing | null; past: Snapshot[]; future: Snapshot[] };
+export type EditorState = Snapshot & { group: string[]; editing: Editing | null; past: Snapshot[]; future: Snapshot[] };
 
 export type EditorAction = { draft?: string; newId?: string } & (
   | { type: 'command'; command: EditCommand; key?: string }
@@ -31,6 +33,7 @@ export type EditorAction = { draft?: string; newId?: string } & (
   | { type: 'toggle'; id: string }
   | { type: 'replace'; root: MapNode }
   | { type: 'move'; ids: string[]; parentId: string; beforeId: string | null; side: Side }
+  | { type: 'mark'; ids: string[] }
 );
 
 type InsertCommand = 'child' | 'sibling' | 'siblingAbove' | 'parent';
@@ -46,15 +49,22 @@ const INSERTS: Record<InsertCommand, Insert> = {
 };
 
 export function initialState(root: MapNode): EditorState {
-  return { root, selected: root.id, editing: null, past: [], future: [] };
+  return { root, selected: root.id, group: [], editing: null, past: [], future: [] };
 }
 
 export function modeOf(state: EditorState): Mode {
   if (state.editing) return 'editing';
+  if (state.group.length) return 'multiple';
   return state.selected ? 'selected' : 'idle';
 }
 
 export function reduce(state: EditorState, action: EditorAction): EditorState {
+  const next = step(state, action);
+  if (action.type === 'mark' || action.type === 'move' || next.group.length === 0) return next;
+  return { ...next, group: [] };
+}
+
+function step(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case 'command':
       return runCommand(state, action.command, action.draft, action.key ?? '', action.newId);
@@ -76,6 +86,12 @@ export function reduce(state: EditorState, action: EditorAction): EditorState {
       const settled = finishEditing(state, action.draft);
       const root = move(settled.root, action.ids, action.parentId, action.beforeId, action.side);
       return withinLimits(root) ? commit(settled, root, settled.selected) : settled;
+    }
+    case 'mark': {
+      const settled = finishEditing(state, action.draft);
+      const marked = new Set(action.ids);
+      const ids = visibleNodes(settled.root).map(({ node }) => node.id).filter((id) => marked.has(id));
+      return { ...settled, selected: ids[0] ?? null, group: ids.length > 1 ? ids : [] };
     }
   }
 }
@@ -153,7 +169,7 @@ function runCommand(
       return selected ? commit(settled, toggleCollapsed(root, selected), selected) : settled;
     case 'delete': {
       if (!selected) return settled;
-      const removal = remove(root, selected);
+      const removal = settled.group.length ? removeAll(root, new Set(settled.group)) : remove(root, selected);
       return commit(settled, removal.root, removal.next ?? selected);
     }
     case 'left':

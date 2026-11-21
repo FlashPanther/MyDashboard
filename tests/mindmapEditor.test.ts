@@ -276,3 +276,65 @@ test('un déplacement qui ferait dépasser la profondeur relisible est ignoré',
   assert.equal(moved.root, state.root);
   assert.equal(moved.past.length, state.past.length);
 });
+
+function grouped(...texts: string[]): EditorState {
+  const state = sample();
+  const ids = texts.map((text) => {
+    const walk = (node: MapNode): string | null =>
+      node.text === text ? node.id : node.children.map(walk).find(Boolean) ?? null;
+    return walk(state.root)!;
+  });
+  return reduce(state, { type: 'mark', ids });
+}
+
+test('un cadre sur plusieurs nœuds en fait un groupe, dans l’ordre de la carte', () => {
+  const state = grouped('B', 'A1');
+  assert.equal(modeOf(state), 'multiple');
+  assert.deepEqual(state.group.map((id) => find(state.root, id)!.text), ['A1', 'B']);
+  assert.equal(selectedText(state), 'A1');
+});
+
+test('un cadre sur un seul nœud le sélectionne, un cadre vide désélectionne', () => {
+  const one = grouped('B');
+  assert.deepEqual([one.group.length, selectedText(one), modeOf(one)], [0, 'B', 'selected']);
+  const none = reduce(sample(), { type: 'mark', ids: [] });
+  assert.deepEqual([none.group.length, none.selected, modeOf(none)], [0, null, 'idle']);
+});
+
+test('Suppr retire tout le groupe en une étape, parents et enfants confondus', () => {
+  const state = run(grouped('A', 'A1', 'B'), 'delete');
+  assert.equal(outline(state.root), 'Idée');
+  assert.equal(selectedText(state), 'Idée');
+  assert.equal(state.group.length, 0);
+  assert.equal(outline(run(state, 'undo').root), 'Idée(A(A1 A2) B)');
+});
+
+test('la racine prise dans un groupe n’est pas supprimée', () => {
+  const state = run(grouped('Idée', 'B'), 'delete');
+  assert.equal(outline(state.root), 'Idée(A(A1 A2))');
+});
+
+test('toute autre action dissout le groupe', () => {
+  assert.equal(run(grouped('A1', 'B'), 'down').group.length, 0);
+  assert.equal(run(grouped('A1', 'B'), 'deselect').selected, null);
+  assert.equal(reduce(grouped('A1', 'B'), { type: 'select', id: 'root' }).group.length, 0);
+  assert.equal(reduce(grouped('A1', 'B'), { type: 'toggle', id: 'root' }).group.length, 0);
+  assert.equal(run(grouped('A1', 'B'), 'undo').group.length, 0);
+});
+
+test('déplacer un groupe le garde sélectionné et se fait en une étape', () => {
+  const state = grouped('A1', 'A2');
+  const b = state.root.children[1].id;
+  const moved = reduce(state, { type: 'move', ids: state.group, parentId: b, beforeId: null, side: 'right' });
+  assert.equal(outline(moved.root), 'Idée(A B(A1 A2))');
+  assert.equal(moved.group.length, 2);
+  assert.equal(moved.past.length, state.past.length + 1);
+});
+
+test('après la suppression d’un groupe, la sélection va au voisin resté en place', () => {
+  const state = run(grouped('A1', 'A2'), 'delete');
+  assert.equal(outline(state.root), 'Idée(A B)');
+  assert.equal(selectedText(state), 'A');
+  const first = run(grouped('A', 'A2'), 'delete');
+  assert.equal(selectedText(first), 'B');
+});

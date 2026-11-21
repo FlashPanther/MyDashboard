@@ -1,4 +1,4 @@
-import type { Box } from './layout.ts';
+import type { Box, Point } from './layout.ts';
 
 export type View = { x: number; y: number; scale: number };
 
@@ -42,6 +42,6 @@ export function reveal(view: View, box: Box, width: number, height: number, marg
   return dx === 0 && dy === 0 ? view : { ...view, x: view.x + dx, y: view.y + dy };
 }
 
-export function toWorld(view: View, x: number, y: number): { x: number; y: number } {
+export function toWorld(view: View, x: number, y: number): Point {
   return { x: (x - view.x) / view.scale, y: (y - view.y) / view.scale };
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { commandFor, type KeyPress } from '../lib/mindmap/keymap.ts';
+import { commandFor, swallowed, type KeyPress } from '../lib/mindmap/keymap.ts';
 
 function press(key: string, modifiers: Partial<KeyPress> = {}): KeyPress {
   return { key, code: '', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...modifiers };
@@ -83,4 +83,23 @@ test('sans sélection, seuls créer un enfant et se déplacer répondent', () =>
   assert.equal(commandFor(press('Enter'), 'idle'), null);
   assert.equal(commandFor(press('Delete'), 'idle'), null);
   assert.equal(commandFor(press('a'), 'idle'), null);
+});
+
+test('à plusieurs, seuls supprimer, désélectionner, se déplacer, annuler et zoomer répondent', () => {
+  assert.equal(commandFor(press('Delete'), 'multiple'), 'delete');
+  assert.equal(commandFor(press('Escape'), 'multiple'), 'deselect');
+  assert.equal(commandFor(press('ArrowDown'), 'multiple'), 'down');
+  assert.equal(commandFor(press('z', { ctrlKey: true }), 'multiple'), 'undo');
+  assert.equal(commandFor(press('='), 'multiple'), 'zoomIn');
+  for (const key of ['Tab', 'Enter', 'a', 'F2']) assert.equal(commandFor(press(key), 'multiple'), null);
+  assert.equal(commandFor(press('@', { ctrlKey: true, altKey: true }), 'multiple'), null);
+  assert.equal(commandFor(press('/', { ctrlKey: true }), 'multiple'), null);
+});
+
+test('à plusieurs, les touches de création sont retenues pour ne pas déplacer le focus', () => {
+  assert.equal(swallowed(press('Tab'), 'multiple'), true);
+  assert.equal(swallowed(press('Enter'), 'multiple'), true);
+  assert.equal(swallowed(press('Tab', { ctrlKey: true }), 'multiple'), false);
+  assert.equal(swallowed(press('a'), 'multiple'), false);
+  assert.equal(swallowed(press('Tab'), 'selected'), false);
 });

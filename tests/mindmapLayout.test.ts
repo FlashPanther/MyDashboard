@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { layout, linkPath } from '../lib/mindmap/layout.ts';
+import { boxesIn, layout, linkPath } from '../lib/mindmap/layout.ts';
 import { newNode } from '../lib/mindmap/tree.ts';
 
 const size = () => ({ width: 100, height: 40 });
@@ -78,4 +78,15 @@ test('un lien part du bord qui fait face à l’enfant', () => {
   const parent = { x: 0, y: 0, width: 100, height: 40 };
   assert.equal(linkPath(parent, { x: 150, y: 50, width: 100, height: 40 }), 'M 100 20 C 125 20, 125 70, 150 70');
   assert.equal(linkPath(parent, { x: -150, y: 0, width: 100, height: 40 }), 'M 0 20 C -25 20, -25 20, -50 20');
+});
+
+test('un cadre prend les nœuds qu’il touche, même en partie, quel que soit le sens du tracé', () => {
+  const boxes = new Map([
+    ['a', { x: 0, y: 0, width: 100, height: 30 }],
+    ['b', { x: 0, y: 50, width: 100, height: 30 }],
+    ['c', { x: 200, y: 0, width: 100, height: 30 }],
+  ]);
+  assert.deepEqual(boxesIn(boxes, { x: 50, y: 10 }, { x: 60, y: 60 }), ['a', 'b']);
+  assert.deepEqual(boxesIn(boxes, { x: 400, y: 20 }, { x: -10, y: -10 }), ['a', 'c']);
+  assert.deepEqual(boxesIn(boxes, { x: 120, y: 0 }, { x: 180, y: 100 }), []);
 });

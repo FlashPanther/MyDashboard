@@ -34,7 +34,7 @@ Reconstruction de l'éditeur (il existait à part, on le rebâtit ici avec les m
 - [x] **2. Éditer au clavier** : créer, renommer, supprimer, se déplacer, annuler, avec les raccourcis des cartes
   mentales de Whimsical.
 - [x] **3. Glisser les nœuds** : réordonner, changer de parent, passer de l'autre côté de la racine.
-- [ ] **4. Sélection au cadre** : supprimer ou déplacer plusieurs nœuds ensemble.
+- [x] **4. Sélection au cadre** : supprimer ou déplacer plusieurs nœuds ensemble.
 - [ ] **5. Menu de branche** : replier ou déplier toute une branche.
 
 Puis le lien avec Google Tasks :

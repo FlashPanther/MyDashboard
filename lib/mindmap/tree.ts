@@ -208,6 +208,24 @@ function bySide(root: MapNode): MapNode {
   return { ...root, children: SIDES.flatMap((side) => root.children.filter((branch) => sideOf(branch) === side)) };
 }
 
+export function removeAll(root: MapNode, ids: ReadonlySet<string>): { root: MapNode; next: string | null } {
+  const removed = topmost(root, ids);
+  if (removed.length === 0) return { root, next: null };
+  const gone = new Set(removed);
+  const { parent, index } = locate(root, removed.at(-1)!)!;
+  const kept = (node: MapNode): boolean => !gone.has(node.id);
+  const next = parent.children.slice(index).find(kept) ?? parent.children.slice(0, index).reverse().find(kept) ?? parent;
+  return {
+    next: next.id,
+    root: change(root, (draft) => {
+      for (const id of removed) {
+        const target = locate(draft, id)!;
+        target.parent.children.splice(target.index, 1);
+      }
+    }),
+  };
+}
+
 export function rename(root: MapNode, id: string, text: string): MapNode {
   const node = find(root, id);
   if (!node || node.text === text) return root;
