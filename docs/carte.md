@@ -88,8 +88,9 @@ Puis le lien avec Google Tasks :
   dans tes cartes (glisser les nœuds), puis, si tu le décides, à réduire les listes. Codé et testé avec des tâches
   simulées ; **reste à constater en ligne**. L'échéance et le détail des tâches ne passent pas dans la carte, qui n'a pas
   de dates ; ils restent dans Google.
-- [ ] **14. Alléger le tableau** : retirer l'ancien onglet « Carte », les panneaux de tâches devenus inutiles et les
-  étiquettes dans les titres.
+- [ ] **14. Alléger le tableau** : l'ancien onglet « Carte » du panneau des tâches (les tâches par liste Google) est
+  retiré, la vraie carte le remplace. Restent à décider avec Thomas : les autres onglets du panneau des tâches et les
+  étiquettes dans les titres (`#prio`, `#plustard`).
 
 ## Décisions à reprendre aux étapes suivantes
 

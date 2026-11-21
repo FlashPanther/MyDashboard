@@ -11,7 +11,7 @@ import { TASK_TITLE_MAX } from '@/lib/google/taskWrites';
 import { tagColor } from '@/lib/tags';
 import { taskAlert } from '@/lib/taskAlert';
 import { shortDate } from '@/lib/time';
-import { branches, isPressing, type ListBranch } from '@/lib/taskMap';
+import { isPressing } from '@/lib/taskMap';
 import type { TaskItem, TaskList } from '@/app/api/tasks/route';
 
 const TASKS_URL = '/api/tasks';
@@ -52,7 +52,7 @@ function dueOf(task: TaskItem): { text: string; tone: string; dot: string; title
   };
 }
 
-const TABS = ['today', 'plan', 'map'] as const;
+const TABS = ['today', 'plan'] as const;
 
 export function TasksWidget() {
   const { data, error, notConnected, refresh } = useEndpoint<TasksPayload>(
@@ -128,12 +128,6 @@ export function TasksWidget() {
   const undated = tasks
     .filter((task) => !task.due)
     .sort((a, b) => (a.updated ?? '').localeCompare(b.updated ?? ''));
-  const map = branches(lists, tasks, { keepEmpty: !active });
-
-  function addTo(listId: string) {
-    setChosenList(listId);
-    addInput.current?.focus();
-  }
 
   return (
     <Panel
@@ -150,14 +144,13 @@ export function TasksWidget() {
         items: [
           { key: 'today', label: 'Aujourd’hui', count: data && pressing.length },
           { key: 'plan', label: 'À planifier', count: data && undated.length },
-          { key: 'map', label: 'Carte', count: data && map.reduce((sum, branch) => sum + branch.tasks.length, 0) },
         ],
       }}
       error={error}
       notConnected={notConnected}
     >
       <div className="flex h-[19rem] flex-col lg:h-full">
-        {/* Une tache creee n'a pas d'echeance : on montre l'onglet ou elle arrive, sauf sur la carte, ou elle est deja. */}
+        {/* Une tache creee n'a pas d'echeance : on montre l'onglet ou elle arrive. */}
         <QuickAdd
           lists={lists}
           listId={chosenList ?? lists[0]?.id}
@@ -167,7 +160,7 @@ export function TasksWidget() {
           onBusy={setWriting}
           onCreated={() => {
             refresh();
-            if (tab !== 'map') setTab('plan');
+            setTab('plan');
           }}
         />
         {changeError && <p className="mb-1 shrink-0 text-[12px] text-rose">{changeError}</p>}
@@ -197,7 +190,6 @@ export function TasksWidget() {
             {tab === 'plan' && undated.length === 0 && !active && (
               <p className="py-1 font-mono text-[11px] text-jade">Tout est planifié.</p>
             )}
-            {tab === 'map' && <ListMap map={map} onAdd={addTo} {...row} />}
           </div>
         )}
       </div>
@@ -263,65 +255,6 @@ function ListOptions({ lists }: { lists: TaskList[] }) {
       {list.title}
     </option>
   ));
-}
-
-type RowProps = Omit<Parameters<typeof TaskRows>[0], 'tasks'>;
-
-/** Une branche par liste Google : son nom, ses tâches, et ce qui est remis à plus tard, replié. */
-function ListMap({ map, onAdd, ...row }: { map: ListBranch[]; onAdd: (listId: string) => void } & RowProps) {
-  if (map.length === 0) return <Empty>Aucune liste.</Empty>;
-  return (
-    <div className="space-y-4">
-      {map.map((branch) => (
-        <Branch key={branch.id} branch={branch} onAdd={() => onAdd(branch.id)} {...row} />
-      ))}
-    </div>
-  );
-}
-
-function Branch({ branch, onAdd, ...row }: { branch: ListBranch; onAdd: () => void } & RowProps) {
-  const [open, setOpen] = useState(false);
-  const add = `Ajouter une tâche dans « ${branch.title} »`;
-  const empty = branch.tasks.length === 0 && branch.later.length === 0;
-  return (
-    <section aria-label={branch.title} className="min-w-0">
-      <header className="mb-1.5 flex items-baseline gap-2 border-b border-rule pb-1">
-        <h3 className="eyebrow min-w-0 flex-1 truncate">{branch.title}</h3>
-        {branch.pressing > 0 && <span className="shrink-0 font-mono text-[11px] text-rose">{branch.pressing}</span>}
-        <span className="tnum shrink-0 font-mono text-[11px] text-muted">{branch.tasks.length}</span>
-        <button
-          type="button"
-          title={add}
-          aria-label={add}
-          disabled={row.writing}
-          onClick={onAdd}
-          className="shrink-0 font-mono text-[13px] leading-none text-muted hover:text-amber disabled:opacity-50"
-        >
-          +
-        </button>
-      </header>
-      {empty && <p className="font-mono text-[11px] text-jade">Rien à faire.</p>}
-      {branch.tasks.length > 0 && <TaskRows tasks={branch.tasks} {...row} />}
-      {branch.later.length > 0 && (
-        <>
-          <button
-            type="button"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-            className="mt-1 font-mono text-[11px] text-muted hover:text-ink"
-          >
-            {open ? '− ' : '+ '}
-            {branch.later.length} plus tard
-          </button>
-          {open && (
-            <div className="mt-1 opacity-70">
-              <TaskRows tasks={branch.later} {...row} />
-            </div>
-          )}
-        </>
-      )}
-    </section>
-  );
 }
 
 function TaskRows({
