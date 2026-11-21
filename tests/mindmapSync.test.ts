@@ -144,3 +144,10 @@ test('pendant un conflit, revenir à la carte d’avant ne passe pas pour enregi
   assert.equal(isClean(refused(), server.root), false);
   assert.equal(statusOf(refused(), server.root), 'conflict');
 });
+
+test('un refus du serveur après une réponse perdue ne lève pas le doute sur ce qu’il contient', () => {
+  const lost = syncStep(syncStep(clean(), { type: 'sent', root: mine }), eventOf(0, null));
+  const refusedAfter = syncStep(syncStep(lost, { type: 'sent', root: server.root }), eventOf(401, null));
+  assert.equal(isClean(refusedAfter, server.root), false);
+  assert.equal(statusOf(refusedAfter, server.root), 'refused');
+});

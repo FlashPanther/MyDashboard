@@ -103,7 +103,7 @@ export function syncStep(sync: SyncState, event: SyncEvent): SyncState {
       return mine ? { ...settled, base: { revision: event.theirs.revision, root: sync.sending! } } : { ...settled, theirs: event.theirs };
     }
     case 'failed':
-      return { ...sync, sending: null, trouble: event.trouble, retries: sync.retries + 1, doubt: event.trouble === 'offline' };
+      return { ...sync, sending: null, trouble: event.trouble, retries: sync.retries + 1, doubt: sync.doubt || event.trouble === 'offline' };
     case 'settled':
       return sync.theirs ? { ...sync, base: sync.theirs, theirs: null } : sync;
   }
