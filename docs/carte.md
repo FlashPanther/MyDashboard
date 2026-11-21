@@ -58,8 +58,11 @@ Puis le lien avec Google Tasks :
   l'en-tête du tableau affiche « Google expiré : relier ». Le signal sera repris dans la page Carte à l'étape 9.
 - [ ] **8 bis. Une liaison qui tient** : cela dépend de Google Cloud, pas du code. Tant que l'application y est en état
   « Test », la liaison tombe après sept jours ; il faut la publier, puis relier de nouveau (voir le README).
-- [ ] **9. Créer** : marquer un nœud comme tâche la crée dans Google Tasks, avec le chemin de la branche dans son
-  détail.
+- [ ] **9. Créer** : après chaque enregistrement, les nœuds-tâches sans lien sont créés dans Google Tasks, dans la
+  liste nommée par `mindmap.taskList` de `dashboard.config.ts`, avec le chemin de la branche dans leur détail. Les
+  liens (nœud → tâche Google) sont gardés par le serveur, à côté de la carte : un enregistrement du navigateur ne peut
+  pas les effacer. Retirer un nœud-tâche détache la tâche sans la supprimer. Codé et testé avec un faux Google ;
+  **reste à essayer contre le vrai Google** avant de cocher.
 - [ ] **10. Relire et cocher**, dans les deux sens.
 - [ ] **11. Détacher ou supprimer** : retirer un nœud détache la tâche ; la supprimer pour de bon est un second geste.
   Supprimer une carte détache toutes ses tâches : c'est le serveur qui le fait, derrière la suppression.

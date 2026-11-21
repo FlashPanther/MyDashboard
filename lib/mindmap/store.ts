@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { parseLinks, type Links } from './links.ts';
 import { FORMAT_VERSION, parseDocument, type MapNode } from './tree.ts';
 
 const MAPS_DIR = path.join(process.cwd(), '.data', 'cartes');
@@ -8,7 +9,7 @@ const TRASH = 'corbeille';
 const ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 export const MAX_MAPS = 200;
 
-export type StoredMap = { id: string; revision: number; updatedAt: string; root: MapNode };
+export type StoredMap = { id: string; revision: number; updatedAt: string; root: MapNode; links: Links };
 export type MapSummary = { id: string; title: string; revision: number; updatedAt: string };
 export type SaveResult = { saved: boolean; map: StoredMap } | null;
 type Options = { now?: Date; dir?: string };
@@ -49,14 +50,14 @@ async function mapIds(dir: string): Promise<string[]> {
   return names.filter((name) => name.endsWith('.json')).map((name) => name.slice(0, -'.json'.length)).filter((id) => ID.test(id));
 }
 
-async function persist(dir: string, { id, revision, updatedAt, root }: StoredMap): Promise<void> {
+async function persist(dir: string, { id, revision, updatedAt, root, links }: StoredMap): Promise<void> {
   const file = path.join(dir, `${id}.json`);
   const draft = `${file}.${randomUUID()}.tmp`;
   await onDisk(async () => {
     await fs.mkdir(dir, { recursive: true });
     const handle = await fs.open(draft, 'w', 0o600);
     try {
-      await handle.writeFile(JSON.stringify({ version: FORMAT_VERSION, revision, updatedAt, root }, null, 2));
+      await handle.writeFile(JSON.stringify({ version: FORMAT_VERSION, revision, updatedAt, root, links }, null, 2));
       await handle.sync();
     } finally {
       await handle.close();
@@ -75,7 +76,7 @@ export async function readMap(id: string, { dir = MAPS_DIR }: Options = {}): Pro
   try {
     const data = JSON.parse(text);
     if (!Number.isInteger(data.revision) || data.revision < 1 || typeof data.updatedAt !== 'string') throw new Error();
-    return { id, revision: data.revision, updatedAt: data.updatedAt, root: parseDocument(data) };
+    return { id, revision: data.revision, updatedAt: data.updatedAt, root: parseDocument(data), links: parseLinks(data.links) };
   } catch {
     throw new UnreadableMapError();
   }
@@ -96,7 +97,7 @@ export async function listMaps({ dir = MAPS_DIR }: Options = {}): Promise<MapSum
 export function createMap(root: MapNode, { now = new Date(), dir = MAPS_DIR }: Options = {}): Promise<StoredMap | null> {
   return inTurn(dir, async () => {
     if ((await mapIds(dir)).length >= MAX_MAPS) return null;
-    const map = { id: randomUUID(), revision: 1, updatedAt: now.toISOString(), root };
+    const map = { id: randomUUID(), revision: 1, updatedAt: now.toISOString(), root, links: {} };
     await persist(dir, map);
     return map;
   });
@@ -115,6 +116,21 @@ export function saveMap(
     const map = { ...current, root, revision: revision + 1, updatedAt: now.toISOString() };
     await persist(dir, map);
     return { saved: true, map };
+  });
+}
+
+/** Les liens vers Google Tasks appartiennent au serveur : ils changent sans toucher à la révision de la carte. */
+export function relink(
+  id: string,
+  change: (map: StoredMap) => Links,
+  { dir = MAPS_DIR }: Options = {},
+): Promise<StoredMap | null> {
+  return inTurn(id, async () => {
+    const current = await readMap(id, { dir });
+    if (!current) return null;
+    const map = { ...current, links: change(current) };
+    await persist(dir, map);
+    return map;
   });
 }
 

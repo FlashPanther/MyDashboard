@@ -81,6 +81,11 @@ export const config = {
     ],
   },
 
+  /** Carte mentale : la liste Google Tasks qui recoit ses noeuds-taches (creee si elle n'existe pas). */
+  mindmap: {
+    taskList: 'Cartes',
+  },
+
   /** Nombre de secondes entre deux rafraichissements, par widget. */
   refresh: {
     calendar: 300,

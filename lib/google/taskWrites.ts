@@ -26,12 +26,22 @@ export function parseTaskChange(body: unknown): TaskChange | null {
   return null;
 }
 
-export function newTaskRequest(title: string, listId: unknown): GoogleCall {
+export function newTaskRequest(title: string, listId: unknown, extra: { notes?: string; done?: boolean } = {}): GoogleCall {
   const list = text(listId);
+  const payload = { title, ...(extra.notes ? { notes: extra.notes } : {}), ...(extra.done ? { status: 'completed' } : {}) };
   return {
     url: list ? tasksUrl(list) : `${API}/lists/@default/tasks`,
-    init: jsonInit('POST', { title }),
+    init: jsonInit('POST', payload),
   };
+}
+
+export function taskListsRequest(pageToken?: string): GoogleCall {
+  const params = new URLSearchParams({ maxResults: '100', ...(pageToken ? { pageToken } : {}) });
+  return { url: `${API}/users/@me/lists?${params}`, init: {} };
+}
+
+export function newTaskListRequest(title: string): GoogleCall {
+  return { url: `${API}/users/@me/lists`, init: jsonInit('POST', { title }) };
 }
 
 export function taskChangeRequest(taskId: string, change: TaskChange): GoogleCall {

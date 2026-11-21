@@ -6,6 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, u
 import { MapCanvas, type CanvasHandle } from '@/components/mindmap/MapCanvas';
 import { Shortcuts } from '@/components/mindmap/Shortcuts';
 import { useMapSync } from '@/components/mindmap/useMapSync';
+import { useTaskSync } from '@/components/mindmap/useTaskSync';
 import { writeJson } from '@/components/mindmap/writeJson';
 import type { Send } from '@/components/mindmap/types';
 import { Preparing } from '@/components/Preparing';
@@ -130,6 +131,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     [send],
   );
   const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
+  const google = useTaskSync(id, status === 'saved', progress.size > 0, root);
   const leave = useCallback(() => {
     const draft = editingElement.current?.innerText;
     flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
@@ -189,6 +191,16 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
           {STATUS[status]}
           {!kept && status !== 'saved' && UNKEPT}
         </p>
+        {google === 'unlinked' && (
+          <a href="/api/auth/google" className="font-mono text-xs text-amber underline">
+            Google n’est pas relié : les tâches restent dans la carte. Relier
+          </a>
+        )}
+        {google === 'failed' && (
+          <p role="status" className="font-mono text-xs text-amber">
+            Tâches pas encore envoyées à Google : nouvel essai au prochain enregistrement.
+          </p>
+        )}
         {status === 'conflict' && (
           <>
             <ToolbarButton onPress={() => settle(false)}>Garder ma version</ToolbarButton>
