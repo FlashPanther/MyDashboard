@@ -131,7 +131,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
     [send],
   );
   const { status, kept, settle, flush } = useMapSync(id, opened.sync, root, adopt);
-  const google = useTaskSync(id, status === 'saved', progress.size > 0, root);
+  const google = useTaskSync(id, status === 'saved', root);
   const leave = useCallback(() => {
     const draft = editingElement.current?.innerText;
     flush(reduce(latest.current, { type: 'command', command: 'stop', draft }).root);
@@ -198,7 +198,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         )}
         {google === 'failed' && (
           <p role="status" className="font-mono text-xs text-amber">
-            Tâches pas encore envoyées à Google : nouvel essai au prochain enregistrement.
+            Tâches pas encore envoyées à Google : nouvel essai dans un instant.
           </p>
         )}
         {status === 'conflict' && (

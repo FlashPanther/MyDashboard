@@ -1,4 +1,6 @@
 const API = 'https://tasks.googleapis.com/tasks/v1';
+/** Longueur maximale d'un titre de tache chez Google. */
+export const TASK_TITLE_MAX = 1024;
 
 export type TaskChange = { listId: string } & ({ done: true } | { moveTo: string });
 

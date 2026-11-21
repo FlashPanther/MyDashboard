@@ -7,6 +7,7 @@ import { useEndpoint } from '@/lib/useEndpoint';
 import { useStored, useStoredChoice } from '@/lib/storage';
 import { ListChecks } from 'lucide-react';
 import { mutate } from 'swr';
+import { TASK_TITLE_MAX } from '@/lib/google/taskWrites';
 import { tagColor } from '@/lib/tags';
 import { taskAlert } from '@/lib/taskAlert';
 import { shortDate } from '@/lib/time';
@@ -452,7 +453,7 @@ function QuickAdd({
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Nouvelle tâche (#étiquette), puis Entrée"
           aria-label="Nouvelle tâche"
-          maxLength={1024}
+          maxLength={TASK_TITLE_MAX}
           disabled={busy}
           className="min-w-0 flex-1 bg-transparent text-[13px] text-ink placeholder:text-muted focus:outline-none disabled:opacity-50"
         />

@@ -12,7 +12,7 @@ export const MAX_MAPS = 200;
 export type StoredMap = { id: string; revision: number; updatedAt: string; root: MapNode; links: Links };
 export type MapSummary = { id: string; title: string; revision: number; updatedAt: string };
 export type SaveResult = { saved: boolean; map: StoredMap } | null;
-type Options = { now?: Date; dir?: string };
+export type Options = { now?: Date; dir?: string };
 
 export class UnreadableMapError extends Error {
   constructor() {
