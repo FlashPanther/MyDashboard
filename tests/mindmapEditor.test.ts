@@ -4,8 +4,8 @@ import { initialState, modeOf, reduce, type EditorState } from '../lib/mindmap/e
 import type { EditCommand } from '../lib/mindmap/keymap.ts';
 import { find, newNode, visibleNodes, type MapNode } from '../lib/mindmap/tree.ts';
 
-function run(state: EditorState, command: EditCommand, draft?: string, key = ''): EditorState {
-  return reduce(state, { type: 'command', command, draft, key });
+function run(state: EditorState, command: EditCommand, draft?: string): EditorState {
+  return reduce(state, { type: 'command', command, draft });
 }
 
 function outline(node: MapNode): string {
@@ -72,22 +72,12 @@ test('Entrée sur un nœud sélectionné l’édite, une seconde Entrée crée l
   const selected = typed(start(), ['child'], ['stop', 'A']);
   const editing = run(selected, 'edit');
   assert.equal(editing.editing?.id, selected.selected);
-  assert.equal(editing.editing?.initial, null);
   assert.equal(outline(run(editing, 'sibling', 'A').root), 'Idée(A ∅)');
 });
 
 test('éditer sans rien changer ne crée pas d’étape d’annulation', () => {
   const selected = typed(start(), ['child'], ['stop', 'A']);
   assert.equal(typed(selected, ['edit'], ['stop', 'A']).past.length, 1);
-});
-
-test('taper sur un nœud sélectionné remplace son texte', () => {
-  const selected = typed(start(), ['child'], ['stop', 'A']);
-  const editing = run(selected, 'type', '', 'x');
-  assert.equal(editing.editing?.initial, 'x');
-  const done = run(editing, 'stop', 'xyz');
-  assert.equal(outline(done.root), 'Idée(xyz)');
-  assert.equal(outline(run(done, 'undo').root), 'Idée(A)');
 });
 
 test('Entrée sur la racine en saisie crée un enfant, faute de frère possible', () => {
@@ -216,8 +206,6 @@ test('une action sans texte de saisie laisse le texte du nœud tel quel', () => 
   const done = run(run(selected, 'edit'), 'stop');
   assert.equal(outline(done.root), 'Idée(A)');
   assert.equal(done.past.length, selected.past.length);
-  const replaced = run(run(selected, 'type', undefined, 'x'), 'stop');
-  assert.equal(outline(replaced.root), 'Idée(x)');
 });
 
 test('Maj+Tab retire aussi un nœud vide qui n’était que sélectionné', () => {

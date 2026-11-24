@@ -54,12 +54,20 @@ test('flèches, Suppr et F2 agissent sur le nœud sélectionné', () => {
   assert.equal(commandFor(press('F2'), 'selected'), 'edit');
 });
 
-test('une touche imprimable lance la saisie en remplaçant le texte', () => {
-  assert.equal(commandFor(press('a'), 'selected'), 'type');
-  assert.equal(commandFor(press('É', { shiftKey: true }), 'selected'), 'type');
-  assert.equal(commandFor(press('@', { ctrlKey: true, altKey: true }), 'selected'), 'type');
-  assert.equal(commandFor(press(' '), 'selected'), null);
-  assert.equal(commandFor(press('Shift', { shiftKey: true }), 'selected'), null);
+test('taper une lettre ne lance pas la saisie : seule Entrée le fait', () => {
+  assert.equal(commandFor(press('a'), 'selected'), null);
+  assert.equal(commandFor(press('É', { shiftKey: true }), 'selected'), null);
+  assert.equal(commandFor(press('@', { ctrlKey: true, altKey: true }), 'selected'), null);
+  assert.equal(commandFor(press('Enter'), 'selected'), 'edit');
+});
+
+test('F replie ou déplie le nœud sélectionné', () => {
+  assert.equal(commandFor(press('f'), 'selected'), 'toggle');
+  assert.equal(commandFor(press('F', { shiftKey: true }), 'selected'), 'toggle');
+  assert.equal(commandFor(press('f'), 'idle'), null);
+  assert.equal(commandFor(press('f'), 'multiple'), null);
+  assert.equal(commandFor(press('f'), 'editing'), null);
+  assert.equal(commandFor(press('f', { ctrlKey: true }), 'selected'), null);
 });
 
 test('annuler, rétablir et zoomer', () => {
@@ -114,5 +122,5 @@ test('Alt+T ne fait rien sans sélection, pendant la saisie, ni avec Maj ou Ctrl
   assert.equal(commandFor(press('t', { altKey: true, code: 'KeyT' }), 'idle'), null);
   assert.equal(commandFor(press('t', { altKey: true, code: 'KeyT' }), 'editing'), null);
   assert.equal(commandFor(press('T', { altKey: true, shiftKey: true, code: 'KeyT' }), 'selected'), null);
-  assert.equal(commandFor(press('t', { altKey: true, ctrlKey: true, code: 'KeyT' }), 'selected'), 'type');
+  assert.equal(commandFor(press('t', { altKey: true, ctrlKey: true, code: 'KeyT' }), 'selected'), null);
 });

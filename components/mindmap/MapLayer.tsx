@@ -64,8 +64,7 @@ export const MapLayer = memo(function MapLayer({
             key={node.id}
             {...shared}
             id={node.id}
-            text={editing.initial ?? node.text}
-            caretAtEnd={editing.initial !== null}
+            text={node.text}
             editingElement={editingElement}
             observe={observe}
             send={send}
@@ -126,7 +125,6 @@ export const MapLayer = memo(function MapLayer({
 function EditedNode({
   id,
   text,
-  caretAtEnd,
   editingElement,
   observe,
   send,
@@ -134,7 +132,6 @@ function EditedNode({
 }: {
   id: string;
   text: string;
-  caretAtEnd: boolean;
   editingElement: RefObject<HTMLElement | null>;
   observe: Observe;
   send: Send;
@@ -146,9 +143,7 @@ function EditedNode({
     const node = editingElement.current!;
     node.textContent = text;
     node.focus();
-    const selection = getSelection()!;
-    selection.selectAllChildren(node);
-    if (caretAtEnd) selection.collapseToEnd();
+    getSelection()!.selectAllChildren(node);
     return observe(node);
   }, []);
 

@@ -28,7 +28,7 @@ import {
 
 export type Snapshot = { root: MapNode; selected: string | null };
 
-export type Editing = { id: string; initial: string | null; before: Snapshot };
+export type Editing = { id: string; before: Snapshot };
 
 export type EditorState = Snapshot & {
   group: string[];
@@ -39,7 +39,7 @@ export type EditorState = Snapshot & {
 };
 
 export type EditorAction = { draft?: string; newId?: string } & (
-  | { type: 'command'; command: EditCommand; key?: string }
+  | { type: 'command'; command: EditCommand }
   | { type: 'select'; id: string | null }
   | { type: 'edit'; id: string }
   | { type: 'blur'; id: string }
@@ -105,13 +105,13 @@ function onShown(state: EditorState): EditorState {
 function step(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case 'command':
-      return runCommand(state, action.command, action.draft, action.key ?? '', action.newId);
+      return runCommand(state, action.command, action.draft, action.newId);
     case 'select':
       if (action.id !== null && action.id === state.editing?.id) return state;
       return { ...finishEditing(state, action.draft), selected: action.id };
     case 'edit':
       if (action.id === state.editing?.id) return state;
-      return startEditing({ ...finishEditing(state, action.draft), selected: action.id }, null);
+      return startEditing({ ...finishEditing(state, action.draft), selected: action.id });
     case 'blur':
       return action.id === state.editing?.id ? finishEditing(state, action.draft) : state;
     case 'toggle': {
@@ -203,13 +203,12 @@ function targetOf(state: EditorState): string {
 }
 
 function typedText(state: EditorState, draft: string | undefined): string {
-  const { id, initial } = state.editing!;
-  return (draft ?? initial ?? find(state.root, id)!.text).trim();
+  return (draft ?? find(state.root, state.editing!.id)!.text).trim();
 }
 
-function startEditing(state: EditorState, initial: string | null, before: Snapshot = snapshot(state)): EditorState {
+function startEditing(state: EditorState, before: Snapshot = snapshot(state)): EditorState {
   const id = targetOf(state);
-  return { ...state, selected: id, editing: { id, initial, before } };
+  return { ...state, selected: id, editing: { id, before } };
 }
 
 function finishEditing(state: EditorState, draft: string | undefined): EditorState {
@@ -232,16 +231,15 @@ function runCommand(
   state: EditorState,
   command: EditCommand,
   draft: string | undefined,
-  key: string,
   newId: string = crypto.randomUUID(),
 ): EditorState {
   if (isInsert(command)) {
     const text = state.editing ? typedText(state, draft) : find(state.root, targetOf(state))!.text.trim();
-    if (text === '') return state.editing ? state : startEditing(state, null);
+    if (text === '') return state.editing ? state : startEditing(state);
     const settled = finishEditing(state, draft);
     const root = INSERTS[command](settled.root, targetOf(settled), newId);
     if (root === settled.root || !withinLimits(root)) return settled;
-    return startEditing({ ...settled, root, selected: newId }, null, snapshot(settled));
+    return startEditing({ ...settled, root, selected: newId }, snapshot(settled));
   }
 
   const settled = finishEditing(state, draft);
@@ -272,9 +270,7 @@ function runCommand(
     case 'down':
       return { ...settled, selected: selected ? (neighbour(shownRoot(settled), selected, command) ?? selected) : root.id };
     case 'edit':
-      return startEditing(settled, null);
-    case 'type':
-      return startEditing(settled, key);
+      return startEditing(settled);
     case 'stop':
       return settled;
     case 'deselect':
