@@ -285,7 +285,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         progress={progress}
         selected={state.selected}
         group={state.group}
-        editing={state.editing}
+        editingId={state.editing?.id ?? null}
         editingElement={editingElement}
         send={send}
         linkedIn={linkedIn}
