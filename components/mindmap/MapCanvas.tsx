@@ -13,7 +13,6 @@ import { ContextMenu, type MenuItem } from '@/components/mindmap/ContextMenu';
 import { Ghost } from '@/components/mindmap/Ghost';
 import { MapLayer } from '@/components/mindmap/MapLayer';
 import type { Drag, Send } from '@/components/mindmap/types';
-import type { Editing } from '@/lib/mindmap/editor';
 import type { ZoomCommand } from '@/lib/mindmap/keymap';
 import { dropAt, grabbed, type Carried, type Drop } from '@/lib/mindmap/drop';
 import { boxesIn, layout, linkPath, type Box, type Point, type Size } from '@/lib/mindmap/layout';
@@ -56,7 +55,7 @@ export function MapCanvas({
   progress,
   selected,
   group,
-  editing,
+  editingId,
   editingElement,
   send,
   linkedIn,
@@ -68,7 +67,7 @@ export function MapCanvas({
   progress: ReadonlyMap<string, Progress>;
   selected: string | null;
   group: string[];
-  editing: Editing | null;
+  editingId: string | null;
   editingElement: RefObject<HTMLElement | null>;
   send: Send;
   linkedIn: (id: string) => string[];
@@ -260,7 +259,7 @@ export function MapCanvas({
         if (!event.isPrimary || gesturing || (event.target as Element).closest('button')) return;
         const id = nodeIdAt(event.target);
         if (id === null || !group.includes(id)) send({ type: 'select', id });
-        if (!view || id === editing?.id || event.button !== 0) return;
+        if (!view || id === editingId || event.button !== 0) return;
         const carriedNodes = id === null ? null : grabbed(root, group, id);
         if (id !== null && !carriedNodes) return;
         const at = viewportPoint(event);
@@ -304,7 +303,7 @@ export function MapCanvas({
       }}
       onContextMenu={(event) => {
         const id = nodeIdAt(event.target);
-        if (!id || id === editing?.id || menuItems(id).length === 0) return;
+        if (!id || id === editingId || menuItems(id).length === 0) return;
         event.preventDefault();
         send({ type: 'select', id });
         setMenu({ id, x: event.clientX, y: event.clientY });
@@ -353,7 +352,7 @@ export function MapCanvas({
           boxes={boxes}
           selected={selected}
           marked={marked}
-          editing={editing}
+          editingId={editingId}
           editingElement={editingElement}
           lifted={lifted}
           observe={observe}

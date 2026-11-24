@@ -3,7 +3,6 @@ import { branchColour, FADED, LINK, nodeClass, nodeStyle } from '@/components/mi
 import { keepFocus } from '@/components/mindmap/keepFocus';
 import { TaskBox } from '@/components/mindmap/TaskBox';
 import type { Send } from '@/components/mindmap/types';
-import type { Editing } from '@/lib/mindmap/editor';
 import { linkPath, type Box } from '@/lib/mindmap/layout';
 import { branchesOn, countDescendants, SIDES, type MapNode, type Progress, type Side, type VisibleNode } from '@/lib/mindmap/tree';
 
@@ -18,7 +17,7 @@ export const MapLayer = memo(function MapLayer({
   boxes,
   selected,
   marked,
-  editing,
+  editingId,
   editingElement,
   lifted,
   observe,
@@ -30,7 +29,7 @@ export const MapLayer = memo(function MapLayer({
   boxes: Map<string, Box>;
   selected: string | null;
   marked: ReadonlySet<string>;
-  editing: Editing | null;
+  editingId: string | null;
   editingElement: RefObject<HTMLElement | null>;
   lifted: ReadonlySet<string>;
   observe: Observe;
@@ -56,16 +55,15 @@ export const MapLayer = memo(function MapLayer({
         const box = boxes.get(node.id)!;
         const shared = {
           'data-id': node.id,
-          className: nodeClass(depth, side, node.id === selected || marked.has(node.id), node.id === editing?.id, node.task) + (lifted.has(node.id) ? FADED : ''),
+          className: nodeClass(depth, side, node.id === selected || marked.has(node.id), node.id === editingId, node.task) + (lifted.has(node.id) ? FADED : ''),
           style: nodeStyle(box, colour),
         };
-        return node.id === editing?.id ? (
+        return node.id === editingId ? (
           <EditedNode
             key={node.id}
             {...shared}
             id={node.id}
-            text={editing.initial ?? node.text}
-            caretAtEnd={editing.initial !== null}
+            text={node.text}
             editingElement={editingElement}
             observe={observe}
             send={send}
@@ -126,7 +124,6 @@ export const MapLayer = memo(function MapLayer({
 function EditedNode({
   id,
   text,
-  caretAtEnd,
   editingElement,
   observe,
   send,
@@ -134,7 +131,6 @@ function EditedNode({
 }: {
   id: string;
   text: string;
-  caretAtEnd: boolean;
   editingElement: RefObject<HTMLElement | null>;
   observe: Observe;
   send: Send;
@@ -146,9 +142,7 @@ function EditedNode({
     const node = editingElement.current!;
     node.textContent = text;
     node.focus();
-    const selection = getSelection()!;
-    selection.selectAllChildren(node);
-    if (caretAtEnd) selection.collapseToEnd();
+    getSelection()!.selectAllChildren(node);
     return observe(node);
   }, []);
 

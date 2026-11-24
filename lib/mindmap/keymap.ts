@@ -15,7 +15,6 @@ export type EditCommand =
   | 'up'
   | 'down'
   | 'edit'
-  | 'type'
   | 'stop'
   | 'deselect'
   | 'undo'
@@ -62,10 +61,6 @@ export function commandFor(press: KeyPress, mode: Mode): Command | null {
   if (structural === 'sibling' && mode === 'selected') return 'edit';
   if (structural) return mode === 'idle' && structural !== 'child' ? null : structural;
 
-  const printable = press.key !== ' ' && [...press.key].length === 1;
-  // Sous Windows, AltGr arrive comme Ctrl+Alt.
-  if (mode === 'selected' && printable && press.ctrlKey && press.altKey) return 'type';
-
   if (mod) {
     const key = press.key.toLowerCase();
     if (key === 'z') return press.shiftKey ? 'redo' : 'undo';
@@ -80,7 +75,7 @@ export function commandFor(press: KeyPress, mode: Mode): Command | null {
   if (press.key === 'Escape') return 'deselect';
   if (mode === 'multiple') return null;
   if (press.key === 'F2') return 'edit';
-  return printable ? 'type' : null;
+  return !press.shiftKey && press.key.toLowerCase() === 'f' ? 'toggle' : null;
 }
 
 export function swallowed(press: KeyPress, mode: Mode): boolean {

@@ -192,7 +192,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
       if (command || swallowed(event, mode)) event.preventDefault();
       if (!command) return;
       if (isZoom(command)) canvas.current?.zoom(command);
-      else send({ type: 'command', command, key: event.key });
+      else send({ type: 'command', command });
     };
     // À la fermeture, rien ne garantit un rendu React : la saisie en cours est validée et écrite sur-le-champ.
     const onLeave = () => {
@@ -285,7 +285,7 @@ function Editor({ id, opened }: { id: string; opened: Opened }) {
         progress={progress}
         selected={state.selected}
         group={state.group}
-        editing={state.editing}
+        editingId={state.editing?.id ?? null}
         editingElement={editingElement}
         send={send}
         linkedIn={linkedIn}
