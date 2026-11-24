@@ -63,7 +63,8 @@ test('taper une lettre ne lance pas la saisie : seule Entrée le fait', () => {
 
 test('F replie ou déplie le nœud sélectionné', () => {
   assert.equal(commandFor(press('f'), 'selected'), 'toggle');
-  assert.equal(commandFor(press('F', { shiftKey: true }), 'selected'), 'toggle');
+  assert.equal(commandFor(press('F'), 'selected'), 'toggle');
+  assert.equal(commandFor(press('F', { shiftKey: true }), 'selected'), null);
   assert.equal(commandFor(press('f'), 'idle'), null);
   assert.equal(commandFor(press('f'), 'multiple'), null);
   assert.equal(commandFor(press('f'), 'editing'), null);

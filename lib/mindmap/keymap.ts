@@ -75,7 +75,7 @@ export function commandFor(press: KeyPress, mode: Mode): Command | null {
   if (press.key === 'Escape') return 'deselect';
   if (mode === 'multiple') return null;
   if (press.key === 'F2') return 'edit';
-  return press.key.toLowerCase() === 'f' ? 'toggle' : null;
+  return !press.shiftKey && press.key.toLowerCase() === 'f' ? 'toggle' : null;
 }
 
 export function swallowed(press: KeyPress, mode: Mode): boolean {
